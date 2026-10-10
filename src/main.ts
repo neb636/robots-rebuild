@@ -36,7 +36,7 @@ async function boot() {
     if (flags) for (const f of flags.split(',')) state.flags[f] = true;
     const active = params.get('party');
     if (active) state.active = active.split(',') as any;
-    await game.loadMap(jump, params.get('spawn') ?? Object.keys((await import('./maps/index')).MAPS[jump].spawns)[0]);
+    await game.loadMap(jump, params.get('spawn') ?? Object.keys((await import('./maps/index')).MAPS[jump].spawns)[0], { skipEnter: params.has('skip') });
     return;
   }
 

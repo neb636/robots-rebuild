@@ -115,11 +115,12 @@ export function nameEntry(def = 'Theo'): Promise<string> {
 export function optionsMenu(): Promise<void> {
   return new Promise((resolve) => {
     const s = loadSettings();
-    const vals = { music: s.music ?? 0.7, sfx: s.sfx ?? 0.8, text: s.text ?? 45 };
+    const vals = { music: s.music ?? 0.7, sfx: s.sfx ?? 0.8, text: s.text ?? 45, pixelFilter: s.pixelFilter ?? 1 };
     const rows = [
       { k: 'music', label: 'Music', min: 0, max: 1, step: 0.1 },
       { k: 'sfx', label: 'Sound', min: 0, max: 1, step: 0.1 },
       { k: 'text', label: 'Text speed', min: 15, max: 120, step: 15 },
+      { k: 'pixelFilter', label: 'Pixel filter', min: 0, max: 1, step: 1 },
     ] as const;
     const p = el('div', 'panel', ui.root);
     Object.assign(p.style, { left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '24em', padding: '1.2em 1.6em' });
@@ -139,6 +140,7 @@ export function optionsMenu(): Promise<void> {
       if (dir) {
         (vals as any)[r.k] = Math.min(r.max, Math.max(r.min, +((vals as any)[r.k] + dir * r.step).toFixed(2)));
         audio.setVolumes(vals.music, vals.sfx); ui.textSpeed = vals.text;
+        (window as any).game?.renderer.setPixelFilter(vals.pixelFilter === 1);
         audio.sfx('cursor'); render();
       }
       if (input.pressed('cancel') || input.pressed('menu') || input.pressed('confirm')) {

@@ -413,6 +413,8 @@ export interface SpriteSheet {
   texture: THREE.Texture;
   emissive: THREE.Texture | null;
   cols: number; rows: number; fw: number; fh: number;
+  /** texels per world unit (defaults to PX) */
+  ppu?: number;
   canvas: HTMLCanvasElement;
 }
 

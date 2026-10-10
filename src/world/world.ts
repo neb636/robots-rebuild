@@ -99,6 +99,8 @@ export class World {
   camFocus = new THREE.Vector3();
   camFollow: Actor | null = null;
   camDist = 18.5;
+  /** global zoom-out so characters sit smaller in frame, like the isometric references */
+  camZoom = 1.15;
   camPitch = THREE.MathUtils.degToRad(36);
   camYaw = 0;
   camLerp = 4;
@@ -269,7 +271,7 @@ export class World {
       f.z = Math.min(Math.max(f.z, b.z), b.z + b.d);
     }
     const p = this.camPitch, yaw = this.camYaw;
-    const off = new THREE.Vector3(Math.sin(yaw) * Math.cos(p), Math.sin(p), Math.cos(yaw) * Math.cos(p)).multiplyScalar(this.camDist);
+    const off = new THREE.Vector3(Math.sin(yaw) * Math.cos(p), Math.sin(p), Math.cos(yaw) * Math.cos(p)).multiplyScalar(this.camDist * this.camZoom);
     this.camera.position.copy(f).add(off);
     if (this.shakeT > 0) {
       this.shakeT -= dt;

@@ -87,7 +87,8 @@ export class Actor {
       this.emi.repeat.copy(this.tex.repeat);
     }
     const scale = o.scale ?? 1;
-    const w = (o.sheet.fw / PX) * scale, h = (o.sheet.fh / PX) * scale;
+    const ppu = o.sheet.ppu ?? PX;
+    const w = (o.sheet.fw / ppu) * scale, h = (o.sheet.fh / ppu) * scale;
     this.bodyHeight = h;
     const geo = new THREE.PlaneGeometry(w, h);
     geo.translate(0, h / 2, 0);
