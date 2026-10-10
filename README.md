@@ -66,6 +66,47 @@ planning/
   prologue_script.md   the revised prologue story (what changed and why)
 ```
 
+## Art direction prototype B: stylized 3D
+
+`/stylized.html` is a separate, walkable vertical slice used to compare a non-pixel look
+against the pixel-art build: a ruined, overgrown Beacon Hill lane with real 3D characters
+(no sprites), carved flagstones, volumetric fog with lantern halos, a drone searchlight, and
+the Converted standing in the haze.
+
+```
+npm run dev        # then open http://localhost:5173/stylized.html
+```
+
+| Key | Does |
+|---|---|
+| WASD / arrows, Shift | move, run (touch: left-thumb stick) |
+| Mouse drag, Q / E, wheel | orbit and zoom the camera (touch: right-thumb drag) |
+| 1 / 2 / 3 | mood: Ashfall (dusk), Curfew (night rain), Grey Pall (dead fog) |
+| P | toggle the painterly (Kuwahara) render |
+| C | camera: Follow (third-person, like the reference) / JRPG (the game's diorama angle) / Cinematic |
+| H | hide the UI |
+
+URL params for sharing a specific setup: `?mood=curfew&look=paint&cam=jrpg&q=low&ui=0&card=0`.
+Quality defaults to `low` on touch devices (no SSAO or depth of field, 1x pixel ratio, no MSAA).
+
+All art is still procedural code, as in the main game:
+
+```
+src/stylized/
+  main.ts        app shell: loop, cameras, input, UI, mood switching
+  scene.ts       the lane layout, walkable heights, lights, the Converted, the drone, moods
+  post.ts        post stack: SSAO, volumetric height fog + light halos + spot beam, DOF, bloom,
+                 AgX tone map, film grade, painterly Kuwahara, vignette, grain
+  character.ts   parametric 3D characters (hero, Converted) with a procedural walk/idle rig
+  buildings.ts   rowhouses: windows (intact/broken/boarded/lit), stoops, cornices, bow fronts
+  flagstones.ts  Voronoi flagstones as real beveled geometry, plus gap points for grass
+  foliage.ts     wind-swept grass, leaf-card bushes and ivy, trees, hanging moss
+  props.ts       gas lamps, lanterns, barrel fire, wrecked car, drone, string lights, balustrades
+  sky.ts         sky dome, distant skyline, State House dome, the Superintelligence spire
+  textures.ts    procedural PBR texture sets (albedo / normal / roughness)
+  fx.ts          ash, embers, rain, fog banks
+```
+
 ## Debug shortcuts
 
 Jump straight to any map with URL params:
