@@ -1,0 +1,36 @@
+name: PR preview
+
+# Builds every PR and publishes it to .../pr-preview/pr-<number>/ so it can be tried on the iPad.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  # The main deploy writes to this same branch. A shared group prevents push races.
+  group: gh-pages-publish
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        if: github.event.action != 'closed'
+        with:
+          node-version: 24
+          cache: npm
+      - if: github.event.action != 'closed'
+        run: npm ci && npm run build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/
+      - uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: dist
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
