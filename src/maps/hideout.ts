@@ -4,6 +4,7 @@ import type { MapModule } from './index';
 import { World, colorMat } from '../world/world';
 import { furniture, wall, interiorWindow, crate, rug } from '../world/props';
 import { stringLights, wallMap, radio } from '../world/props2';
+import { poster, posterWall, pipeRun, cable, wallStain, decal, scatterDecals, crateStack, boxes, trashBags } from '../world/props3';
 import { Weather } from '../world/particles';
 import { catSheet } from '../world/sheets';
 import { ui } from '../ui/ui';
@@ -27,10 +28,11 @@ export const hideout: MapModule = {
 
   build(w: World, g: Game) {
     w.setLighting({
-      bg: '#050407',
-      hemi: { sky: '#3a3a5a', ground: '#1a1210', intensity: 0.35 },
-      ambient: { color: '#2a2030', intensity: 0.4 },
-      bloom: 1.5, bloomThreshold: 0.55, tilt: 0.8, saturation: 0.14, vignette: 0.7,
+      bg: '#0a0808',
+      hemi: { sky: '#5a5a80', ground: '#4a3424', intensity: 0.85 },
+      ambient: { color: '#3a3040', intensity: 0.55 },
+      bloom: 1.5, bloomThreshold: 0.55, tilt: 0.8, saturation: 0.16, vignette: 0.6,
+      shadowTint: '#2a2238', highlightTint: '#ffe6c4',
     });
     w.bounds = { x: 0, z: 0, w: 13, d: 8 };
     w.camDist = 15;
@@ -72,6 +74,7 @@ export const hideout: MapModule = {
     const hatch = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.2), colorMat('#050404')); hatch.rotation.x = -Math.PI / 2; hatch.position.set(10.6, 0.01, 6.6); w.add(hatch);
     for (let i = 0; i < 3; i++) { const st = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 0.25), colorMat('#3a2a1e')); st.position.set(10.6, -0.2 - i * 0.25, 6.2 + i * 0.3); w.add(st); }
     w.weather = new Weather('dust', w.root, { count: 120, size: [13, 3.5, 8] });
+    dressAttic(w);
 
     // searchlight (inactive until the sweep)
     searchLight = new THREE.SpotLight('#e8f4ff', 0, 18, 0.32, 0.4, 1.1);
@@ -199,4 +202,51 @@ async function radioScene(g: Game) {
   state.addItem('radio');
   setTimeout(() => ui.toast('Marcus shoves the <em>Hand-crank Radio</em> into your bag.'), 900);
   ui.hint('Get to the <b>back stairs</b> (bottom right)!');
+}
+
+/** Two years of making do: supplies, blankets, jugs, taped-up notes, a lantern by each bed. */
+function dressAttic(w: World) {
+  // warm fill from the string lights so the floor isn't a black pit
+  w.pointLight(3.5, 2.2, 2.6, '#ffc078', 2.6, 7, 0.05);
+  w.pointLight(10.5, 2.2, 3.6, '#ffc078', 2.0, 6, 0.05);
+  w.pointLight(6.5, 2.6, 6.4, '#8a90c0', 1.6, 7);
+  // camping lanterns by the mattresses
+  for (const [lx, lz] of [[2.1, 3.6], [10.6, 3.9]] as const) {
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.26, 8), colorMat('#ffd890', { emissive: '#ffa850', ei: 2.4 }));
+    body.position.set(lx, 0.14, lz); w.add(body);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 8), colorMat('#2a3a2a', { metal: 0.4 })); cap.position.set(lx, 0.3, lz); w.add(cap);
+    w.pointLight(lx, 0.5, lz, '#ffb060', 1.8, 3.6, 0.12);
+  }
+  // notes, photos and the map wall
+  posterWall(w, 2.2, 1.6, 0.0, { n: 5, seed: 41, spread: 1.6 });
+  poster(w, 12.0, 1.7, 0.0, { v: 2, s: 1.0 });
+  poster(w, 0.0, 1.6, 5.2, { rot: Math.PI / 2, v: 7, s: 0.9 });
+  wallStain(w, 6.8, 2.2, 0.0, { h: 1.6, kind: 'water' });
+  wallStain(w, 13.0, 2.0, 4.0, { rot: -Math.PI / 2, h: 2, kind: 'water' });
+  wallStain(w, 0.0, 2.1, 1.6, { rot: Math.PI / 2, h: 1.6, kind: 'soot' });
+  // old radiator pipe along the back wall
+  pipeRun(w, [[-0.0, 0.25, 0.12], [6.0, 0.25, 0.12], [6.0, 2.9, 0.12]], { r: 0.05, rust: true });
+  // battery leads to the string lights
+  cable(w, [0.6, 0.35, 0.5], [0.3, 2.6, 0.3], { sag: 0.1, r: 0.015, color: '#b02a22' });
+  cable(w, [0.75, 0.35, 0.5], [0.4, 2.55, 0.32], { sag: 0.1, r: 0.015 });
+  // supplies along the east wall: crates, canned food, water jugs
+  crateStack(w, 12.4, 0.6, { n: 3, seed: 5 });
+  for (let i = 0; i < 4; i++) {
+    const j = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.42, 0.28), colorMat('#b8d0d8', { rough: 0.25 }));
+    j.position.set(12.6, 0.21, 1.4 + i * 0.32); w.add(j);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 6), colorMat('#2a6ab0')); cap.position.set(12.6, 0.45, 1.4 + i * 0.32); w.add(cap);
+  }
+  w.collider(12.4, 1.2, 0.5, 1.4);
+  for (let i = 0; i < 9; i++) {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.12, 8), colorMat(['#c8b070', '#b8382e', '#d8d4c8'][i % 3], { metal: 0.4, rough: 0.5 }));
+    c.position.set(6.2 + (i % 3) * 0.16, 0.06 + Math.floor(i / 3) * 0.12, 1.05); w.add(c);
+  }
+  boxes(w, 4.8, 7.3, { n: 3, seed: 14 });
+  trashBags(w, 7.6, 7.4, { n: 2, seed: 3 });
+  // a blanket draped over a crate, sleeping-bag bundle
+  const blanket = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.9), colorMat('#6a4a3a', { rough: 1 }));
+  blanket.position.set(2.85, 1.42, 0.6); blanket.rotation.y = 0.2; w.add(blanket);
+  // floor: papers, wrappers, water stains under the window
+  decal(w, 'stain', 9.4, 1.0, { s: 1.0, v: 1 });
+  scatterDecals(w, { x: 0.5, z: 0.8, w: 12, d: 6.6 }, ['paper', 'litter', 'stain', 'butts'], 14, 61, { s: [0.6, 1.0], avoid: [{ x: 4.5, z: 3.2, w: 3.5, d: 2.2 }] });
 }

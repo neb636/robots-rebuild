@@ -3,14 +3,16 @@ import * as THREE from 'three';
 import { World, colorMat } from '../world/world';
 import { building, lamp, bareTree, car, snowPile } from '../world/props';
 import { Weather } from '../world/particles';
+import { acUnit, cable, trashBags, scatterDecals, edgeWeeds, signboard } from '../world/props3';
 import { droneSheet } from '../world/sheets';
 
 export function buildTitle(w: World) {
   w.setLighting({
     bg: '#070a14', fog: { color: '#141c30', near: 18, far: 60 },
-    hemi: { sky: '#4a5a8a', ground: '#1a1418', intensity: 0.7 },
-    sun: { color: '#8aa0d0', intensity: 0.55, dir: [-5, 10, 4] },
-    bloom: 1.8, bloomThreshold: 0.55, tilt: 1, saturation: 0.08, vignette: 0.7,
+    hemi: { sky: '#5a6a9a', ground: '#2a2228', intensity: 1.0 },
+    sun: { color: '#8aa0d0', intensity: 0.7, dir: [-5, 10, 4] },
+    bloom: 1.8, bloomThreshold: 0.55, tilt: 1, saturation: 0.1, vignette: 0.6,
+    shadowTint: '#1c2a44', highlightTint: '#ffe8cc',
   });
   w.bounds = { x: -40, z: -40, w: 80, d: 80 };
   const rows = Array.from({ length: 40 }, (_, z) => Array.from({ length: 60 }, (_, x) => (z > 20 && z < 26 ? 'a' : 'b')).join(''));
@@ -43,6 +45,12 @@ export function buildTitle(w: World) {
   car(w, 7, 4, { color: '#6a2a2a', snow: 1.2, rot: Math.PI / 2 + 0.1 });
   bareTree(w, -5, 0, { snow: true, scale: 1.3 }); bareTree(w, 15, 0.5, { snow: true, scale: 1.1 });
   snowPile(w, -2, 6); snowPile(w, 12, 6.5, 1.4);
+  for (let ax = -27; ax < 28; ax += 7.5) acUnit(w, ax, 4.6 + (Math.abs(ax) % 2) * 2.4, -1.76);
+  for (let cx = -30; cx < 26; cx += 10) cable(w, [cx, 7.5, -1.9], [cx + 10, 7.2, -1.9], { sag: 1.2 });
+  signboard(w, -9, 3.1, -1.88, 'OPEN 24H', { wd: 2.2, h: 0.45, bg: '#1a1418', fg: '#ff4a3a', glow: true, strip: '#ff3a2a' });
+  trashBags(w, -17, -1.4, { n: 3, seed: 3 }); trashBags(w, 18, -1.4, { n: 2, seed: 4 });
+  scatterDecals(w, { x: -28, z: -1.5, w: 56, d: 9 }, ['crack', 'oil', 'litter', 'snowpatch'], 50, 5);
+  edgeWeeds(w, -30, -1.85, 30, -1.85, 30, 6, { kinds: ['dead', 'grass'] });
   w.weather = new Weather('snow', w.root, { count: 2200, size: [50, 22, 40] });
 
   // searchlight drone

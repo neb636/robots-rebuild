@@ -5,6 +5,7 @@ import { World, colorMat, mat } from '../world/world';
 import { lamp, crate, barrel, sign, snowPile } from '../world/props';
 import { crane, container, bollard, trawler } from '../world/props2';
 import { Weather } from '../world/particles';
+import { railing, chainFence, trashBags, pallet, tarpHeap, crateStack, decal, scatterDecals, edgeWeeds, cable, signboard, vendingMachine, trafficCone, posterWall, wallStain } from '../world/props3';
 import { wardenSheet, catSheet } from '../world/sheets';
 import { ui } from '../ui/ui';
 import { audio } from '../engine/audio';
@@ -27,9 +28,11 @@ export const harbor: MapModule = {
   build(w: World, g: Game) {
     w.setLighting({
       bg: '#0a1018', fog: { color: '#1c2633', near: 12, far: 38 },
-      hemi: { sky: '#6a7aa0', ground: '#1a1a22', intensity: 0.9 },
-      sun: { color: '#9ab0d8', intensity: 0.7, dir: [-4, 10, 5] },
-      bloom: 1.7, bloomThreshold: 0.55, tilt: 0.95, saturation: 0.06, vignette: 0.7,
+      hemi: { sky: '#7a8ab0', ground: '#2a2a34', intensity: 1.35 },
+      ambient: { color: '#3a4a66', intensity: 0.5 },
+      sun: { color: '#9ab0d8', intensity: 0.9, dir: [-4, 10, 5] },
+      bloom: 1.7, bloomThreshold: 0.55, tilt: 0.95, saturation: 0.08, vignette: 0.6,
+      shadowTint: '#1a2a40', highlightTint: '#ffe8d0',
     });
     const W = 58;
     w.bounds = { x: 0.5, z: 5.3, w: W - 1, d: 10.4 };
@@ -48,14 +51,15 @@ export const harbor: MapModule = {
     for (const lx of [8, 22, 36, 50]) lamp(w, lx, 5.8, { color: '#d8e4ff', intensity: 16, dist: 13 });
     for (const lx of [15, 29, 43]) lamp(w, lx, 15.6, { color: '#ffc880', intensity: 12, dist: 11 });
     crane(w, 14, -1, 13); crane(w, 34, -2, 15);
-    container(w, 6, 17.6, '#8a3a2a', { snow: true }); container(w, 13, 17.8, '#2a5a7a', { snow: true }); container(w, 13, 17.8, '#c8a030', { y: 2.5, snow: true });
-    container(w, 24, 17.6, '#3a6a3a', { snow: true }); container(w, 38, 17.8, '#7a2a4a', { snow: true }); container(w, 45, 17.6, '#2a5a7a', { snow: true }); container(w, 45, 17.6, '#8a3a2a', { y: 2.5, snow: true });
+    container(w, 6, 18.4, '#8a3a2a'); container(w, 13, 18.6, '#2a5a7a');
+    container(w, 24, 18.4, '#3a6a3a'); container(w, 38, 18.6, '#7a2a4a'); container(w, 45, 18.4, '#2a5a7a');
     crate(w, 18, 14.8, { s: 0.9, snow: true }); crate(w, 19, 15, { s: 0.7 }); barrel(w, 28, 15, { color: '#3a5a7a' }); barrel(w, 29, 14.6, { color: '#7a3a2a' });
     snowPile(w, 32, 15.2); snowPile(w, 52, 15, 1.2);
     sign(w, 3, 16, 'FAN PIER', { y: 2.2, w: 1.8, h: 0.4, bg: '#1d2f5a', fg: '#e8e8f0', post: true });
     boat = trawler(w, 49, 2.2);
     w.collider(43, 0, 13, 5);
     w.weather = new Weather('snow', w.root, { count: 900 });
+    dressPier(w, W);
 
     // the Warden — waits in the fog until summoned
     warden = w.actor({ sheet: wardenSheet(), x: 62, z: 9.5, solid: false, animated: false, scale: 1.2, emissiveIntensity: 3, radius: 1.2 });
@@ -344,4 +348,37 @@ async function aftermath(g: Game) {
   await g.wait(3);
   await ui.say('', 'Thank you for playing. Press Z to return to the title.', { portrait: null, style: 'italic' });
   location.reload();
+}
+
+/** Working-pier clutter: rusted rails, nets and pallets, fish crates, ice and oil on the boards. */
+function dressPier(w: World, W: number) {
+  // rusted rail along the pier edge, open where the Persistence ties up
+  railing(w, 0.5, 5.35, 43.5, 5.35, { h: 0.9, y: 0.35, collide: false, posts: 1.75 });
+  railing(w, 51, 5.35, W - 0.5, 5.35, { h: 0.9, y: 0.35, collide: false, posts: 1.75 });
+  // harbor office: sign, lit vending machine, flyers on the container sides
+  signboard(w, 7.5, 2.85, 17.2, 'HARBOR OPS', { wd: 2.6, h: 0.42, bg: '#1d2f5a', fg: '#e8e8f0', strip: '#9ab8ff' });
+  vendingMachine(w, 10.2, 16.0, { color: '#d8d4c8', seed: 4 });
+  posterWall(w, 24, 1.3, 17.2, { n: 3, seed: 121, spread: 1.6 });
+  for (const [sx, sz] of [[6, 17.2], [24, 17.2], [38, 17.4]] as const) wallStain(w, sx + 1.2, 1.5, sz, { h: 1.8, wd: 1.4, kind: 'rust' });
+  // gear along the south lot (kept clear of the story's walk lanes)
+  pallet(w, 21.3, 15.1, { rot: 0.2 }); pallet(w, 22.4, 15.3, { rot: -0.1 }); pallet(w, 25.5, 15.9, { leaning: true });
+  crateStack(w, 34.5, 15.1, { n: 3, seed: 7, color: '#3a5a7a' });
+  tarpHeap(w, 41, 15.0, { wd: 1.8, d: 1.2, h: 0.8, color: '#2a5a6a' });
+  trashBags(w, 16.0, 15.3, { n: 3, seed: 8 }); trashBags(w, 54.5, 15.2, { n: 2, seed: 9 });
+  trafficCone(w, 30.8, 15.4); trafficCone(w, 31.5, 15.6, { fallen: true });
+  // coiled mooring lines by the bollards
+  for (const bx of [11, 25, 39]) {
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.07, 5, 14), colorMat('#a89060', { rough: 1 }));
+    coil.rotation.x = -Math.PI / 2; coil.position.set(bx + 0.6, 0.42, 6.0); w.add(coil);
+    const coil2 = coil.clone(); coil2.scale.setScalar(0.75); coil2.position.y = 0.5; w.add(coil2);
+  }
+  // fish crates and nets stacked by the bollards
+  for (const fx of [5.5, 19.5, 33.5]) { crateStack(w, fx, 6.2, { n: 2, seed: Math.floor(fx), color: fx > 30 ? '#7a3a2a' : '#4a6a7a' }); tarpHeap(w, fx + 2.0, 6.1, { wd: 1.2, d: 0.8, h: 0.4, color: '#5a6a3a', collide: false }); }
+  // lamp-to-lamp wires
+  cable(w, [8, 3.0, 5.8], [22, 3.0, 5.8], { sag: 0.8 }); cable(w, [22, 3.0, 5.8], [36, 3.0, 5.8], { sag: 0.8 }); cable(w, [36, 3.0, 5.8], [50, 3.0, 5.8], { sag: 0.8 });
+  // the boards: ice, oil, fish scales and litter; frozen weeds in the seams
+  scatterDecals(w, { x: 1, z: 5.6, w: W - 2, d: 10 }, ['oil', 'stain', 'snowpatch', 'snowpatch', 'litter', 'paper'], 46, 122, { s: [0.7, 1.4] });
+  for (const [px, pz] of [[14, 8.2], [33, 13.4], [46, 12.6], [20, 11.5]] as const) decal(w, 'puddle', px, pz, { s: 1.3 });
+  scatterDecals(w, { x: 1, z: 16, w: W - 2, d: 3.6 }, ['crack', 'oil', 'stain'], 18, 123, { s: [0.8, 1.4] });
+  edgeWeeds(w, 0.5, 15.9, W - 0.5, 15.9, 24, 124, { kinds: ['dead', 'dead', 'grass'], s: [0.4, 0.9] });
 }

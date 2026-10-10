@@ -5,6 +5,7 @@ import { World, colorMat, mat, worldBox } from '../world/world';
 import { building, lamp, car, fence, bareTree, trashcan, streetSign, snowPile, debris, barrier, crate, hedgeBox, bench, pine } from '../world/props';
 import { kiosk, wanted } from '../world/props2';
 import { Weather } from '../world/particles';
+import { acUnit, pipeRun, cable, posterWall, wallStain, vendingMachine, dumpster, trashBags, boxes, trafficCone, decal, scatterDecals, edgeWeeds, scatterWeeds, chainFence, signboard, tarpHeap, railing } from '../world/props3';
 import { droneSheet } from '../world/sheets';
 import { patrolDrone, convertedGroup } from './common';
 import { ui } from '../ui/ui';
@@ -30,14 +31,16 @@ export const beaconHill: MapModule = {
   build(w: World, g: Game) {
     w.setLighting({
       bg: '#0b1020', fog: { color: '#1a2238', near: 18, far: 46 },
-      hemi: { sky: '#5a6a9a', ground: '#2a2228', intensity: 0.75 },
-      sun: { color: '#a8bce8', intensity: 0.65, dir: [-5, 10, 6] },
-      bloom: 1.6, bloomThreshold: 0.58, tilt: 1, saturation: 0.08, vignette: 0.6,
+      hemi: { sky: '#6a7aaa', ground: '#3a3038', intensity: 1.15 },
+      ambient: { color: '#3a4a6a', intensity: 0.4 },
+      sun: { color: '#a8bce8', intensity: 0.8, dir: [-5, 10, 6] },
+      bloom: 1.6, bloomThreshold: 0.58, tilt: 1, saturation: 0.1, vignette: 0.55,
+      shadowTint: '#1c2a44', highlightTint: '#ffe8cc',
     });
     const W = 78, D = 22;
     w.bounds = { x: 0, z: 4.8, w: W, d: 12 };
     w.camOffset.set(0, 0, -1.8);
-    w.camPitch = THREE.MathUtils.degToRad(31);
+    w.camPitch = THREE.MathUtils.degToRad(35);
     w.camBounds = { x: 9, z: 9.5, w: 60, d: 1.5 };
     const rows: string[] = [];
     for (let z = 0; z < D; z++) {
@@ -112,6 +115,7 @@ export const beaconHill: MapModule = {
     kiosk(w, 69, 8.0);
     barrier(w, 66, 13.8, { len: 2 }); barrier(w, 72, 13.8, { len: 2 });
     w.weather = new Weather('snow', w.root, { count: 1600 });
+    dressBeaconHill(w);
 
     // ---------------- the Converted
     convertedGroup(g, w, [
@@ -266,4 +270,51 @@ async function checkpoint(g: Game) {
   ui.hint('Enter <b>Park Street</b> station.');
   setTimeout(() => ui.hint(''), 5000);
   void p;
+}
+
+/** Two winters of neglect: dead storefronts, junk at the curbs, weeds through the snow, one machine still humming. */
+function dressBeaconHill(w: World) {
+  const fz = 5.0;
+  // facades: AC units, downspouts, rust streaks, layered posters
+  for (const px of [6, 11, 18, 24, 30, 37, 51]) pipeRun(w, [[px - 0.12, 9.2, fz + 0.1], [px - 0.12, 0.25, fz + 0.1]], { r: 0.06, rust: px % 2 === 0 });
+  for (const [ax, ay] of [[2.8, 4.8], [8.4, 7.4], [14.6, 4.8], [21.2, 7.4], [27.6, 4.8], [33.4, 7.4], [39.4, 4.8], [53.8, 7.4]] as const) acUnit(w, ax, ay, fz + 0.24, { drip: true });
+  for (const [sx, k] of [[4.1, 'rust'], [16.0, 'water'], [28.8, 'soot'], [35.2, 'rust'], [54.5, 'water']] as const) wallStain(w, sx, 3.4, fz, { h: 3.2, wd: 1.0, kind: k });
+  posterWall(w, 4.4, 1.3, fz + 0.02, { n: 4, seed: 101, spread: 1.4 });
+  posterWall(w, 26.2, 1.4, fz + 0.02, { n: 5, seed: 102, spread: 1.6 });
+  posterWall(w, 38.6, 1.3, fz + 0.02, { n: 3, seed: 103, spread: 1.0 });
+  // dead shopfronts; a red sign that still flickers
+  signboard(w, 27, 3.25, fz + 0.12, 'PHARMACY', { wd: 2.8, h: 0.5, bg: '#e8e4d8', fg: '#2a3a5a', badge: '#2a8a4a' });
+  signboard(w, 39.5, 3.0, fz + 0.12, 'OPEN 24H', { wd: 2.2, h: 0.45, bg: '#1a1418', fg: '#ff4a3a', glow: true, strip: '#ff3a2a' });
+  // wires strung between the rooftops and lamps
+  cable(w, [0, 7.2, fz + 0.1], [8, 2.6, 7.4], { sag: 0.6 }); cable(w, [8, 2.7, 7.4], [20, 2.7, 7.4], { sag: 0.9 });
+  cable(w, [20, 2.7, 7.4], [32, 2.7, 7.4], { sag: 0.9 }); cable(w, [32, 2.7, 7.4], [44, 2.7, 7.4], { sag: 0.9 });
+  cable(w, [24, 8.4, fz + 0.1], [37, 7.8, fz + 0.1], { sag: 1.1 });
+  // curbside junk (kept off the sweepers' and the queue's ground)
+  trashBags(w, 4.8, 5.5, { n: 4, seed: 11 }); trashBags(w, 27.4, 5.45, { n: 3, seed: 12 }); trashBags(w, 38.8, 5.5, { n: 2, seed: 13 });
+  boxes(w, 22.8, 5.5, { n: 3, seed: 14, snow: true });
+  vendingMachine(w, 51.6, 15.7, { color: '#2f5a8a', seed: 5, lit: true, broken: true, rot: Math.PI });
+  dumpster(w, 42.5, 15.5, { snow: true, rot: Math.PI });
+  trashBags(w, 44.2, 15.6, { n: 3, seed: 15 });
+  tarpHeap(w, 19.2, 15.4, { wd: 1.8, d: 1.0, h: 0.7, color: '#4a5a3a' });
+  trafficCone(w, 45.0, 10.3); trafficCone(w, 49.6, 11.3, { fallen: true }); trafficCone(w, 47.2, 13.4);
+  // behind the ruins: torn chain-link and a weedy lot under snow
+  chainFence(w, 0, 17.6, 18, 17.6, { collide: false, torn: true }); chainFence(w, 18, 17.6, 56, 17.6, { collide: false });
+  scatterWeeds(w, { x: 0, z: 16.8, w: 56, d: 5 }, 70, 104, { kinds: ['dead', 'dead', 'grass'], s: [0.6, 1.4] });
+  // ground: manholes, drains, cracks, oil and litter; snow drifts on the road
+  decal(w, 'manhole', 15, 10.4); decal(w, 'manhole', 40, 11.6, { rot: 1.1 });
+  for (const dx of [5, 18, 29, 50]) { decal(w, 'drain', dx, 8.3); decal(w, 'drain', dx + 6, 12.7); }
+  scatterDecals(w, { x: 0, z: 8.2, w: 57, d: 4.6 }, ['crack', 'oil', 'stain', 'crack', 'snowpatch'], 40, 105, { s: [0.8, 1.5], avoid: [{ x: 30, z: 8.8, w: 8, d: 3 }] });
+  scatterDecals(w, { x: 0, z: 5.2, w: 57, d: 2.0 }, ['litter', 'paper', 'stain', 'can'], 22, 106, { s: [0.7, 1.1] });
+  scatterDecals(w, { x: 0, z: 13.3, w: 57, d: 2.6 }, ['litter', 'paper', 'crack', 'can'], 18, 107, { s: [0.7, 1.1] });
+  // dead grass at the wall bases and curbs, poking through the snow
+  edgeWeeds(w, 0, fz + 0.15, 42, fz + 0.15, 30, 108, { kinds: ['dead', 'grass'], s: [0.4, 0.9] });
+  edgeWeeds(w, 0, 15.95, 56, 15.95, 30, 109, { kinds: ['dead', 'dead', 'weed'], s: [0.5, 1.0] });
+  edgeWeeds(w, 0, 7.9, 57, 7.9, 14, 110, { kinds: ['dead'], s: [0.3, 0.6] });
+  // the Common: station entrance signage, overgrown lawns, rusted rails
+  signboard(w, 69, 2.38, 9.24, 'PARK STREET', { wd: 2.9, h: 0.36, bg: '#1e2a24', fg: '#f0ece0', badge: '#c83a30', strip: '#8a6aff' });
+  railing(w, 67.3, 9.35, 67.3, 10.3, { h: 0.9, collide: false }); railing(w, 70.7, 9.35, 70.7, 10.3, { h: 0.9, collide: false });
+  posterWall(w, 67.6, 1.2, 9.22, { n: 2, seed: 111, spread: 0.3 });
+  scatterWeeds(w, { x: 57.5, z: 4.8, w: 20, d: 3 }, 30, 112, { kinds: ['dead', 'grass'], s: [0.5, 1.1] });
+  scatterWeeds(w, { x: 57.5, z: 13.2, w: 20, d: 3.6 }, 40, 113, { kinds: ['dead', 'grass', 'weed'], s: [0.5, 1.2] });
+  scatterDecals(w, { x: 58, z: 8, w: 19, d: 5 }, ['crack', 'snowpatch', 'leaves', 'litter'], 16, 114, { s: [0.8, 1.4], avoid: [{ x: 66, z: 8.5, w: 6, d: 3 }] });
 }

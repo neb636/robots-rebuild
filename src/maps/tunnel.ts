@@ -5,6 +5,7 @@ import { World, colorMat, mat } from '../world/world';
 import { crate, sign, wall, debris } from '../world/props';
 import { subwayCar } from '../world/props2';
 import { Weather } from '../world/particles';
+import { pipeRun, cable, wallStain, decal, scatterDecals, edgeWeeds, posterWall, neonStrip, signboard, trashBags, boxes, trafficCone, railing } from '../world/props3';
 import { sweeperSheet } from '../world/sheets';
 import { ui } from '../ui/ui';
 import { audio } from '../engine/audio';
@@ -22,10 +23,12 @@ export const tunnel: MapModule = {
 
   build(w: World, g: Game) {
     w.setLighting({
-      bg: '#020203', fog: { color: '#030305', near: 9, far: 24 },
-      ambient: { color: '#4a4a66', intensity: 0.32 },
-      hemi: { sky: '#3a3a50', ground: '#0a0808', intensity: 0.25 },
-      bloom: 1.8, bloomThreshold: 0.5, tilt: 0.85, saturation: 0.1, vignette: 0.85,
+      bg: '#050608', fog: { color: '#0a0e14', near: 14, far: 34 },
+      ambient: { color: '#5a6a8a', intensity: 2.2 },
+      hemi: { sky: '#5a6688', ground: '#2a2018', intensity: 1.6 },
+      exposure: 1.5,
+      bloom: 1.8, bloomThreshold: 0.5, tilt: 0.85, saturation: 0.12, vignette: 0.7,
+      shadowTint: '#1a2a3a', highlightTint: '#ffe8c8',
     });
     const W = 66;
     w.bounds = { x: 0.6, z: 2.1, w: W - 1.2, d: 7.2 };
@@ -33,7 +36,7 @@ export const tunnel: MapModule = {
     w.camBounds = { x: 8, z: 5.5, w: 50, d: 0.5 };
     const rows: string[] = [];
     for (let z = 0; z < 11; z++) rows.push((z >= 2 && z < 4 ? 'k' : 'r').repeat(W));
-    w.ground(rows, { r: { tex: 'rail_bed' }, k: { tex: 'concrete_dark', h: 0.45, side: 'concrete_dark' } });
+    w.ground(rows, { r: { tex: 'rail_bed_x' }, k: { tex: 'concrete_dark', h: 0.45, side: 'concrete_dark' } });
     for (const rz of [5.6, 7.2]) w.box(0, rz, W, 0.12, 0.14, colorMat('#6a6a70', { metal: 0.8, rough: 0.35 }), { collide: false });
     // third rail
     w.box(0, 8.6, W, 0.18, 0.22, colorMat('#4a4038', { metal: 0.5 }), { collide: false });
@@ -65,6 +68,7 @@ export const tunnel: MapModule = {
     const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), colorMat('#8090b0', { emissive: '#6070a0', ei: 1.0 })); shaft.position.set(62, 4.9, 2.4); shaft.rotation.x = Math.PI / 2; w.add(shaft);
     w.pointLight(62, 4.4, 3, '#8aa0d0', 4, 6);
     w.weather = new Weather('dust', w.root, { count: 260, size: [24, 5, 10], color: '#c8c0b0' });
+    dressTunnel(w, W);
 
     // the flashlight — follows the party, points where you face
     const torch = new THREE.SpotLight('#fff0c8', 70, 16, 0.42, 0.55, 1.4);
@@ -158,4 +162,44 @@ async function mayaTalk(g: Game) {
   await g.say('marcus', 'Okay. Good to know. In case.');
   await g.say('maya', 'In case what?');
   await g.say('marcus', 'In case.');
+}
+
+/** Tunnel guts: conduit bundles, caged work lamps, leaks, a violet-lit maintenance alcove, junk on the ballast. */
+function dressTunnel(w: World, W: number) {
+  const wz = 2.0;
+  // conduit and cable trays run the whole length
+  pipeRun(w, [[0, 4.3, wz + 0.12], [W, 4.3, wz + 0.12]], { r: 0.09, color: '#4a4c4e' });
+  pipeRun(w, [[0, 4.05, wz + 0.1], [W, 4.05, wz + 0.1]], { r: 0.05, rust: true });
+  pipeRun(w, [[0, 1.55, wz + 0.1], [27, 1.55, wz + 0.1], [27, 0.6, wz + 0.1]], { r: 0.06, color: '#5a5040' });
+  for (let x = 4; x < W; x += 9) cable(w, [x, 3.85, wz + 0.1], [x + 4.5, 3.85, wz + 0.1], { sag: 0.45 });
+  // caged sodium work lamps between the ribs: pools of warm light to walk between
+  for (let x = 5; x < W; x += 8) {
+    const cage = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.2), colorMat('#ffcf80', { emissive: '#ffa040', ei: 2.6 }));
+    cage.position.set(x, 3.0, wz + 0.15); w.add(cage);
+    w.pointLight(x, 2.8, wz + 1.2, '#ffb060', 9, 9, 0.06);
+  }
+  // water stains and rust streaks down the tunnel wall
+  for (let x = 3; x < W; x += 5.5) wallStain(w, x + (x % 3), 2.6, wz, { h: 2.6, wd: 0.9, kind: x % 2 ? 'water' : 'rust' });
+  // maintenance alcove: blue-violet tiles glow like the station entrance in the references
+  const alcove = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.4), colorMat('#5a4ad0', { emissive: '#4a3ac8', ei: 0.9 }));
+  alcove.position.set(19, 1.65, wz + 0.02); w.add(alcove);
+  for (let i = 0; i <= 8; i++) { const gl = new THREE.Mesh(new THREE.BoxGeometry(0.02, 2.4, 0.01), colorMat('#2a2060')); gl.position.set(18 + i * 0.275 - 0.1, 1.65, wz + 0.03); w.add(gl); }
+  for (let i = 0; i <= 8; i++) { const gl = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.02, 0.01), colorMat('#2a2060')); gl.position.set(19, 0.45 + i * 0.3, wz + 0.03); w.add(gl); }
+  neonStrip(w, 19, 2.95, wz + 0.1, 2.0, '#8a6aff', { intensity: 8, flicker: 0.08 });
+  w.pointLight(19, 1.2, wz + 1.2, '#6a5aff', 5, 6);
+  signboard(w, 19, 3.35, wz + 0.08, 'NO ENTRY', { wd: 1.6, h: 0.3, bg: '#c83a30', fg: '#f4f0e8' });
+  railing(w, 17.8, 3.95, 20.2, 3.95, { h: 0.8, y: 0.45, collide: false });
+  posterWall(w, 34, 2.0, wz, { n: 3, seed: 91, spread: 1.0 });
+  posterWall(w, 53, 1.9, wz, { n: 4, seed: 92, spread: 1.4 });
+  // junk left behind on the walkway and ballast
+  boxes(w, 6.5, 3.4, { n: 3, seed: 21 });
+  trashBags(w, 27.5, 3.5, { n: 3, seed: 22 });
+  trafficCone(w, 45, 3.3); trafficCone(w, 46.2, 3.6, { fallen: true });
+  trashBags(w, 57, 9.2, { n: 2, seed: 23 });
+  // puddles and grime on the ballast, moss and weeds where water drips
+  for (const [px, pz] of [[8, 7.8], [24, 6.4], [32, 8.6], [52, 7.0], [58, 5.2]] as const) decal(w, 'puddle', px, pz, { s: 1.2 });
+  scatterDecals(w, { x: 1, z: 4.2, w: W - 2, d: 5.6 }, ['oil', 'stain', 'litter', 'paper', 'can'], 40, 93, { s: [0.7, 1.2] });
+  scatterDecals(w, { x: 1, z: 2.1, w: W - 2, d: 1.8 }, ['crack', 'stain', 'butts'], 20, 94, { s: [0.7, 1.1] });
+  edgeWeeds(w, 0, 4.1, W, 4.1, 26, 95, { kinds: ['dead', 'fern'], s: [0.4, 0.8] });
+  for (const mx of [10, 26, 41, 55]) decal(w, 'moss', mx, 4.4, { s: 1.4 });
 }

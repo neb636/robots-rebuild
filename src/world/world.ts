@@ -4,6 +4,35 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { tex } from '../engine/textures';
 import { Actor, ActorOpts } from './entity';
 import { Weather } from './particles';
+import { view } from '../engine/renderer';
+
+const _r = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3(), _v = new THREE.Vector3();
+
+/**
+ * Pixel-grid snapping. With a low-res framebuffer, a camera that slides by sub-pixel amounts makes
+ * every texel flip between neighbouring pixels each frame (shimmer / pixel crawl). Moving the camera
+ * only in whole-pixel steps (measured at the focus depth) keeps the world pixel-stable; actors are
+ * then snapped onto the same grid so their sprites don't crawl either.
+ */
+export function snapCamera(cam: THREE.PerspectiveCamera, focusDepth: number) {
+  cam.updateMatrixWorld();
+  _r.setFromMatrixColumn(cam.matrixWorld, 0);
+  _u.setFromMatrixColumn(cam.matrixWorld, 1);
+  const wpp = (2 * focusDepth * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2))) / view.lines;
+  const x = cam.position.dot(_r), y = cam.position.dot(_u);
+  cam.position.addScaledVector(_r, Math.round(x / wpp) * wpp - x).addScaledVector(_u, Math.round(y / wpp) * wpp - y);
+  cam.updateMatrixWorld();
+  return wpp;
+}
+
+/** Offset an actor's rendered position onto the camera's pixel grid (its logical pos is untouched). */
+export function snapActor(a: Actor, cam: THREE.Camera, wpp: number) {
+  _r.setFromMatrixColumn(cam.matrixWorld, 0);
+  _u.setFromMatrixColumn(cam.matrixWorld, 1);
+  const p = a.group.position;
+  const x = p.dot(_r), y = p.dot(_u);
+  p.addScaledVector(_r, Math.round(x / wpp) * wpp - x).addScaledVector(_u, Math.round(y / wpp) * wpp - y);
+}
 
 export interface Rect { x: number; z: number; w: number; d: number; }
 export interface TileDef { tex: string; h?: number; solid?: boolean; side?: string; }
@@ -20,6 +49,12 @@ export interface Lighting {
   tilt?: number;           // tilt-shift strength 0..1
   saturation?: number;
   vignette?: number;
+  contrast?: number;
+  /** split-tone grade colors (see Renderer.apply) */
+  shadowTint?: string;
+  highlightTint?: string;
+  /** strength of the depth-outline pass (0 = off) */
+  outline?: number;
 }
 
 export interface Interactable {
@@ -101,7 +136,7 @@ export class World {
   camDist = 18.5;
   /** global zoom-out so characters sit smaller in frame, like the isometric references */
   camZoom = 1.15;
-  camPitch = THREE.MathUtils.degToRad(36);
+  camPitch = THREE.MathUtils.degToRad(40);
   camYaw = 0;
   camLerp = 4;
   camOffset = new THREE.Vector3(0, 0, 0);
@@ -279,10 +314,21 @@ export class World {
       this.camera.position.x += (Math.random() - 0.5) * a; this.camera.position.y += (Math.random() - 0.5) * a;
     }
     this.camera.lookAt(f.x, f.y + 0.8, f.z);
+    const wpp = snapCamera(this.camera, this.camDist * this.camZoom);
+    for (const a of this.actors) snapActor(a, this.camera, wpp);
     if (this.sun) {
       const dir = this.sun.position.clone().sub(this.sun.target.position).normalize();
-      this.sun.target.position.set(f.x, 0, f.z);
-      this.sun.position.copy(this.sun.target.position).addScaledVector(dir, 30);
+      // Move the shadow camera in whole shadow-map texels so shadow edges don't crawl.
+      const sc = this.sun.shadow.camera as THREE.OrthographicCamera;
+      const texel = (sc.right - sc.left) / this.sun.shadow.mapSize.x;
+      _f.copy(dir).negate();
+      _r.crossVectors(_f, THREE.Object3D.DEFAULT_UP).normalize();
+      _u.crossVectors(_r, _f).normalize();
+      _v.set(f.x, 0, f.z);
+      const rx = _v.dot(_r), uy = _v.dot(_u);
+      _v.addScaledVector(_r, Math.round(rx / texel) * texel - rx).addScaledVector(_u, Math.round(uy / texel) * texel - uy);
+      this.sun.target.position.copy(_v);
+      this.sun.position.copy(_v).addScaledVector(dir, 30);
     }
   }
 

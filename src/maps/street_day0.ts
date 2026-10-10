@@ -4,6 +4,7 @@ import type { MapModule } from './index';
 import { World, colorMat } from '../world/world';
 import { building, lamp, car, fence, hydrant, trashcan, streetSign, bench } from '../world/props';
 import { leafTree, leaves } from '../world/props2';
+import { acUnit, pipeRun, signboard, vendingMachine, decal, scatterDecals, edgeWeeds, hoop, utilityPole, cable, posterWall, trashBags, planter } from '../world/props3';
 import { Weather } from '../world/particles';
 import { droneSheet } from '../world/sheets';
 import { ui } from '../ui/ui';
@@ -26,13 +27,14 @@ export const streetDay0: MapModule = {
   build(w: World, g: Game) {
     w.setLighting({
       bg: '#a8c4e0', fog: { color: '#d8c8b0', near: 22, far: 60 },
-      hemi: { sky: '#cfe0ff', ground: '#8a6a4a', intensity: 1.0 },
+      hemi: { sky: '#cfe0ff', ground: '#8a6a4a', intensity: 1.15 },
       sun: { color: '#ffe0b0', intensity: 2.0, dir: [-6, 9, 5] },
-      bloom: 0.9, bloomThreshold: 0.8, tilt: 0.9, saturation: 0.2, vignette: 0.45,
+      bloom: 0.9, bloomThreshold: 0.8, tilt: 0.9, saturation: 0.2, vignette: 0.4,
+      shadowTint: '#2c3848', highlightTint: '#fff0d0',
     });
     w.bounds = { x: 0, z: 4, w: 48, d: 12 };
     w.camOffset.set(0, 0, -1.6);
-    w.camPitch = THREE.MathUtils.degToRad(31);
+    w.camPitch = THREE.MathUtils.degToRad(36);
     w.camBounds = { x: 9, z: 9, w: 30, d: 1 };
     // ground: north sidewalk (brick), street (asphalt), south sidewalk
     const rows: string[] = [];
@@ -65,6 +67,7 @@ export const streetDay0: MapModule = {
     // Charles St crossing at east edge
     w.box(45, 8.5, 3, 6, 0.01, colorMat('#e8e4d8'), { collide: false });
     w.weather = new Weather('dust', w.root, { count: 120, color: '#fff0c8' });
+    dressStreet(w);
 
     // townsfolk, stopped
     const T = (id: string, x: number, z: number, dir: any, lines: string[]) => {
@@ -148,4 +151,37 @@ async function fade(g: Game) {
   await g.wait(2);
   state.flags.day0 = false;
   await g.loadMap('hideout', 'start', { fade: false });
+}
+
+/** Day Zero is still a living street: tidy-ish, but dense with the stuff of city life. */
+function dressStreet(w: World) {
+  const fz = 5.0; // facade plane
+  // downspouts at party walls, AC units in upper windows
+  for (const px of [6, 11, 18, 24, 29, 35, 42]) pipeRun(w, [[px - 0.12, 8.6, fz + 0.1], [px - 0.12, 0.2, fz + 0.1]], { r: 0.06, color: '#3a3836' });
+  for (const [ax, ay] of [[3.5, 4.6], [14.2, 7.1], [20.5, 4.6], [26.7, 7.1], [37.3, 4.6], [44.6, 7.1]] as const) acUnit(w, ax, ay, fz + 0.24, { drip: ay < 5 });
+  // the corner market: sign, awning strip light, vending machine, crates of produce
+  signboard(w, 32, 2.95, fz + 0.12, 'MARKET', { wd: 3.2, h: 0.6, bg: '#2f4a3a', fg: '#f0e8c8', badge: '#c83a30', strip: '#ffd890' });
+  vendingMachine(w, 34.3, 5.45, { color: '#b8382e', seed: 1, light: false });
+  planter(w, 28.6, 5.45, 1.2, 0.6);
+  trashBags(w, 23.4, 5.4, { n: 3, seed: 4 });
+  posterWall(w, 9.0, 1.4, fz + 0.02, { n: 3, seed: 7, spread: 1.0 });
+  posterWall(w, 40.0, 1.5, fz + 0.02, { n: 4, seed: 8, spread: 1.2 });
+  hoop(w, 38.2, 7.6); hoop(w, 39.3, 7.6);
+  // overhead lines from poles across the street
+  const p1 = utilityPole(w, 16.2, 7.75, { h: 6.4 });
+  const p2 = utilityPole(w, 40.5, 7.75, { h: 6.4 });
+  cable(w, p1.a, [13.0, 6.6, fz + 0.1], { sag: 0.5 }); cable(w, p1.b, [19.5, 6.2, fz + 0.1], { sag: 0.5 });
+  cable(w, p2.a, [37.6, 6.6, fz + 0.1], { sag: 0.5 }); cable(w, p2.b, [43.5, 6.2, fz + 0.1], { sag: 0.5 });
+  cable(w, p1.a, p2.a, { sag: 1.2 }); cable(w, p1.b, p2.b, { sag: 1.4 });
+  cable(w, p1.a, [-2, 6.0, 7.75], { sag: 1.0 });
+  // road: lane paint, manholes, curb drains, patched cracks
+  for (let x = 1; x < 44; x += 4) decal(w, 'paint', x, 11.5, { v: 1, s: 0.9 });
+  decal(w, 'manhole', 12.5, 10.6); decal(w, 'manhole', 35.5, 12.2, { rot: 0.8 });
+  for (const dx of [6, 19, 33]) { decal(w, 'drain', dx, 9.3); decal(w, 'drain', dx + 5, 13.7); }
+  scatterDecals(w, { x: 0, z: 9.2, w: 44, d: 4.6 }, ['crack', 'stain', 'oil', 'crack'], 18, 31);
+  scatterDecals(w, { x: 0, z: 5.6, w: 44, d: 2.4 }, ['leaves', 'paper', 'butts', 'stain'], 14, 32, { s: [0.6, 1.0] });
+  scatterDecals(w, { x: 0, z: 14.2, w: 44, d: 1.0 }, ['leaves', 'crack'], 8, 33);
+  // a few weeds where the sidewalk meets brick, granite and fence
+  edgeWeeds(w, 0, fz + 0.15, 44, fz + 0.15, 16, 34, { kinds: ['grass', 'weed'], s: [0.4, 0.8] });
+  edgeWeeds(w, 0, 15.25, 48, 15.25, 22, 35, { kinds: ['grass', 'weed', 'dead'], s: [0.5, 1.0] });
 }

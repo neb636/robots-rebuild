@@ -5,6 +5,7 @@ import { World, colorMat, mat } from '../world/world';
 import { furniture, crate, barrel, bench, sign, wall } from '../world/props';
 import { subwayCar, turnstiles, bigSign, radio, stringLights, wanted } from '../world/props2';
 import { Weather } from '../world/particles';
+import { vendingMachine, posterWall, poster, pipeRun, cable, wallStain, neonStrip, decal, scatterDecals, edgeWeeds, trashBags, tarpHeap, signboard, acUnit } from '../world/props3';
 import { catSheet } from '../world/sheets';
 import { ui } from '../ui/ui';
 import { audio } from '../engine/audio';
@@ -25,9 +26,11 @@ export const parkStreet: MapModule = {
   build(w: World, g: Game) {
     w.setLighting({
       bg: '#050403', fog: { color: '#0e0a08', near: 16, far: 38 },
-      hemi: { sky: '#8a7a60', ground: '#2a2018', intensity: 0.55 },
+      hemi: { sky: '#8a8a80', ground: '#3a3024', intensity: 1.0 },
+      ambient: { color: '#304048', intensity: 0.35 },
       sun: { color: '#ffe0b0', intensity: 0.45, dir: [3, 10, 6] },
-      bloom: 1.5, bloomThreshold: 0.6, tilt: 0.9, saturation: 0.12, vignette: 0.65,
+      bloom: 1.5, bloomThreshold: 0.6, tilt: 0.9, saturation: 0.14, vignette: 0.6,
+      shadowTint: '#203440', highlightTint: '#ffecd0',
     });
     w.bounds = { x: 5.2, z: 3, w: 20.6, d: 11 };
     w.camDist = 19;
@@ -47,7 +50,8 @@ export const parkStreet: MapModule = {
     wall(w, 26, 0, 0.5, 15, 5.5, 'subway_wall');
     wall(w, 5, 14.6, 21, 0.3, 0.9, 'subway_wall');
     // ceiling beams
-    for (let x = 6; x < 26; x += 4) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 13), colorMat('#2a2622')); b.position.set(x, 5.6, 7.5); w.add(b); }
+    // (cutaway: beams stop short so they never block the view of the platform)
+    for (let x = 6; x < 26; x += 4) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 3.4), colorMat('#2a2622')); b.position.set(x, 5.6, 4.3); w.add(b); }
     // signage
     bigSign(w, 13, 2.62, 'PARK STREET', '← TO ALEWIFE                TO BRAINTREE →', { w: 6.5, y: 4.0 });
     sign(w, 21.5, 2.62, 'RED LINE', { y: 4.2, w: 2.2, h: 0.5, bg: '#e8e2d4', fg: '#f4f0e8', band: '#9a2420', px: [48, 12] });
@@ -86,6 +90,7 @@ export const parkStreet: MapModule = {
     }
     w.pointLight(20.5, 2, 8.6, '#c0e0ff', 3, 5);
     w.weather = new Weather('dust', w.root, { count: 220, size: [22, 5, 12] });
+    dressStation(w);
 
     // --- people
     okafor = w.actor({ sheet: sheet('okafor'), x: 15.2, z: 6.8, dir: 'down' });
@@ -276,4 +281,42 @@ async function leave(g: Game) {
   if (i !== 0) { await g.walk(p, { x: 7.2, z: p.pos.z - 0.4 }, 3); return; }
   audio.sfx('thud');
   await g.loadMap('tunnel', 'start');
+}
+
+/** The station as a camp: humming vending machines, conduit, leaks, notices, a violet stairwell glow. */
+function dressStation(w: World) {
+  const y0 = 0.5, wz = 2.6;
+  // two vending machines against the back wall: one still humming on stolen power, one gutted
+  vendingMachine(w, 12.4, 3.0, { color: '#2f5a8a', seed: 2, lit: true });
+  vendingMachine(w, 13.5, 3.0, { color: '#b8382e', seed: 3, lit: false, broken: true, light: false });
+  // notices, flyers and missing-person posters
+  posterWall(w, 6.4, 2.0, wz, { n: 5, seed: 71, spread: 1.4 });
+  posterWall(w, 19.2, 1.7, wz, { n: 4, seed: 72, spread: 1.6 });
+  poster(w, 16.2, 1.6, wz + 0.01, { v: 8, s: 1.2 });
+  wallStain(w, 10.5, 3.6, wz, { h: 2.8, wd: 1.0, kind: 'water' });
+  wallStain(w, 15.0, 3.4, wz, { h: 3.2, wd: 0.8, kind: 'rust' });
+  wallStain(w, 26, 3.4, 9.0, { rot: -Math.PI / 2, h: 3.0, kind: 'water' });
+  // conduit along the top of the wall, a drop to an old junction box
+  pipeRun(w, [[5.2, 4.75, wz + 0.15], [26, 4.75, wz + 0.15]], { r: 0.08, color: '#4a5050' });
+  pipeRun(w, [[5.2, 4.45, wz + 0.12], [11.5, 4.45, wz + 0.12], [11.5, 3.4, wz + 0.12]], { r: 0.05, rust: true });
+  pipeRun(w, [[25.85, 5.4, 3], [25.85, 5.4, 14]], { r: 0.1, rust: true });
+  acUnit(w, 18.0, 3.3, wz + 0.24);
+  const jb = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.18), colorMat('#5a6060', { metal: 0.4 })); jb.position.set(11.5, 3.1, wz + 0.1); w.add(jb);
+  // cables sagging between the ceiling beams
+  cable(w, [6, 5.3, 4], [10, 5.3, 4], { sag: 0.5 }); cable(w, [10, 5.3, 4.2], [14, 5.3, 5], { sag: 0.6 });
+  // violet-blue neon spilling down the stairwell, a lit exit sign
+  neonStrip(w, 23.6, 3.0, 2.72, 2.6, '#7a5cff', { intensity: 5, flicker: 0.05 });
+  neonStrip(w, 25.8, 2.2, 3.4, 1.6, '#4a7aff', { vertical: true, intensity: 2.5 });
+  signboard(w, 21.2, 3.1, wz + 0.06, 'EXIT', { wd: 1.0, h: 0.34, bg: '#1e6a3a', fg: '#e8ffe8', glow: true });
+  // camp clutter in the corners
+  trashBags(w, 5.9, 13.9, { n: 4, seed: 9 });
+  tarpHeap(w, 24.6, 6.4, { wd: 1.4, d: 1.0, h: 0.6, color: '#3a5a6a', collide: true });
+  // floor: cracks, grime, a puddle under the leak, litter around the fire
+  decal(w, 'puddle', 10.5, 4.2, { s: 1.1, y: y0 });
+  decal(w, 'puddle', 15.2, 3.7, { s: 0.7, v: 2, y: y0 });
+  scatterDecals(w, { x: 5.5, z: 3, w: 20, d: 11 }, ['crack', 'stain', 'crack', 'oil'], 22, 81, { s: [0.8, 1.4] });
+  scatterDecals(w, { x: 9, z: 7.5, w: 7, d: 5 }, ['litter', 'paper', 'butts', 'can'], 12, 82, { s: [0.7, 1.0] });
+  // daylight and weeds creeping down from the street
+  edgeWeeds(w, 22.2, 5.15, 25.2, 5.15, 7, 83, { kinds: ['dead', 'grass'], s: [0.4, 0.8] });
+  decal(w, 'moss', 22.4, 5.4, { s: 1.0, y: y0 });
 }

@@ -4,6 +4,7 @@ import type { MapModule } from './index';
 import { World, colorMat } from '../world/world';
 import { furniture, wall, interiorWindow, rug } from '../world/props';
 import { TV } from '../world/props2';
+import { poster, boxes, decal, cable } from '../world/props3';
 import { Weather } from '../world/particles';
 import { catSheet } from '../world/sheets';
 import { ui } from '../ui/ui';
@@ -45,9 +46,11 @@ export const apartment: MapModule = {
   build(w: World, g: Game) {
     w.setLighting({
       bg: '#0a0806',
-      hemi: { sky: '#ffe8c8', ground: '#6a4a30', intensity: 1.1 },
-      sun: { color: '#ffd8a8', intensity: 1.5, dir: [-4, 9, 6] },
-      bloom: 1.1, bloomThreshold: 0.7, tilt: 0.75, saturation: 0.16, vignette: 0.5,
+      hemi: { sky: '#ffe8c8', ground: '#7a5a40', intensity: 1.25 },
+      ambient: { color: '#5a6a80', intensity: 0.35 },
+      sun: { color: '#ffd8a8', intensity: 1.6, dir: [-4, 9, 6] },
+      bloom: 1.1, bloomThreshold: 0.7, tilt: 0.75, saturation: 0.18, vignette: 0.45,
+      shadowTint: '#30283a', highlightTint: '#fff2dc',
     });
     w.bounds = { x: 0, z: 0, w: 16, d: 11 };
     w.camDist = 17.5;
@@ -104,6 +107,7 @@ export const apartment: MapModule = {
     w.pointLight(0.8, 1.6, 1.0, '#ffc890', 3, 6);
     w.pointLight(13.8, 2.6, 3.2, '#fff0d8', 4, 7);
     w.weather = new Weather('dust', w.root, { count: 180, size: [16, 4, 11] });
+    dressApartment(w);
 
     // Biscuit
     cat = w.actor({ sheet: catSheet(), x: 2.8, z: 2.4, y: 0.62, solid: false, animated: false, castShadow: true });
@@ -221,4 +225,44 @@ async function broadcast(g: Game) {
   audio.playMusic(null);
   ui.hint('Leave through the <b>front door</b> (bottom right).');
   setTimeout(() => ui.hint(''), 7000);
+}
+
+/** Lived-in clutter: posters, a floor lamp, books, laundry, moving boxes, cables. */
+function dressApartment(w: World) {
+  // posters and a gig flyer on the walls
+  poster(w, 7.3, 1.9, 0.0, { v: 1, s: 1.3 });
+  poster(w, 8.1, 2.2, 0.0, { v: 4, s: 0.9 });
+  poster(w, 12.0, 2.3, 0.0, { v: 3, s: 1.0 });
+  poster(w, 0.0, 1.9, 4.6, { rot: Math.PI / 2, v: 0, s: 1.4 });
+  poster(w, 0.0, 2.0, 7.6, { rot: Math.PI / 2, v: 5, s: 1.0 });
+  poster(w, 6.2, 1.9, 3.4, { rot: Math.PI / 2, v: 2, s: 1.1 });
+  // floor lamp beside the couch
+  const lampPole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.7, 6), colorMat('#2a2420', { metal: 0.4 }));
+  lampPole.position.set(11.6, 0.85, 5.9); lampPole.castShadow = true; w.add(lampPole);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.05, 10), colorMat('#2a2420')); base.position.set(11.6, 0.03, 5.9); w.add(base);
+  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.3, 0.32, 10, 1, true), colorMat('#f0d8a8', { emissive: '#ffb860', ei: 1.2 }));
+  (shade.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide; shade.position.set(11.6, 1.75, 5.9); w.add(shade);
+  w.pointLight(11.6, 1.6, 5.9, '#ffbf78', 3.2, 6);
+  w.collider(11.45, 5.75, 0.3, 0.3);
+  // books stacked on the floor next to the shelf
+  const bookCols = ['#8a2a2a', '#2a4a7a', '#d8b45a', '#3a6a3a', '#c8c0b0'];
+  for (let i = 0; i < 6; i++) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.42 - (i % 3) * 0.04, 0.08, 0.3), colorMat(bookCols[i % 5]));
+    b.position.set(5.85, 0.04 + i * 0.08, 0.55); b.rotation.y = (i % 3 - 1) * 0.2; b.castShadow = true; w.add(b);
+  }
+  // laundry heap by the bed
+  const cloth = ['#3a4a6a', '#c8c0b0', '#7a3a3a', '#4a5a3a'];
+  for (let i = 0; i < 5; i++) {
+    const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), colorMat(cloth[i % 4], { rough: 1 }));
+    c.scale.set(1.3, 0.35, 1); c.position.set(0.5 + (i % 3) * 0.22, 0.06, 3.5 + Math.floor(i / 3) * 0.25); c.rotation.y = i; w.add(c);
+  }
+  // unpacked moving boxes in the corner, a pizza box and papers
+  boxes(w, 4.6, 10.2, { n: 4, seed: 12, collide: true });
+  const pizza = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.5), colorMat('#c8a878')); pizza.position.set(8.6, 0.42, 3.55); pizza.rotation.y = 0.3; w.add(pizza);
+  decal(w, 'paper', 1.9, 8.6, { rot: 0.4, v: 1 }); decal(w, 'paper', 2.3, 8.9, { rot: -0.3, v: 2 });
+  decal(w, 'paper', 8.2, 6.6, { rot: 1.2, v: 3 });
+  decal(w, 'stain', 13.4, 4.4, { s: 0.6, v: 2 });
+  // TV and lamp cables trailing along the wall
+  cable(w, [10.3, 0.55, 0.3], [11.4, 0.04, 0.25], { sag: 0.02, r: 0.018 });
+  cable(w, [11.6, 0.04, 6.0], [12.6, 0.04, 6.6], { sag: 0, r: 0.018 });
 }

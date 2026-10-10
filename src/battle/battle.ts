@@ -1,9 +1,10 @@
 // Turn-based battle: CTB timeline, telegraphed enemy intents, weaknesses/overload, Bond & Duo techs.
 import * as THREE from 'three';
-import { World, Lighting, colorMat } from '../world/world';
+import { World, Lighting, colorMat, snapCamera, snapActor } from '../world/world';
 import { Actor } from '../world/entity';
 import { Burst, Weather } from '../world/particles';
 import { building, lamp, bareTree, car, crate, barrier, snowPile, fence, barrel } from '../world/props';
+import { acUnit, trashBags, posterWall, scatterDecals, edgeWeeds, vendingMachine, wallStain, pipeRun, neonStrip, railing, crateStack, decal } from '../world/props3';
 import { ui } from '../ui/ui';
 import { input } from '../engine/input';
 import { audio } from '../engine/audio';
@@ -707,6 +708,8 @@ export class Battle {
     }
     this.camera.lookAt(this.camLook);
     for (const a of this.world.actors) a.update(dt, this.t);
+    const wpp = snapCamera(this.camera, this.camera.position.distanceTo(this.camLook));
+    for (const a of this.world.actors) snapActor(a, this.camera, wpp);
     for (const u of this.world.updaters) u(dt, this.t);
     this.world.weather?.update(dt, new THREE.Vector3(0, 0, 0));
     this.bursts = this.bursts.filter((b) => { b.update(dt); return !b.dead; });
@@ -734,7 +737,7 @@ export function buildStage(w: World, stage: Stage): Lighting {
   let L: Lighting;
   const groundRows = (ch: string) => Array.from({ length: 24 }, () => ch.repeat(36));
   if (stage === 'street') {
-    L = { bg: '#0e1424', fog: { color: '#1a2238', near: 14, far: 34 }, hemi: { sky: '#5a6a9a', ground: '#2a2228', intensity: 0.9 }, sun: { color: '#9ab0e0', intensity: 0.7, dir: [-4, 10, 6] }, bloom: 1.5, bloomThreshold: 0.6, tilt: 0.8, saturation: 0.1 };
+    L = { bg: '#0e1424', fog: { color: '#1a2238', near: 14, far: 34 }, hemi: { sky: '#6a7aaa', ground: '#3a3038', intensity: 1.2 }, sun: { color: '#9ab0e0', intensity: 0.85, dir: [-4, 10, 6] }, bloom: 1.5, bloomThreshold: 0.6, tilt: 0.8, saturation: 0.1, shadowTint: '#1c2a44' };
     w.setLighting(L);
     w.ground(groundRows('s'), { s: { tex: 'cobble_snow' } }, -18, -12);
     building(w, { x: -16, z: -11, w: 8, d: 4, h: 9, floors: 3, lit: 0.3, snow: true, roof: 'mansard', roofSnow: true, shutter: '#1a1a1a', ivy: 0.2 });
@@ -744,30 +747,48 @@ export function buildStage(w: World, stage: Stage): Lighting {
     lamp(w, -6, -5, { snow: true }); lamp(w, 6, -5, { snow: true });
     car(w, 9, -2, { color: '#3a4a6a', snow: 1, rot: 0.2 });
     bareTree(w, -10, -4, { snow: true }); snowPile(w, -8, 3); snowPile(w, 8, 4, 1.3);
+    for (const [ax, ay] of [[-13, 4.6], [-4.5, 6.8], [3, 4.6], [11, 6.8]] as const) acUnit(w, ax, ay, -6.76, { drip: true });
+    posterWall(w, -3.5, 1.3, -6.98, { n: 4, seed: 201 }); posterWall(w, 10.5, 1.3, -6.98, { n: 3, seed: 202 });
+    trashBags(w, -12.5, -6.2, { n: 3, seed: 203 }); vendingMachine(w, 13.2, -6.5, { seed: 6, broken: true });
+    scatterDecals(w, { x: -16, z: -6, w: 32, d: 14 }, ['crack', 'oil', 'snowpatch', 'litter', 'stain'], 40, 204);
+    edgeWeeds(w, -16, -6.85, 16, -6.85, 18, 205, { kinds: ['dead', 'grass'] });
     w.weather = new Weather('snow', w.root, { count: 900 });
   } else if (stage === 'station') {
-    L = { bg: '#0a0806', fog: { color: '#120e0a', near: 12, far: 30 }, hemi: { sky: '#6a5a40', ground: '#201810', intensity: 0.6 }, sun: { color: '#ffd8a0', intensity: 0.4, dir: [0, 10, 4] }, bloom: 1.6, tilt: 0.8 };
+    L = { bg: '#0a0806', fog: { color: '#120e0a', near: 12, far: 30 }, hemi: { sky: '#8a8a80', ground: '#3a3024', intensity: 1.0 }, sun: { color: '#ffd8a0', intensity: 0.45, dir: [0, 10, 4] }, bloom: 1.6, tilt: 0.8, shadowTint: '#203440' };
     w.setLighting(L);
     w.ground(groundRows('f'), { f: { tex: 'station_floor' } }, -18, -12);
     w.box(-18, -10, 36, 1, 7, colorMat('#c9bfa4'));
     for (let x = -15; x < 16; x += 6) { w.box(x, -6, 0.8, 0.8, 7, colorMat('#5a5048')); w.pointLight(x + 0.4, 4, -5, '#ffd8a0', 6, 9, 0.05); }
+    pipeRun(w, [[-18, 5.2, -8.85], [18, 5.2, -8.85]], { r: 0.1, rust: true });
+    for (const sx of [-12, -1, 9]) wallStain(w, sx, 3.5, -9, { h: 3, wd: 1.2, kind: 'water' });
+    posterWall(w, -6, 2, -9, { n: 4, seed: 211 }); posterWall(w, 4, 2, -9, { n: 3, seed: 212 });
+    vendingMachine(w, -9.5, -8.6, { color: '#2f5a8a', seed: 2 });
+    neonStrip(w, 12, 3.2, -8.9, 2.4, '#7a5cff', { intensity: 4, flicker: 0.05 });
+    scatterDecals(w, { x: -16, z: -8, w: 32, d: 16 }, ['crack', 'stain', 'litter', 'paper', 'puddle'], 36, 213);
     w.weather = new Weather('dust', w.root, { count: 200 });
   } else if (stage === 'tunnel') {
-    L = { bg: '#030304', fog: { color: '#050508', near: 8, far: 22 }, ambient: { color: '#3a3a4a', intensity: 0.5 }, bloom: 1.8, tilt: 0.6 };
+    L = { bg: '#050608', fog: { color: '#0a0e14', near: 12, far: 30 }, ambient: { color: '#5a6a8a', intensity: 1.8 }, hemi: { sky: '#5a6688', ground: '#2a2018', intensity: 1.2 }, bloom: 1.8, tilt: 0.6, exposure: 1.3, shadowTint: '#1a2a3a' };
     w.setLighting(L);
-    w.ground(groundRows('r'), { r: { tex: 'rail_bed' } }, -18, -12);
+    w.ground(groundRows('r'), { r: { tex: 'rail_bed_x' } }, -18, -12);
     w.box(-18, -6, 36, 1, 6, colorMat('#2e2c2a'));
     for (const z of [-1.2, 1.2]) w.box(-18, z, 36, 0.12, 0.15, colorMat('#6a6a70', { metal: 0.8, rough: 0.3 }), { collide: false });
     w.pointLight(3.5, 2.2, 2.5, '#fff0c0', 10, 9);
     w.pointLight(-3.5, 2.5, 1, '#ff3020', 5, 8, 0.2);
+    pipeRun(w, [[-18, 4.3, -4.88], [18, 4.3, -4.88]], { r: 0.09 }); pipeRun(w, [[-18, 4.0, -4.9], [18, 4.0, -4.9]], { r: 0.05, rust: true });
+    for (const sx of [-10, 0, 10]) wallStain(w, sx, 3, -5, { h: 3, kind: 'rust' });
+    for (const [px, pz] of [[-6, 3], [7, -2], [2, 5]] as const) decal(w, 'puddle', px, pz, { s: 1.3 });
+    scatterDecals(w, { x: -16, z: -4, w: 32, d: 14 }, ['oil', 'stain', 'litter', 'can'], 30, 221);
     w.weather = new Weather('dust', w.root, { count: 160 });
   } else {
-    L = { bg: '#060a12', fog: { color: '#0e1622', near: 10, far: 30 }, hemi: { sky: '#3a4a6a', ground: '#101418', intensity: 0.7 }, sun: { color: '#8aa0c8', intensity: 0.5, dir: [-3, 10, 5] }, bloom: 1.7, tilt: 0.8 };
+    L = { bg: '#060a12', fog: { color: '#0e1622', near: 10, far: 30 }, hemi: { sky: '#6a7aa0', ground: '#2a2a34', intensity: 1.2 }, sun: { color: '#8aa0c8', intensity: 0.7, dir: [-3, 10, 5] }, bloom: 1.7, tilt: 0.8, shadowTint: '#1a2a40' };
     w.setLighting(L);
     const rows = Array.from({ length: 24 }, (_, z) => (z < 6 ? 'w' : 'd').repeat(36));
     w.ground(rows, { d: { tex: 'dock' }, w: { tex: 'water' } }, -18, -12);
     for (const x of [-12, -4, 6, 13]) lamp(w, x, -5.5, { color: '#c0d8ff', intensity: 7 });
     crate(w, 8, -3, { s: 1.2 }); crate(w, 9.3, -3.2, { s: 1 }); barrel(w, -9, -3);
+    railing(w, -18, -5.9, 18, -5.9, { h: 0.9, collide: false, posts: 1.75 });
+    crateStack(w, -13, -4.4, { n: 3, seed: 231, color: '#4a6a7a' }); trashBags(w, 13, -4.5, { n: 2, seed: 232 });
+    scatterDecals(w, { x: -16, z: -5, w: 32, d: 16 }, ['oil', 'stain', 'snowpatch', 'litter'], 34, 233);
     w.weather = new Weather('snow', w.root, { count: 500 });
   }
   return L;

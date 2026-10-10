@@ -9,6 +9,9 @@ import {
 } from 'postprocessing';
 import { loadSettings } from '../story/state';
 
+/** Height of the low-res framebuffer in pixels; used to snap cameras and sprites to the pixel grid. */
+export const view = { lines: 360 };
+
 export interface PostSettings {
   bloom?: number; bloomThreshold?: number; tilt?: number; saturation?: number; vignette?: number; exposure?: number; contrast?: number;
   /** split-tone: color pushed into the shadows / highlights */
@@ -137,9 +140,11 @@ export class Renderer {
   resize() {
     const w = window.innerWidth, h = window.innerHeight, k = this.scale;
     const rw = Math.ceil(w / k), rh = Math.ceil(h / k);
+    view.lines = rh;
     this.gl.setSize(rw, rh, false);
     this.composer.setSize(rw, rh, false);
-    this.canvas.style.width = '100%'; this.canvas.style.height = '100%';
+    // Exact integer upscale (may overhang the window by < k px) so every low-res pixel is the same size.
+    this.canvas.style.width = rw * k + 'px'; this.canvas.style.height = rh * k + 'px';
   }
 
   get aspect() { return window.innerWidth / window.innerHeight; }

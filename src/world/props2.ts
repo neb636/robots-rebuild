@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { World, mat, colorMat, worldBox } from './world';
-import { PixelCanvas, toTexture, rng } from '../engine/pixel';
+import { PixelCanvas, toTexture, rng, shade, mix } from '../engine/pixel';
 import { sign } from './props';
 
 function mesh(g: THREE.BufferGeometry, m: THREE.Material | THREE.Material[], cast = true) {
@@ -119,22 +119,37 @@ export function radio(w: World, x: number, z: number, y = 0.8) {
 // ---------------------------------------------------------------- autumn tree (Day Zero)
 export function leafTree(w: World, x: number, z: number, o: { color?: string; scale?: number; seed?: number } = {}) {
   const s = o.scale ?? 1; const r = rng(o.seed ?? Math.floor(x * 13 + z * 7));
-  const trunk = mesh(new THREE.CylinderGeometry(0.12 * s, 0.2 * s, 2.2 * s, 6), colorMat('#3a2a1e'));
-  trunk.position.set(x, 1.1 * s, z); w.add(trunk);
-  const base = o.color ?? '#d8a030';
-  const c = new PixelCanvas(64, 64);
-  for (let i = 0; i < 1400; i++) {
-    const v = r();
-    const col = v < 0.2 ? '#f0c850' : v < 0.55 ? base : v < 0.85 ? '#b07020' : '#7a4a18';
-    const px = r() * 64, py = r() * 64; c.rect(px, py, 2, 2, col);
+  const bark = colorMat('#3a2a1e', { rough: 1 });
+  const trunk = mesh(new THREE.CylinderGeometry(0.1 * s, 0.2 * s, 2.6 * s, 6), bark);
+  trunk.position.set(x, 1.3 * s, z); w.add(trunk);
+  // a few limbs reaching into the crown
+  for (let i = 0; i < 3; i++) {
+    const limb = mesh(new THREE.CylinderGeometry(0.04 * s, 0.07 * s, 1.1 * s, 5), bark);
+    limb.position.set(x + (i - 1) * 0.3 * s, 2.5 * s, z); limb.rotation.z = (i - 1) * 0.7; w.add(limb);
   }
-  const leafMat = new THREE.MeshStandardMaterial({ map: toTexture(c, true), roughness: 0.95 });
-  for (let i = 0; i < 6; i++) {
-    const rr = (0.75 + r() * 0.5) * s;
-    const g = new THREE.IcosahedronGeometry(rr, 0);
-    const m = mesh(g, leafMat);
-    m.position.set(x + (r() - 0.5) * 1.3 * s, (2.4 + r() * 1.2) * s, z + (r() - 0.5) * 1.0 * s);
-    m.rotation.set(r() * 3, r() * 3, r() * 3);
+  const base = o.color ?? '#d8a030';
+  // leaf texture: distinct 2px leaves over a dark crown interior, so clumps read as foliage not noise
+  const c = new PixelCanvas(32, 32);
+  c.fill(shade(base, -0.45));
+  for (let i = 0; i < 260; i++) {
+    const v = r();
+    const col = v < 0.25 ? shade(base, 0.25) : v < 0.7 ? base : shade(base, -0.22);
+    const px = Math.floor(r() * 32), py = Math.floor(r() * 32);
+    c.px(px, py, col); c.px(px + 1, py, col); c.px(px, py + 1, shade(col, -0.15));
+  }
+  const tex = toTexture(c, true);
+  const tones = [shade(base, 0.12), '#ffffff', shade(base, -0.05)];
+  const mats = tones.map((t) => { const m = new THREE.MeshStandardMaterial({ map: tex, color: t === '#ffffff' ? '#ffffff' : mix('#ffffff', t, 0.35), roughness: 0.95, flatShading: true }); return m; });
+  const n = 11;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + r();
+    const rad = (i < 3 ? 0.2 : 0.75) * s * (0.6 + r() * 0.5);
+    const rr = (0.45 + r() * 0.35) * s;
+    const g = new THREE.IcosahedronGeometry(rr, 1);
+    const yy = (2.7 + (i < 3 ? 1.1 : r() * 0.9)) * s;
+    const m = mesh(g, mats[yy > 3.3 * s ? 1 : i % 2 === 0 ? 0 : 2]);
+    m.position.set(x + Math.cos(a) * rad, yy, z + Math.sin(a) * rad * 0.8);
+    m.scale.y = 0.85; m.rotation.set(r() * 3, r() * 3, r() * 3);
     w.add(m);
   }
   w.collider(x - 0.25, z - 0.25, 0.5, 0.5);
