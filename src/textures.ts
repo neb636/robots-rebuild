@@ -345,13 +345,73 @@ export const windowTex = (lit: boolean) => once('win_' + lit, () => canvasTex(12
   }
 }));
 
-/** Cat face emblem for the hero's sweater. */
-export const emblemTex = () => once('emblem', () => canvasTex(128, 128, (c) => {
-  c.fillStyle = '#c8b898';
-  c.beginPath(); c.moveTo(24, 44); c.lineTo(34, 14); c.lineTo(54, 34); c.lineTo(74, 34); c.lineTo(94, 14); c.lineTo(104, 44);
-  c.quadraticCurveTo(110, 100, 64, 106); c.quadraticCurveTo(18, 100, 24, 44); c.fill();
-  c.fillStyle = '#2a2018'; c.beginPath(); c.arc(48, 62, 6, 0, 7); c.arc(80, 62, 6, 0, 7); c.fill();
-  c.fillStyle = '#b05a4a'; c.beginPath(); c.moveTo(58, 76); c.lineTo(70, 76); c.lineTo(64, 84); c.fill();
-  c.strokeStyle = '#2a2018'; c.lineWidth = 2;
-  for (const s of [-1, 1]) for (let k = 0; k < 2; k++) { c.beginPath(); c.moveTo(64 + s * 14, 82 + k * 6); c.lineTo(64 + s * 40, 78 + k * 10); c.stroke(); }
+/**
+ * Biscuit's face, cartoon style, for the front of Theo's sweater: a ginger tabby with a notched
+ * left ear, big green eyes, a cream muzzle and whiskers that run off her cheeks. Transparent
+ * background; drawn with a dark outline like a knitted-in character patch.
+ */
+export const emblemTex = () => once('emblem', () => canvasTex(512, 512, (c) => {
+  const INK = '#2a1b14', GINGER = '#e68f42', STRIPE = '#b4592a', CREAM = '#f7e4c4', PINK = '#ee9a96';
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  const shape = (draw: () => void, fill: string, stroke = 14) => {
+    c.beginPath(); draw();
+    if (stroke) { c.strokeStyle = INK; c.lineWidth = stroke; c.stroke(); }
+    c.fillStyle = fill; c.fill();
+  };
+  // whiskers first so the face overlaps their roots
+  c.strokeStyle = INK; c.lineWidth = 11;
+  const whiskers = [[-1, 0, -12], [-1, 1, 10], [1, 0, -12], [1, 1, 10]];
+  for (const [s, , dy] of whiskers) { c.beginPath(); c.moveTo(256 + s * 120, 352 + dy * 0.4); c.quadraticCurveTo(256 + s * 190, 344 + dy * 1.6, 256 + s * 236, 340 + dy * 3.2); c.stroke(); }
+  c.strokeStyle = CREAM; c.lineWidth = 5;
+  for (const [s, , dy] of whiskers) { c.beginPath(); c.moveTo(256 + s * 120, 352 + dy * 0.4); c.quadraticCurveTo(256 + s * 190, 344 + dy * 1.6, 256 + s * 236, 340 + dy * 3.2); c.stroke(); }
+  // ears (her left ear, on the viewer's right, has a notch bitten out of it)
+  shape(() => { c.moveTo(96, 214); c.quadraticCurveTo(104, 96, 134, 46); c.quadraticCurveTo(190, 92, 222, 150); c.closePath(); }, GINGER);
+  shape(() => { c.moveTo(416, 214); c.quadraticCurveTo(410, 150, 400, 118); c.lineTo(374, 112); c.lineTo(392, 92); c.quadraticCurveTo(386, 66, 378, 46); c.quadraticCurveTo(322, 92, 290, 150); c.closePath(); }, GINGER);
+  shape(() => { c.moveTo(126, 186); c.quadraticCurveTo(130, 120, 142, 88); c.quadraticCurveTo(178, 118, 196, 156); c.closePath(); }, PINK, 0);
+  shape(() => { c.moveTo(386, 186); c.quadraticCurveTo(384, 150, 378, 128); c.lineTo(366, 118); c.quadraticCurveTo(352, 122, 316, 156); c.closePath(); }, PINK, 0);
+  // head with tufted cheeks
+  const head = () => {
+    c.moveTo(256, 128);
+    c.bezierCurveTo(350, 126, 418, 176, 428, 262);
+    c.lineTo(456, 300); c.lineTo(424, 312); c.lineTo(446, 352); c.lineTo(406, 354);
+    c.bezierCurveTo(376, 420, 316, 444, 256, 444);
+    c.bezierCurveTo(196, 444, 136, 420, 106, 354);
+    c.lineTo(66, 352); c.lineTo(88, 312); c.lineTo(56, 300); c.lineTo(84, 262);
+    c.bezierCurveTo(94, 176, 162, 126, 256, 128);
+    c.closePath();
+  };
+  shape(head, GINGER, 16);
+  // tabby stripes, clipped to the head
+  c.save(); c.beginPath(); head(); c.clip();
+  c.strokeStyle = STRIPE; c.lineWidth = 15;
+  for (const [x0, y0, x1, y1] of [[256, 132, 256, 196], [214, 140, 224, 196], [298, 140, 288, 196], [176, 156, 196, 200], [336, 156, 316, 200]]) {
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+  }
+  for (const s of [-1, 1]) for (const y of [300, 336]) {
+    c.beginPath(); c.moveTo(256 + s * 180, y - 6); c.quadraticCurveTo(256 + s * 150, y + 2, 256 + s * 124, y + 12); c.stroke();
+  }
+  c.restore();
+  // muzzle
+  shape(() => { c.ellipse(222, 360, 50, 40, 0, 0, Math.PI * 2); c.moveTo(340, 360); c.ellipse(290, 360, 50, 40, 0, 0, Math.PI * 2); }, CREAM, 0);
+  shape(() => { c.ellipse(256, 398, 36, 26, 0, 0, Math.PI * 2); }, CREAM, 0);
+  // cheeks
+  c.fillStyle = 'rgba(240,120,120,0.35)';
+  c.beginPath(); c.ellipse(140, 344, 30, 18, 0, 0, Math.PI * 2); c.ellipse(372, 344, 30, 18, 0, 0, Math.PI * 2); c.fill();
+  // eyes: big, green, round pupils, two glints each
+  for (const s of [-1, 1]) {
+    const x = 256 + s * 78, y = 272;
+    shape(() => { c.ellipse(x, y, 46, 52, 0, 0, Math.PI * 2); }, '#8cc63f', 11);
+    c.fillStyle = '#c8e070'; c.beginPath(); c.ellipse(x, y + 20, 30, 22, 0, 0, Math.PI); c.fill();
+    c.fillStyle = INK; c.beginPath(); c.ellipse(x + s * 4, y + 2, 28, 38, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff';
+    c.beginPath(); c.arc(x - 12, y - 16, 13, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(x + 12, y + 16, 6, 0, Math.PI * 2); c.fill();
+  }
+  // nose and a little "w" mouth
+  shape(() => { c.moveTo(232, 326); c.quadraticCurveTo(256, 318, 280, 326); c.quadraticCurveTo(272, 344, 256, 350); c.quadraticCurveTo(240, 344, 232, 326); }, PINK, 9);
+  c.strokeStyle = INK; c.lineWidth = 9;
+  c.beginPath(); c.moveTo(256, 350); c.lineTo(256, 362);
+  c.moveTo(222, 360); c.quadraticCurveTo(236, 380, 256, 362); c.quadraticCurveTo(276, 380, 290, 360); c.stroke();
+  // a pink tongue-blep, because she's that kind of cat
+  shape(() => { c.moveTo(246, 370); c.quadraticCurveTo(256, 398, 266, 370); }, '#e06a72', 7);
 }));

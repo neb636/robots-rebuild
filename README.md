@@ -41,6 +41,10 @@ and restored on the next visit:
 URL params override the saved settings without changing them, for sharing a specific setup:
 `?mood=curfew&look=paint&cam=jrpg&q=low&ui=0&card=0`. `?debug` exposes `window.__THREE`.
 
+For character work, `npm run dev` also serves `/viewer.html`: the hero (or a Converted) under
+neutral studio light, `?view=face|face3|profile|front|body|three|side|back|game`,
+`&anim=idle|walk|run`, `&who=hero|c0..c3`, `&live` to animate. Drag to orbit, wheel to zoom.
+
 ## Why this tech stack
 
 **Three.js + TypeScript + Vite, rendered in the browser.**
@@ -61,6 +65,10 @@ src/
   post.ts        post stack: SSAO, volumetric height fog + light halos + spot beam, DOF, bloom,
                  AgX tone map, film grade, painterly Kuwahara, vignette, grain
   character.ts   parametric 3D characters (hero, Converted) with a procedural walk/idle rig
+  face.ts        head sculpting; Theo's detailed face (painted skin, blinking eyes, brows, hair)
+  biscuit.ts     Biscuit, Theo's cat, riding in his pack
+  charkit.ts     character building blocks: materials, revolved/tapered/skinned geometry, painting
+  viewer.ts      dev-only character viewer (/viewer.html, not part of the build)
   buildings.ts   rowhouses: windows (intact/broken/boarded/lit), stoops, cornices, bow fronts
   flagstones.ts  Voronoi flagstones as real beveled geometry, plus gap points for grass
   foliage.ts     wind-swept grass, leaf-card bushes and ivy, trees, hanging moss
