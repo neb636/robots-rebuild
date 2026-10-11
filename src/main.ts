@@ -1,6 +1,7 @@
 // Quiet Machines: a walkable vertical slice of a ruined Beacon Hill lane in stylized, lit 3D.
-import '@fontsource/cinzel/500.css';
-import '@fontsource/cinzel/700.css';
+import '@fontsource/cormorant-garamond/500.css';
+import '@fontsource/cormorant-garamond/600.css';
+import '@fontsource/cormorant-garamond/700.css';
 import './style.css';
 import * as THREE from 'three';
 import { PBR_NAMES, pbr, setAnisotropy } from './textures';
@@ -10,37 +11,8 @@ import { Character, HERO, blobShadow, rim } from './character';
 import { wind } from './foliage';
 import { ash, embers, rain, fogBanks } from './fx';
 import { audio } from './audio';
-
-type CamMode = 'follow' | 'jrpg' | 'cinematic';
-const params = new URLSearchParams(location.search);
-const isTouch = matchMedia('(pointer: coarse)').matches;
-
-const CAMS: CamMode[] = ['follow', 'jrpg', 'cinematic'];
-
-// Player settings (mood, camera, render style, quality) persist on this device. URL params still
-// win, so a shared link like ?mood=curfew&cam=jrpg opens exactly that setup.
-const SETTINGS_KEY = 'quiet-machines.settings.v1';
-type Saved = { mood?: string; cam?: string; painterly?: boolean; quality?: string };
-function loadSettings(): Saved {
-  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') ?? {}; } catch { return {}; }
-}
-function saveSettings(): boolean {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ mood: state.mood, cam: state.cam, painterly: state.painterly, quality: state.quality }));
-    return true;
-  } catch { return false; /* storage blocked (private mode): settings just won't persist */ }
-}
-const saved = loadSettings();
-const pick = <T extends string>(v: string | null | undefined, ok: readonly string[], fallback: T): T => (v && ok.includes(v) ? v as T : fallback);
-
-const state = {
-  mood: pick<keyof typeof MOODS>(params.get('mood') ?? saved.mood, Object.keys(MOODS), 'ashfall'),
-  painterly: params.has('look') ? params.get('look') === 'paint' : saved.painterly === true,
-  cam: pick<CamMode>(params.get('cam') ?? saved.cam, CAMS, 'follow'),
-  quality: pick<'high' | 'low'>(params.get('q') ?? saved.quality, ['high', 'low'], isTouch ? 'low' : 'high'),
-  ui: params.get('ui') !== '0',
-  sound: false,
-};
+import { state, saveSettings, params, isTouch, CAMS, CamMode, skipTitleOnce, consumeSkipTitle } from './settings';
+import { TitleScreen } from './title';
 
 const app = document.getElementById('app')!;
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
@@ -48,7 +20,6 @@ const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeou
 
 // ------------------------------------------------------------------------------ loading
 const loader = el('div', 'loader', `<div class="lt">QUIET MACHINES</div><div class="ls">Prologue · Static</div><div class="bar"><i></i></div><div class="lm">…</div>`);
-app.appendChild(loader);
 const setLoad = (p: number, msg: string) => { (loader.querySelector('.bar i') as HTMLElement).style.width = `${p * 100}%`; loader.querySelector('.lm')!.textContent = msg; };
 
 async function boot() {
@@ -62,6 +33,15 @@ async function boot() {
   gl.toneMapping = THREE.NoToneMapping;
   setAnisotropy(Math.min(8, gl.capabilities.getMaxAnisotropy()));
 
+  // Title screen first (skipped with ?menu=0, and when a quality change reloads straight into the game).
+  // The street is built only after New Game, so the title's slow weather never stutters under loading.
+  const skipTitle = params.get('menu') === '0' || consumeSkipTitle();
+  if (!skipTitle) await new TitleScreen(gl, app).run();
+  app.appendChild(loader);
+  if (!skipTitle) loader.classList.add('quick');
+  // the player may have changed quality in the title's options
+  gl.setPixelRatio(Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1));
+
   const msgs = ['Weathering brick…', 'Laying flagstones…', 'Growing moss…', 'Rusting the cars…', 'Knitting a sweater…', 'Lighting the lamps…'];
   for (let i = 0; i < PBR_NAMES.length; i++) { setLoad((i / PBR_NAMES.length) * 0.7, msgs[i % msgs.length]); await nextFrame(); pbr(PBR_NAMES[i]); }
   setLoad(0.75, 'Building the street…'); await nextFrame();
@@ -74,6 +54,8 @@ async function boot() {
   loader.classList.add('done');
   setTimeout(() => loader.remove(), 1200);
   app3.start();
+  // a gesture on the title already unlocked audio, so the prologue's music can start right away
+  if (audio.ready) app3.enableAudio();
   (window as any).app = app3;
   if (params.has('debug')) (window as any).__THREE = THREE;
 }
@@ -207,6 +189,7 @@ class App {
     const p = new URLSearchParams(location.search);
     for (const k of ['q', 'mood', 'cam', 'look']) p.delete(k);
     if (!saveSettings()) { p.set('q', q); p.set('mood', state.mood); p.set('cam', state.cam); if (state.painterly) p.set('look', 'paint'); }
+    skipTitleOnce();
     const qs = p.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
     location.reload();

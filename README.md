@@ -4,6 +4,11 @@ A dark, stylized 3D JRPG set in a ruined, overgrown Boston. The current build is
 vertical slice of a Beacon Hill lane: carved flagstones, volumetric fog with lantern halos, a
 drone searchlight, and the Converted standing in the haze.
 
+It opens on a title screen: a dead machine's hand rising out of an ash field on a rainy night.
+The hand never moves. Only the weather does: clouds creep right, mist slides along the ground, rain
+falls, a strip of cloth streams from the wrist, and one indicator light breathes. The street is
+built after **New Game**.
+
 **Play it:** https://neb636.github.io/robots-rebuild/
 
 ```bash
@@ -30,7 +35,7 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 Mood, camera, render style and quality are player settings, saved on the device (localStorage)
 and restored on the next visit:
 
-- **Mood:** Ashfall (dusk), Curfew (night rain), Grey Pall (dead fog). Each mood is a block of
+- **Mood:** Curfew (night rain, the default), Ashfall (dusk), Grey Pall (dead fog). Each mood is a block of
   data in `MOODS` (`src/scene.ts`): sky, fog, grade, moonlight, rain, wet ground.
 - **Camera:** Follow (third-person), JRPG (diorama angle), Cinematic (hand-placed shots, `CINE` in
   `src/main.ts`).
@@ -38,8 +43,11 @@ and restored on the next visit:
 - **Quality:** High, or Low (no SSAO or depth of field, 1x pixel ratio, no MSAA). Touch devices
   default to Low.
 
+The same settings can be changed from **Options** on the title screen before starting.
+
 URL params override the saved settings without changing them, for sharing a specific setup:
-`?mood=curfew&look=paint&cam=jrpg&q=low&ui=0&card=0`. `?debug` exposes `window.__THREE`.
+`?mood=curfew&look=paint&cam=jrpg&q=low&ui=0&card=0`. `?menu=0` skips the title screen and goes
+straight into the game. `?debug` exposes `window.__THREE` (and `window.__title` on the title screen).
 
 ## Why this tech stack
 
@@ -56,7 +64,11 @@ URL params override the saved settings without changing them, for sharing a spec
 
 ```
 src/
-  main.ts        app shell: loop, cameras, input (keyboard, touch, gamepad), settings, UI
+  main.ts        app shell: boot, loop, cameras, input (keyboard, touch, gamepad), in-game UI
+  settings.ts    player settings shared by the title menu and the game (saved on the device)
+  title.ts       title screen backdrop: the hand, ash field, drifting sky, mist, cloth, its post stack
+  menu.ts        title menu: options, controls, credits, brush-stroke highlight, all input types
+  menu.css       title menu layout
   scene.ts       the lane layout, walkable heights, lights, the Converted, the drone, moods
   post.ts        post stack: SSAO, volumetric height fog + light halos + spot beam, DOF, bloom,
                  AgX tone map, film grade, painterly Kuwahara, vignette, grain
@@ -71,7 +83,7 @@ src/
   batch.ts       static geometry batching by material
   noise.ts       value / fbm / cellular noise and small math helpers
   audio.ts       WebAudio synth, step sequencer, songs, ambience, SFX
-  style.css      loader, settings panel, title card, touch stick
+  style.css      loader, in-game settings panel, title card, touch stick
 planning/
   game_outline.md
   prologue_script.md
