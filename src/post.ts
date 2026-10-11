@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import {
   EffectComposer, RenderPass, EffectPass, Effect, EffectAttribute, BloomEffect, VignetteEffect,
   ToneMappingEffect, ToneMappingMode, NoiseEffect, BlendFunction, ChromaticAberrationEffect,
-  DepthOfFieldEffect, SSAOEffect, NormalPass,
+  DepthOfFieldEffect, SSAOEffect, NormalPass, Pass,
 } from 'postprocessing';
 
 export const MAX_LIGHTS = 12;
@@ -223,74 +223,126 @@ export class GradeEffect extends Effect {
 /**
  * Painterly filter: 8-sector generalized Kuwahara (smooth flat brush regions that keep edges)
  * plus a faint luminance-edge ink line and canvas tooth.
+ *
+ * The Kuwahara is the most expensive thing on screen (dozens of taps × 8 sectors per pixel), so it
+ * runs at half resolution and is upsampled. The brush regions are flat anyway, so the drop in
+ * resolution barely shows. Ink lines and canvas tooth are drawn at full resolution to keep them crisp.
  */
-export class PaintEffect extends Effect {
+const FULLSCREEN_VERT = /* glsl */`
+  varying vec2 vUv;
+  void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 1.0, 1.0); }`;
+
+export class PaintPass extends Pass {
+  private half = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
+  private kuwahara: THREE.ShaderMaterial;
+  private combine: THREE.ShaderMaterial;
+  /** resolution of the brush pass relative to the screen */
+  scale = 0.5;
+
   constructor() {
-    super('PaintEffect', /* glsl */`
-      uniform float radius;
-      uniform float ink;
-      float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-      // Generalized Kuwahara with polynomial sector weights (Kyprianidis et al.): 8 soft, overlapping
-      // sectors over a disc. Picks the low-variance brush direction without the box filter's blockiness.
-      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-        const int R = 5;
-        const float q = 8.0;
-        float zeta = 2.0 / float(R);
-        float sz = sin(0.58);
-        float eta = (zeta + cos(0.58)) / (sz * sz);
-        vec4 m[8]; vec3 s[8];
-        for (int k = 0; k < 8; k++) { m[k] = vec4(0.0); s[k] = vec3(0.0); }
-        for (int j = -R; j <= R; j++) for (int i = -R; i <= R; i++) {
-          vec2 v = vec2(float(i), float(j)) / float(R);
-          if (dot(v, v) > 1.0) continue;
-          vec3 c = texture2D(inputBuffer, uv + vec2(float(i), float(j)) * texelSize * radius).rgb;
-          c = min(c, vec3(4.0));
-          float w[8]; float sum = 0.0; float z;
-          float vxx = zeta - eta * v.x * v.x, vyy = zeta - eta * v.y * v.y;
-          z = max(0.0, v.y + vxx); w[0] = z * z; sum += w[0];
-          z = max(0.0, -v.x + vyy); w[2] = z * z; sum += w[2];
-          z = max(0.0, -v.y + vxx); w[4] = z * z; sum += w[4];
-          z = max(0.0, v.x + vyy); w[6] = z * z; sum += w[6];
-          vec2 r = 0.70710678 * vec2(v.x - v.y, v.x + v.y);
-          vxx = zeta - eta * r.x * r.x; vyy = zeta - eta * r.y * r.y;
-          z = max(0.0, r.y + vxx); w[1] = z * z; sum += w[1];
-          z = max(0.0, -r.x + vyy); w[3] = z * z; sum += w[3];
-          z = max(0.0, -r.y + vxx); w[5] = z * z; sum += w[5];
-          z = max(0.0, r.x + vyy); w[7] = z * z; sum += w[7];
-          float g = exp(-3.125 * dot(v, v)) / max(sum, 1e-4);
-          for (int k = 0; k < 8; k++) { float wk = w[k] * g; m[k] += vec4(c * wk, wk); s[k] += c * c * wk; }
-        }
-        vec3 col = vec3(0.0); float ws = 0.0;
-        for (int k = 0; k < 8; k++) {
-          if (m[k].w <= 0.0) continue;
-          vec3 mu = m[k].rgb / m[k].w;
-          vec3 va = abs(s[k] / m[k].w - mu * mu);
-          float sig = va.r + va.g + va.b;
-          float w = 1.0 / (1.0 + pow(1000.0 * sig, 0.5 * q));
-          col += mu * w; ws += w;
-        }
-        col = ws > 0.0 ? col / ws : inputColor.rgb;
-        // ink: luminance Sobel, faint
-        vec2 t = texelSize * 1.5;
-        float tl = lum(texture2D(inputBuffer, uv + vec2(-t.x, t.y)).rgb), tr = lum(texture2D(inputBuffer, uv + vec2(t.x, t.y)).rgb);
-        float bl = lum(texture2D(inputBuffer, uv + vec2(-t.x, -t.y)).rgb), br = lum(texture2D(inputBuffer, uv + vec2(t.x, -t.y)).rgb);
-        float gx = (tr + br) - (tl + bl), gy = (tl + tr) - (bl + br);
-        float e = smoothstep(0.1, 0.4, sqrt(gx * gx + gy * gy));
-        col *= 1.0 - e * ink;
-        // canvas tooth
-        vec2 p = uv * resolution;
-        float tooth = sin(p.x * 1.7 + sin(p.y * 0.31) * 2.0) * sin(p.y * 1.9 + sin(p.x * 0.27) * 2.0);
-        col *= 0.975 + tooth * 0.025;
-        outputColor = vec4(col, inputColor.a);
-      }
-    `, {
-      attributes: EffectAttribute.CONVOLUTION,
-      uniforms: new Map<string, THREE.Uniform>([
-        ['radius', new THREE.Uniform(1.25)],
-        ['ink', new THREE.Uniform(0.3)],
-      ]),
+    super('PaintPass');
+    this.kuwahara = new THREE.ShaderMaterial({
+      name: 'PaintKuwahara', depthTest: false, depthWrite: false, toneMapped: false,
+      uniforms: { inputBuffer: { value: null }, texelSize: { value: new THREE.Vector2() }, radius: { value: 0.8 } },
+      vertexShader: FULLSCREEN_VERT,
+      fragmentShader: /* glsl */`
+        uniform sampler2D inputBuffer; uniform vec2 texelSize; uniform float radius;
+        varying vec2 vUv;
+        // Generalized Kuwahara with polynomial sector weights (Kyprianidis et al.): 8 soft, overlapping
+        // sectors over a disc. Picks the low-variance brush direction without the box filter's blockiness.
+        void main() {
+          const int R = 4;
+          const float q = 8.0;
+          float zeta = 2.0 / float(R);
+          float sz = sin(0.58);
+          float eta = (zeta + cos(0.58)) / (sz * sz);
+          vec4 m[8]; vec3 s[8];
+          for (int k = 0; k < 8; k++) { m[k] = vec4(0.0); s[k] = vec3(0.0); }
+          for (int j = -R; j <= R; j++) for (int i = -R; i <= R; i++) {
+            vec2 v = vec2(float(i), float(j)) / float(R);
+            if (dot(v, v) > 1.0) continue;
+            vec3 c = min(texture2D(inputBuffer, vUv + vec2(float(i), float(j)) * texelSize * radius).rgb, vec3(4.0));
+            float w[8]; float sum = 0.0; float z;
+            float vxx = zeta - eta * v.x * v.x, vyy = zeta - eta * v.y * v.y;
+            z = max(0.0, v.y + vxx); w[0] = z * z; sum += w[0];
+            z = max(0.0, -v.x + vyy); w[2] = z * z; sum += w[2];
+            z = max(0.0, -v.y + vxx); w[4] = z * z; sum += w[4];
+            z = max(0.0, v.x + vyy); w[6] = z * z; sum += w[6];
+            vec2 r = 0.70710678 * vec2(v.x - v.y, v.x + v.y);
+            vxx = zeta - eta * r.x * r.x; vyy = zeta - eta * r.y * r.y;
+            z = max(0.0, r.y + vxx); w[1] = z * z; sum += w[1];
+            z = max(0.0, -r.x + vyy); w[3] = z * z; sum += w[3];
+            z = max(0.0, -r.y + vxx); w[5] = z * z; sum += w[5];
+            z = max(0.0, r.x + vyy); w[7] = z * z; sum += w[7];
+            float g = exp(-3.125 * dot(v, v)) / max(sum, 1e-4);
+            for (int k = 0; k < 8; k++) { float wk = w[k] * g; m[k] += vec4(c * wk, wk); s[k] += c * c * wk; }
+          }
+          vec3 col = vec3(0.0); float ws = 0.0;
+          for (int k = 0; k < 8; k++) {
+            if (m[k].w <= 0.0) continue;
+            vec3 mu = m[k].rgb / m[k].w;
+            vec3 va = abs(s[k] / m[k].w - mu * mu);
+            float sig = va.r + va.g + va.b;
+            float w = 1.0 / (1.0 + pow(1000.0 * sig, 0.5 * q));
+            col += mu * w; ws += w;
+          }
+          gl_FragColor = vec4(ws > 0.0 ? col / ws : texture2D(inputBuffer, vUv).rgb, 1.0);
+        }`,
     });
+    this.combine = new THREE.ShaderMaterial({
+      name: 'PaintCombine', depthTest: false, depthWrite: false, toneMapped: false,
+      uniforms: { inputBuffer: { value: null }, paintBuffer: { value: null }, texelSize: { value: new THREE.Vector2() }, paintTexel: { value: new THREE.Vector2() }, resolution: { value: new THREE.Vector2() }, ink: { value: 0.3 }, sharpen: { value: 0.6 } },
+      vertexShader: FULLSCREEN_VERT,
+      fragmentShader: /* glsl */`
+        uniform sampler2D inputBuffer; uniform sampler2D paintBuffer; uniform vec2 texelSize; uniform vec2 paintTexel; uniform vec2 resolution; uniform float ink; uniform float sharpen;
+        varying vec2 vUv;
+        float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+        void main() {
+          vec4 src = texture2D(inputBuffer, vUv);
+          // upsample the half-res brush image with a light unsharp mask so stroke edges stay crisp
+          vec3 col = texture2D(paintBuffer, vUv).rgb;
+          vec3 nb = texture2D(paintBuffer, vUv + vec2(paintTexel.x, 0.0)).rgb + texture2D(paintBuffer, vUv - vec2(paintTexel.x, 0.0)).rgb
+                  + texture2D(paintBuffer, vUv + vec2(0.0, paintTexel.y)).rgb + texture2D(paintBuffer, vUv - vec2(0.0, paintTexel.y)).rgb;
+          col = max(col + (col - nb * 0.25) * sharpen, vec3(0.0));
+          // ink: luminance Sobel on the full-res image, faint
+          vec2 t = texelSize * 1.5;
+          float tl = lum(texture2D(inputBuffer, vUv + vec2(-t.x, t.y)).rgb), tr = lum(texture2D(inputBuffer, vUv + vec2(t.x, t.y)).rgb);
+          float bl = lum(texture2D(inputBuffer, vUv + vec2(-t.x, -t.y)).rgb), br = lum(texture2D(inputBuffer, vUv + vec2(t.x, -t.y)).rgb);
+          float gx = (tr + br) - (tl + bl), gy = (tl + tr) - (bl + br);
+          float e = smoothstep(0.1, 0.4, sqrt(gx * gx + gy * gy));
+          col *= 1.0 - e * ink;
+          // canvas tooth
+          vec2 p = vUv * resolution;
+          float tooth = sin(p.x * 1.7 + sin(p.y * 0.31) * 2.0) * sin(p.y * 1.9 + sin(p.x * 0.27) * 2.0);
+          col *= 0.975 + tooth * 0.025;
+          gl_FragColor = vec4(col, src.a);
+        }`,
+    });
+    this.fullscreenMaterial = this.kuwahara;
   }
+
+  render(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget, outputBuffer: THREE.WebGLRenderTarget) {
+    this.kuwahara.uniforms.inputBuffer.value = inputBuffer.texture;
+    this.fullscreenMaterial = this.kuwahara;
+    renderer.setRenderTarget(this.half);
+    renderer.render(this.scene, this.camera);
+    this.combine.uniforms.inputBuffer.value = inputBuffer.texture;
+    this.combine.uniforms.paintBuffer.value = this.half.texture;
+    this.fullscreenMaterial = this.combine;
+    renderer.setRenderTarget(this.renderToScreen ? null : outputBuffer);
+    renderer.render(this.scene, this.camera);
+  }
+
+  setSize(w: number, h: number) {
+    const hw = Math.max(1, Math.round(w * this.scale)), hh = Math.max(1, Math.round(h * this.scale));
+    this.half.setSize(hw, hh);
+    this.kuwahara.uniforms.texelSize.value.set(1 / hw, 1 / hh);
+    this.combine.uniforms.paintTexel.value.set(1 / hw, 1 / hh);
+    this.combine.uniforms.texelSize.value.set(1 / w, 1 / h);
+    this.combine.uniforms.resolution.value.set(w, h);
+  }
+
+  dispose() { this.half.dispose(); this.kuwahara.dispose(); this.combine.dispose(); super.dispose(); }
 }
 
 export interface Grade {
@@ -319,13 +371,12 @@ export class Post {
   bloom: BloomEffect;
   tone: ToneMappingEffect;
   grade: GradeEffect;
-  paint: PaintEffect;
+  paint: PaintPass;
   vignette: VignetteEffect;
   noise: NoiseEffect;
   chroma: ChromaticAberrationEffect;
   private aoPass: EffectPass;
   private dofPass: EffectPass;
-  private paintPass: EffectPass;
   painterly = false;
   quality: 'high' | 'low' = 'high';
 
@@ -343,7 +394,7 @@ export class Post {
     this.bloom = new BloomEffect({ intensity: 1.1, luminanceThreshold: 0.9, luminanceSmoothing: 0.35, mipmapBlur: true, radius: 0.72, levels: 8 });
     this.tone = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
     this.grade = new GradeEffect();
-    this.paint = new PaintEffect();
+    this.paint = new PaintPass();
     this.vignette = new VignetteEffect({ darkness: 0.55, offset: 0.3 });
     this.noise = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
     this.noise.blendMode.opacity.value = 0.08;
@@ -356,11 +407,10 @@ export class Post {
     this.dofPass = new EffectPass(camera, this.dof);
     this.composer.addPass(this.dofPass);
     this.composer.addPass(new EffectPass(camera, this.bloom, this.tone, this.grade));
-    this.paintPass = new EffectPass(camera, this.paint);
-    this.composer.addPass(this.paintPass);
+    this.composer.addPass(this.paint);
     this.composer.addPass(new EffectPass(camera, this.chroma));
     this.composer.addPass(new EffectPass(camera, this.vignette, this.noise));
-    this.paintPass.enabled = false;
+    this.paint.enabled = false;
   }
 
   setQuality(q: 'high' | 'low') {
@@ -371,7 +421,7 @@ export class Post {
     this.fog.set('steps', q === 'high' ? 14 : 6);
   }
 
-  setPainterly(on: boolean) { this.painterly = on; this.paintPass.enabled = on; }
+  setPainterly(on: boolean) { this.painterly = on; this.paint.enabled = on; }
 
   applyGrade(g: Grade) {
     this.gl.toneMappingExposure = g.exposure;

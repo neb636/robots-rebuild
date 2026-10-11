@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
 
 // BASE_PATH is set by the deploy workflows:
 //   main:     /robots-rebuild/
@@ -11,9 +10,5 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 2000,
-    rollupOptions: {
-      // index.html: the game (pixel-art). stylized.html: the stylized-3D art direction prototype.
-      input: { main: resolve(__dirname, 'index.html'), stylized: resolve(__dirname, 'stylized.html') },
-    },
   },
 });
