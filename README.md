@@ -4,6 +4,8 @@ A dark, stylized 3D JRPG set in a ruined, overgrown Boston. The current build is
 vertical slice of a Beacon Hill lane: carved flagstones, volumetric fog with lantern halos, a
 drone searchlight, and the Converted standing in the haze.
 
+**Play it:** https://neb636.github.io/robots-rebuild/
+
 ```bash
 npm install
 npm run dev        # open http://localhost:5173
