@@ -1,0 +1,92 @@
+/* Title menu. Everything is sized from --u (about 1% of the viewport height, 10.8px at 1080p) so the
+   layout keeps the reference's proportions on any screen. */
+.ts {
+  --u: max(6.5px, min(1vh, 0.62vw));
+  /* text unit: everything typographic scales from this, 20% over the layout unit */
+  --t: calc(var(--u) * 1.2);
+  --brush-w: calc(var(--t) * 30);
+  --title-font: var(--serif); --title-weight: 600;
+  --body-font: var(--serif); --body-weight: 500;
+  --ink-hi: #f4f1ea;
+  --ink-mid: rgba(222, 218, 210, 0.8);
+  --ink-low: #aaa69d;
+  position: absolute; inset: 0; z-index: 40; pointer-events: none;
+  font-family: var(--body-font); color: var(--ink-mid);
+}
+.ts * { box-sizing: border-box; }
+.ts-shade { position: absolute; inset: 0; background:
+  linear-gradient(90deg, rgba(4, 5, 7, 0.62) 0%, rgba(4, 5, 7, 0.34) 24%, rgba(4, 5, 7, 0) 48%),
+  linear-gradient(0deg, rgba(4, 5, 7, 0.45) 0%, rgba(4, 5, 7, 0) 22%); }
+.ts-black { position: absolute; inset: 0; background: #000; opacity: 1; transition: opacity 2.6s ease 0.1s; }
+.ts.in .ts-black { opacity: 0; }
+.ts.leaving .ts-black { opacity: 1; transition: opacity 1.4s ease; }
+
+/* name */
+.ts-brand { position: absolute; left: calc(var(--u) * 12.6); top: 25.4%; opacity: 0; transform: translateY(4px); transition: opacity 2s ease 1.1s, transform 2.4s ease 1.1s; }
+.ts.in .ts-brand { opacity: 1; transform: none; }
+.ts-brand h1 { margin: 0; font: var(--title-weight) calc(var(--t) * 3.1) / 1 var(--title-font); letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-hi); text-shadow: 0 2px 14px rgba(0, 0, 0, 0.6); }
+.ts-sub { display: flex; align-items: center; gap: calc(var(--u) * 1.2); margin-top: calc(var(--u) * 1.1); }
+.ts-sub span { font: var(--body-weight) calc(var(--t) * 1.05) / 1 var(--body-font); letter-spacing: 0.46em; text-transform: uppercase; color: var(--ink-low); }
+.ts-sub i { display: block; width: calc(var(--u) * 7); height: 1px; background: linear-gradient(90deg, rgba(220, 216, 208, 0.55), rgba(220, 216, 208, 0)); }
+
+/* sub-page heading (Options, Controls, Credits), sitting just above the list */
+.ts-head { position: absolute; left: 0; bottom: calc(100% + var(--u) * 0.6); white-space: nowrap; font: var(--body-weight) calc(var(--t) * 1.15) / 1 var(--body-font); letter-spacing: 0.4em; text-transform: uppercase; color: #d7854f; opacity: 0; transition: opacity 0.3s; }
+.ts.sub .ts-head { opacity: 0.9; }
+
+/* list */
+.ts-list { position: absolute; left: calc(var(--u) * 12.8); top: calc(25.4% + var(--u) * 8.8); display: flex; flex-direction: column; align-items: flex-start; pointer-events: auto; transition: opacity 0.2s ease; }
+.ts.sub .ts-list { top: calc(25.4% + var(--u) * 10.6); }
+.ts.swap .ts-list { opacity: 0; }
+.ts-item {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: calc(var(--u) * 3);
+  height: calc(var(--t) * 5.2); margin: 0; padding: 0 0 0 calc(var(--u) * 0.1); border: 0; background: none; cursor: pointer;
+  font: var(--body-weight) max(16px, calc(var(--t) * 1.9)) / 1 var(--body-font); letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-mid); text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55); outline: none;
+  opacity: 0; transform: translateX(-6px); transition: color 0.25s, opacity 0.9s ease, transform 1.1s ease;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.ts.in .ts-item { opacity: 1; transform: none; transition-delay: 0s, calc(1.9s + var(--i) * 0.11s), calc(1.9s + var(--i) * 0.11s); }
+.ts-item.on { color: var(--ink-hi); text-shadow: 0 1px 6px rgba(80, 20, 0, 0.45); }
+.ts-item.info { cursor: default; color: var(--ink-low); height: calc(var(--t) * 4.2); }
+.ts-item.info .ts-val { color: var(--ink-mid); text-transform: none; letter-spacing: 0.06em; font-size: max(16px, calc(var(--t) * 1.75)); }
+.ts-label { min-width: 0; text-align: left; white-space: nowrap; }
+.ts-item.opt .ts-label, .ts-item.info .ts-label { width: calc(var(--t) * 14); }
+.ts-val { display: inline-flex; align-items: center; gap: calc(var(--u) * 1.2); letter-spacing: 0.12em; }
+.ts-val em { font-style: normal; min-width: calc(var(--t) * 11); text-align: center; }
+.ts-val b { font-weight: 400; opacity: 0.45; padding: 0 calc(var(--u) * 0.6); transition: opacity 0.2s; }
+.ts-item.on .ts-val b { opacity: 0.95; }
+.ts-item:focus-visible { outline: none; }
+
+/* the brush stroke behind the selection: swept in left to right each time it moves */
+.ts-brush {
+  position: absolute; z-index: 0; left: calc(var(--t) * -1); height: calc(var(--t) * 4.1); width: var(--brush-w);
+  transform: translateY(-50%); pointer-events: none; overflow: visible;
+  clip-path: inset(0 100% 0 0); opacity: 0; transition: top 0.18s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.ts.in .ts-brush { opacity: 1; transition: top 0.18s cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.6s ease 2.3s; }
+.ts-brush.sweep { animation: ts-sweep 0.42s cubic-bezier(0.25, 0.75, 0.2, 1) forwards; }
+@keyframes ts-sweep { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 -4% 0 0); } }
+
+/* bottom: rule, description, key hints */
+.ts-foot { position: absolute; left: calc(var(--u) * 11); bottom: 8.4%; width: calc(var(--u) * 37); opacity: 0; transition: opacity 1.4s ease 2.4s; }
+.ts.in .ts-foot { opacity: 1; }
+.ts-foot i { display: block; height: 1px; background: linear-gradient(90deg, rgba(220, 216, 208, 0.35), rgba(220, 216, 208, 0.12)); }
+.ts-desc { position: absolute; top: calc(var(--u) * 2.6); left: 0; width: max-content; max-width: 70vw; margin: 0; font: 400 max(14px, calc(var(--t) * 1.5)) / 1.3 var(--body-font); letter-spacing: 0.02em; color: #cfcbc3; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7); }
+.ts-keys { position: absolute; right: calc(var(--u) * 7); bottom: 3.3%; display: flex; gap: calc(var(--u) * 2); font: 400 max(13px, calc(var(--t) * 1.35)) / 1 var(--body-font); color: #cfcbc3; opacity: 0; transition: opacity 1.4s ease 2.6s; }
+.ts.in .ts-keys { opacity: 1; }
+.ts-keys span { display: inline-flex; align-items: center; gap: 2px; }
+.ts-keys kbd { display: inline-block; margin-right: 2px; padding: 1px 5px; border: 1px solid rgba(220, 216, 208, 0.55); border-radius: 2px; font: 400 max(11px, calc(var(--t) * 0.95)) / 1.2 var(--body-font); color: #dedad2; }
+
+/* tall screens (phones and portrait tablets): the hand stands in the middle, the menu sits below it */
+@media (max-aspect-ratio: 9 / 10) {
+  .ts { --u: min(1vh, 2.3vw); --t: calc(min(1vh, 2.3vw) * 1.2); --brush-w: calc(var(--t) * 34); }
+  .ts-shade { background:
+    linear-gradient(0deg, rgba(4, 5, 7, 0.78) 0%, rgba(4, 5, 7, 0.5) 34%, rgba(4, 5, 7, 0) 60%),
+    linear-gradient(180deg, rgba(4, 5, 7, 0.45) 0%, rgba(4, 5, 7, 0) 22%); }
+  .ts-brand { left: 7vw; top: 7%; }
+  .ts-list, .ts.sub .ts-list { left: 7.4vw; top: auto; bottom: 15%; }
+  .ts-foot { left: 7vw; width: 86vw; bottom: 9%; }
+  .ts-desc { max-width: 86vw; width: auto; }
+  .ts-item.opt .ts-label, .ts-item.info .ts-label { width: calc(var(--t) * 11); }
+  .ts-keys { display: none; }
+}

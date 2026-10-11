@@ -448,6 +448,25 @@ class AudioEngine {
     };
     const env = (peak: number, dec: number, a = 0.003, start = t) => { const gg = c.createGain(); gg.connect(g); e(gg, a, peak, dec, start); return gg; };
     switch (name) {
+      // title menu: muted and reverberant, closer to a struck bowl than a chiptune blip
+      case 'menuMove': {
+        const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+        n(0.03).connect(lp).connect(env(0.05, 0.05));
+        const gg = env(0.035, 0.5, 0.004); o('sine', 1046, t, 0.5).connect(gg); gg.connect(this.reverbSend);
+        break;
+      }
+      case 'menuOk': case 'menuBack': {
+        const f = name === 'menuOk' ? 392 : 294;
+        for (const [k, a] of [[1, 0.07], [2.76, 0.02]] as const) { const gg = env(a, 1.4, 0.006); o('sine', f * k, t, 1.4).connect(gg); gg.connect(this.reverbSend); }
+        break;
+      }
+      case 'menuStart': {
+        // a low bell toll with a slow bloom of reverb
+        for (const [k, a, d] of [[1, 0.12, 4.5], [2.0, 0.05, 3], [2.76, 0.035, 2.2], [5.4, 0.012, 1.2]] as const) {
+          const gg = env(a, d, 0.01); o('sine', 98 * k, t, d).connect(gg); gg.connect(this.reverbSend);
+        }
+        break;
+      }
       case 'blip': { const x = o('square', 520 + Math.random() * 40, t, 0.03); x.connect(env(0.025, 0.03)); break; }
       case 'cursor': { o('square', 880, t, 0.05).connect(env(0.06, 0.05)); break; }
       case 'confirm': { o('square', 660, t, 0.06).connect(env(0.07, 0.06)); o('square', 990, t + 0.06, 0.08).connect(env(0.07, 0.08, 0.003, t + 0.06)); break; }
