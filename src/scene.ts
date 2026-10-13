@@ -3,7 +3,7 @@
 // tending, the Converted standing in the fog, a compliance drone sweeping the street, the
 // gutted State House dome and the Superintelligence spire beyond.
 import * as THREE from 'three';
-import { Batch, wbox, wplane } from './batch';
+import { Batch, wbox, wplane, mergeStatic } from './batch';
 import { pbr } from './textures';
 import { rng, wnoise } from './noise';
 import { flagstones } from './flagstones';
@@ -378,6 +378,7 @@ export function buildScene(quality: 'high' | 'low'): Built {
     const m = new THREE.Mesh(g, pm); m.rotation.x = -Math.PI / 2; m.rotation.z = R() * 3; m.position.set(px, 0.075, pz); m.receiveShadow = true;
     puddles.add(m);
   }
+  mergeStatic(puddles);
   root.add(puddles);
 
   b.flush(root);

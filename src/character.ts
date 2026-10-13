@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { pbr, emblemTex } from './textures';
 import { rng } from './noise';
+import { mergeStatic } from './batch';
 
 export interface Char3DSpec {
   skin: string;
@@ -78,8 +79,14 @@ function hairMat(color: string) {
     sheenColor: lighten(color, 0.35),
   }));
 }
-const plain = (color: string, rough = 0.7, extra: THREE.MeshStandardMaterialParameters = {}) =>
-  rimify(new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra }));
+// identical plain materials are shared so the meshes using them can be merged (see mergeStatic)
+const plainCache = new Map<string, THREE.MeshStandardMaterial>();
+const plain = (color: string, rough = 0.7, extra: THREE.MeshStandardMaterialParameters = {}) => {
+  const key = `${color}|${rough}|${JSON.stringify(extra)}`;
+  let m = plainCache.get(key);
+  if (!m) plainCache.set(key, (m = rimify(new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra }))));
+  return m;
+};
 
 // ------------------------------------------------------------------------------------ geometry
 const ell = (rx: number, ry: number, rz: number, ws = 28, hs = 20) => new THREE.SphereGeometry(1, ws, hs).scale(rx, ry, rz);
@@ -353,6 +360,7 @@ function build(spec: Char3DSpec, eyesOut: THREE.Mesh[]): Rig {
     mug.rotation.z = 0.3;
   }
 
+  mergeStatic(root, eyesOut);
   const [l, rr] = legs, [al, ar] = arms;
   return { root, hips, torso, head, shL: al[0], elL: al[1], shR: ar[0], elR: ar[1], thL: l[0], knL: l[1], anL: l[2], thR: rr[0], knR: rr[1], anR: rr[2], hipY };
 }

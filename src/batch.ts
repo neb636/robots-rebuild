@@ -1,5 +1,5 @@
-// Static-geometry batching: everything added with the same material is merged into one mesh,
-// so a richly detailed street still costs only a few dozen draw calls.
+// Static-geometry batching: everything added with the same material is merged (per ground chunk),
+// so a richly detailed street still costs only a modest number of draw calls.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
@@ -31,12 +31,25 @@ export class Batch {
     return geo;
   }
 
-  flush(parent: THREE.Object3D) {
+  /**
+   * Merge everything added so far. Each material is merged per `cell`-sized square of the ground
+   * plane rather than into one street-wide mesh, so frustum culling still works: the camera skips
+   * chunks behind it, and each shadow view (a lamp's six cube faces, the drone's cone) only draws
+   * the chunks it can see.
+   */
+  flush(parent: THREE.Object3D, cell = 10) {
+    const box = new THREE.Box3(), c = new THREE.Vector3();
     for (const [mat, e] of this.groups) {
       // geometries with and without vertex colors can't merge; split them
-      const withC = e.geos.filter((g) => g.attributes.color), without = e.geos.filter((g) => !g.attributes.color);
-      for (const list of [withC, without]) {
-        if (!list.length) continue;
+      const lists = new Map<string, THREE.BufferGeometry[]>();
+      for (const g of e.geos) {
+        box.setFromBufferAttribute(g.attributes.position as THREE.BufferAttribute).getCenter(c);
+        const key = `${!!g.attributes.color}:${Math.floor(c.x / cell)}:${Math.floor(c.z / cell)}`;
+        let list = lists.get(key);
+        if (!list) lists.set(key, (list = []));
+        list.push(g);
+      }
+      for (const list of lists.values()) {
         const merged = mergeGeometries(list, false);
         list.forEach((g) => g.dispose());
         if (!merged) continue;
@@ -46,6 +59,47 @@ export class Batch {
       }
     }
     this.groups.clear();
+  }
+}
+
+/**
+ * Merge the plain meshes directly under each node of a rigid hierarchy: siblings that share a
+ * material and shadow/render flags become one mesh in the parent's space. Joints keep animating
+ * (only meshes, never groups, are merged), but a character or prop drops from a hundred draw calls
+ * to a few dozen, in every pass that draws it (main, normals, each shadow map). `keep` lists meshes
+ * that must stay separate because code moves or swaps them individually.
+ */
+export function mergeStatic(root: THREE.Object3D, keep: Iterable<THREE.Object3D> = []) {
+  const skip = new Set(keep);
+  const nodes: THREE.Object3D[] = [];
+  root.traverse((o) => nodes.push(o));
+  for (const node of nodes) {
+    const groups = new Map<string, THREE.Mesh[]>();
+    for (const c of node.children) {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh || (m as THREE.InstancedMesh).isInstancedMesh || (m as THREE.SkinnedMesh).isSkinnedMesh || skip.has(m)) continue;
+      if (m.children.length || Array.isArray(m.material) || !m.visible || m.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender) continue;
+      m.updateMatrix();
+      if (m.matrix.determinant() <= 0) continue; // mirrored: would flip winding
+      const key = `${m.material.uuid}|${m.castShadow}|${m.receiveShadow}|${m.renderOrder}|${m.frustumCulled}|${Object.keys(m.geometry.attributes).sort()}|${!!m.geometry.index}`;
+      let list = groups.get(key);
+      if (!list) groups.set(key, (list = []));
+      list.push(m);
+    }
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      const geos = list.map((m) => m.geometry.clone().applyMatrix4(m.matrix));
+      const merged = mergeGeometries(geos, false);
+      geos.forEach((g) => g.dispose());
+      if (!merged) continue;
+      const first = list[0];
+      const mesh = new THREE.Mesh(merged, first.material);
+      mesh.castShadow = first.castShadow; mesh.receiveShadow = first.receiveShadow;
+      mesh.renderOrder = first.renderOrder; mesh.frustumCulled = first.frustumCulled;
+      mesh.name = first.name;
+      node.add(mesh);
+      for (const m of list) node.remove(m);
+    }
   }
 }
 

@@ -47,6 +47,23 @@ URL params override the saved settings without changing them, for sharing a spec
 `?mood=curfew&cam=jrpg&q=low&ui=0&card=0`. `?menu=0` skips the title screen and goes
 straight into the game. `?debug` exposes `window.__THREE` (and `window.__title` on the title screen).
 
+## Frame rate and browser testing
+
+The loop is capped at **60 fps**, so 120 Hz screens (ProMotion iPhones and Macs) don't render twice
+as many frames for nothing and then throttle from the heat. `?fps=N` changes the cap (`?fps=0` is
+uncapped, for benchmarking).
+
+Automated browsers (Playwright, `playwright-cli`, anything that sets `navigator.webdriver`) get a
+gentler default, because headless browsers aren't vsync-limited and a session left open after a
+test would keep the GPU and a CPU core pinned:
+
+- capped at **30 fps**, at full visual quality, so screenshots look exactly like the real game;
+- after **30 s with no input** the loop drops to 4 fps until the next key, click or mouse move.
+
+When driving the game from an agent, `?menu=0&card=0` goes straight to the street, `?q=low` is
+lighter still if the screenshot doesn't need the high-quality look, and closing the browser when
+done (`playwright-cli close`) stops the rendering entirely.
+
 ## Why this tech stack
 
 **Three.js + TypeScript + Vite, rendered in the browser.**
@@ -78,7 +95,11 @@ src/
   sky.ts         sky dome, distant skyline, State House dome, the Superintelligence spire
   textures.ts    procedural PBR texture sets (albedo / normal / roughness)
   fx.ts          ash, embers, rain, fog banks
-  batch.ts       static geometry batching by material
+  batch.ts       static geometry batching by material (chunked so culling still works), and
+                 merging of rigid hierarchies (characters, lamps, the tree) into few draw calls
+  frameloop.ts   the render loop with its frame-rate cap (and the idle mode for automated browsers)
+  noisetex.ts    lattice textures that make GPU value noise one texture fetch per octave
+  shaderpatches.ts  three.js shader patch: skip lights that can't reach a pixel
   noise.ts       value / fbm / cellular noise and small math helpers
   audio.ts       WebAudio synth, step sequencer, songs, ambience, SFX
   style.css      loader, in-game settings panel, title card, touch stick

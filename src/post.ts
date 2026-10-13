@@ -7,6 +7,7 @@ import {
   ToneMappingEffect, ToneMappingMode, NoiseEffect, BlendFunction, ChromaticAberrationEffect,
   DepthOfFieldEffect, SSAOEffect, NormalPass,
 } from 'postprocessing';
+import { latticeNoise3D } from './noisetex';
 
 export const MAX_LIGHTS = 12;
 
@@ -44,11 +45,13 @@ export class FogEffect extends Effect {
       uniform float spotTan;
       uniform float spotLen;
 
-      float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      uniform sampler3D noiseTex;
+      // Value noise: lattice values come from a tiling 3D texture, and the hardware's trilinear
+      // filter does the interpolation with the smoothstep folded into the lookup coordinate. The same
+      // value noise as hashing the 8 cell corners in the shader, at one texture fetch instead of 8 hashes.
       float n3(vec3 x) {
         vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
-                   mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z);
+        return texture(noiseTex, (i + f + 0.5) * ${(1 / 32).toFixed(5)}).r;
       }
       float fbm3(vec3 p) { return n3(p) * 0.55 + n3(p * 2.03 + 7.1) * 0.3 + n3(p * 4.1 + 3.3) * 0.15; }
       float hDens(float y) { return density * exp(-falloff * (y - fogBase)); }
@@ -145,6 +148,7 @@ export class FogEffect extends Effect {
     `, {
       attributes: EffectAttribute.DEPTH,
       uniforms: new Map<string, THREE.Uniform>([
+        ['noiseTex', new THREE.Uniform(latticeNoise3D(32))],
         ['projInv', new THREE.Uniform(new THREE.Matrix4())],
         ['camWorld', new THREE.Uniform(new THREE.Matrix4())],
         ['camPos', new THREE.Uniform(new THREE.Vector3())],
@@ -252,9 +256,13 @@ export class Post {
   private aoPass: EffectPass;
   private dofPass: EffectPass;
   quality: 'high' | 'low' = 'high';
+  private pong = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
 
   constructor(private gl: THREE.WebGLRenderer, scene: THREE.Scene, private camera: THREE.PerspectiveCamera, msaa: number) {
     this.composer = new EffectComposer(gl, { frameBufferType: THREE.HalfFloatType, multisampling: msaa });
+    // effect passes never need MSAA or depth: give them single-sample buffers (see render())
+    this.composer.outputBuffer.dispose();
+    this.composer.outputBuffer = this.pong.clone();
     this.renderPass = new RenderPass(scene, camera);
     this.normalPass = new NormalPass(scene, camera);
     this.ssao = new SSAOEffect(camera, this.normalPass.texture, {
@@ -318,6 +326,30 @@ export class Post {
     fx.set('noiseAmt', f.noise); fx.set('halo', f.halo); fx.set('skyDist', f.skyDist);
   }
 
-  setSize(w: number, h: number) { this.composer.setSize(w, h, false); }
-  render(dt: number) { this.composer.render(dt); }
+  setSize(w: number, h: number) {
+    this.composer.setSize(w, h, false);
+    const s = this.gl.getDrawingBufferSize(new THREE.Vector2());
+    this.pong.setSize(s.x, s.y);
+  }
+
+  /**
+   * Like EffectComposer.render, but only the scene render is multisampled. The composer's own
+   * ping-pong reuses its (MSAA + depth) input buffer as an effect target, so every fullscreen pass
+   * would be drawn at 4x and then resolved, colour and depth, for no visible gain. Here the scene
+   * lands in the composer's input buffer once, and the effect passes alternate between two plain
+   * single-sample buffers.
+   */
+  render(dt: number) {
+    const gl = this.gl, c = this.composer;
+    const scene = c.inputBuffer;
+    let input = scene, output = c.outputBuffer;
+    for (const pass of c.passes) {
+      if (!pass.enabled) continue;
+      pass.render(gl, input, output, dt, false);
+      if (pass.needsSwap) {
+        const next = input === scene ? this.pong : input;
+        input = output; output = next;
+      }
+    }
+  }
 }

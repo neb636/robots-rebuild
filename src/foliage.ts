@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { leafTex, pbr } from './textures';
 import { rng } from './noise';
+import { mergeStatic } from './batch';
 
 export const wind = { value: 0 };
 export const foliageMats: THREE.Material[] = [];
@@ -302,6 +303,7 @@ export function tree(x: number, z: number, opts: { seed: number; height: number;
     for (const hp of hangPoints) if (R() < 0.25) mossPts.push(hp.clone().add(new THREE.Vector3((R() - 0.5) * 0.4, -0.05, (R() - 0.5) * 0.4)));
     group.add(hangingMoss(mossPts.map((p) => p.sub(group.position)), opts.seed + 2));
   }
+  mergeStatic(group);
   return { group, tips: tips.map((t) => t.clone().add(group.position)), hangPoints };
 }
 

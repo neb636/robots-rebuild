@@ -2,7 +2,7 @@
 // compliance drone, string lights, balustrades, rubble and clutter.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { Batch, wbox } from './batch';
+import { Batch, wbox, mergeStatic } from './batch';
 import { pbr, glowTex } from './textures';
 import { rng } from './noise';
 
@@ -76,13 +76,14 @@ export function gasLamp(b: Batch, parent: THREE.Object3D, x: number, y: number, 
   }
   hb(new THREE.ConeGeometry(0.27, 0.24, 4, 1).rotateY(Math.PI / 4), iron, 0, 0.78, 0);
   hb(new THREE.SphereGeometry(0.05, 10, 8), iron, 0, 0.94, 0);
-  if (!on) return null;
+  if (!on) { mergeStatic(head); return null; }
   const flame = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), glowMat('#ffd9a0', 30));
   flame.scale.set(1, 1.5, 1); flame.position.set(0, 0.3, 0); head.add(flame);
   const pl = new THREE.PointLight(color, opts.intensity ?? 9, 16, 2);
   pl.position.set(0, 0.36, 0);
   if (opts.shadow) { pl.castShadow = true; pl.shadow.mapSize.set(512, 512); pl.shadow.bias = -0.002; pl.shadow.radius = 4; }
   head.add(pl);
+  mergeStatic(head);
   return { obj: head, offset: new THREE.Vector3(0, 0.36, 0), color: new THREE.Color(color), radius: 0.18, base: 1.0, flicker: opts.flicker ?? 0.08, point: pl, pointBase: pl.intensity, priority: 1 };
 }
 
@@ -101,10 +102,11 @@ export function hangingLantern(parent: THREE.Object3D, anchor: THREE.Vector3, dr
   add(new THREE.CylinderGeometry(0.105, 0.09, 0.22, 6, 1, true), on ? glassLitMat(color, 3) : new THREE.MeshStandardMaterial({ color: '#141210', roughness: 0.2 }), 0);
   for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; const r = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.24, 0.014), iron); r.position.set(Math.cos(a) * 0.1, 0, Math.sin(a) * 0.1); body.add(r); }
   add(new THREE.CylinderGeometry(0.1, 0.07, 0.05, 6), iron, -0.13);
-  if (!on) return { pivot, light: null };
+  if (!on) { mergeStatic(pivot); return { pivot, light: null }; }
   const core = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), glowMat('#ffe0b0', 26)); body.add(core);
   const pl = new THREE.PointLight(color, opts.intensity ?? 4, 9, 2);
   body.add(pl);
+  mergeStatic(pivot);
   return { pivot, light: { obj: body, color: new THREE.Color(color), radius: 0.12, base: 0.6, flicker: opts.flicker ?? 0.12, point: pl, pointBase: pl.intensity, priority: 2 } };
 }
 
@@ -136,13 +138,15 @@ export function barrelFire(b: Batch, parent: THREE.Object3D, x: number, z: numbe
   for (const y of [0.2, 0.46, 0.72]) b.add(new THREE.TorusGeometry(0.312, 0.018, 6, 26).rotateX(Math.PI / 2), drum, x, y, z);
   b.add(new THREE.TorusGeometry(0.3, 0.025, 6, 26).rotateX(Math.PI / 2), drum, x, 0.92, z);
   // glowing coals inside + holes punched in the side
-  const coals = new THREE.Mesh(new THREE.CircleGeometry(0.29, 20).rotateX(-Math.PI / 2), glowMat('#ff5a1a', 6)); coals.position.set(x, 0.82, z); parent.add(coals);
+  const glow = new THREE.Group(); parent.add(glow);
+  const coals = new THREE.Mesh(new THREE.CircleGeometry(0.29, 20).rotateX(-Math.PI / 2), glowMat('#ff5a1a', 6)); coals.position.set(x, 0.82, z); glow.add(coals);
   const R = rng(9);
   for (let i = 0; i < 9; i++) {
     const a = R() * Math.PI * 2, y = 0.25 + R() * 0.5;
     const hole = new THREE.Mesh(new THREE.CircleGeometry(0.025 + R() * 0.02, 8), glowMat('#ff7a2a', 8));
-    hole.position.set(x + Math.sin(a) * 0.313, y, z + Math.cos(a) * 0.313); hole.rotation.y = a; parent.add(hole);
+    hole.position.set(x + Math.sin(a) * 0.313, y, z + Math.cos(a) * 0.313); hole.rotation.y = a; glow.add(hole);
   }
+  mergeStatic(glow);
   const flames: THREE.Mesh[] = [];
   for (let i = 0; i < 3; i++) {
     const m = flameMat().clone(); m.uniforms.seed.value = i * 3.7;
@@ -198,6 +202,7 @@ export function wreckedCar(parent: THREE.Object3D, x: number, z: number, rot: nu
     const w = add(new THREE.CylinderGeometry(0.34, 0.34, 0.24, 18), tyre, tx, flat ? 0.24 : 0.33, tz, 0, 0, Math.PI / 2);
     if (flat) w.scale.set(0.72, 1, 1);
   }
+  mergeStatic(g);
   return g;
 }
 
@@ -223,6 +228,7 @@ export function drone(parent: THREE.Object3D) {
   const spot = new THREE.SpotLight('#ff5040', 120, 30, 0.24, 0.5, 1.6);
   spot.position.set(0, -0.2, 0.2);
   g.add(spot); g.add(spot.target);
+  mergeStatic(g, rotors);
   return { group: g, rotors, spot, eye };
 }
 

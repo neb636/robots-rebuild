@@ -3,6 +3,7 @@ import '@fontsource/cormorant-garamond/500.css';
 import '@fontsource/cormorant-garamond/600.css';
 import '@fontsource/cormorant-garamond/700.css';
 import './style.css';
+import './shaderpatches';
 import * as THREE from 'three';
 import { PBR_NAMES, pbr, setAnisotropy } from './textures';
 import { buildScene, heightAt, MOODS, Mood, Built } from './scene';
@@ -13,6 +14,7 @@ import { ash, embers, rain, fogBanks } from './fx';
 import { audio } from './audio';
 import { state, saveSettings, params, isTouch, CAMS, CamMode, skipTitleOnce, consumeSkipTitle } from './settings';
 import { TitleScreen } from './title';
+import { frameLoop } from './frameloop';
 
 const app = document.getElementById('app')!;
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
@@ -108,13 +110,11 @@ class App {
 
   start() {
     let last = performance.now();
-    const loop = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000); last = now;
-      this.fps += (1 / Math.max(dt, 1e-3) - this.fps) * 0.05;
-      this.frame(dt);
-      requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
+    frameLoop((now) => {
+      const real = (now - last) / 1000; last = now;
+      this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
+      this.frame(Math.min(0.05, real));
+    });
     if (params.get('card') !== '0') this.ui?.titleCard();
   }
 
