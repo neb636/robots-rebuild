@@ -83,8 +83,6 @@ export class Menu {
         head: 'Options',
         rows: [
           optRow('Mood', () => MOODS[state.mood].name, (d) => { state.mood = cycle(Object.keys(MOODS), state.mood, d); }, () => MOODS[state.mood].blurb),
-          optRow('Render', () => state.painterly ? 'Painterly' : 'Standard', () => { state.painterly = !state.painterly; },
-            () => state.painterly ? 'A painterly brush filter over the whole frame.' : 'Standard lighting and materials.'),
           optRow('Camera', () => CAM_NAMES[state.cam], (d) => { state.cam = cycle(CAMS, state.cam, d); },
             () => ({ follow: 'Over the shoulder, following the hero.', jrpg: 'A high diorama angle, like the classics.', cinematic: 'Hand-placed shots that play on their own.' })[state.cam]),
           optRow('Quality', () => state.quality === 'high' ? 'High' : 'Low', () => { state.quality = state.quality === 'high' ? 'low' : 'high'; },
@@ -100,7 +98,7 @@ export class Menu {
             info('Zoom', 'Pinch'), info('Settings', '☰ button'),
           ] : [
             info('Move', 'W A S D · Arrows'), info('Run', 'Shift'), info('Look', 'Mouse drag · Q E'), info('Zoom', 'Wheel'),
-            info('Mood', '1 2 3'), info('Camera', 'C'), info('Painterly', 'P'), info('Hide UI', 'H'),
+            info('Mood', '1 2 3'), info('Camera', 'C'), info('Hide UI', 'H'),
           ]),
           info('Gamepad', 'Left stick move · Right stick look'),
           { ...back, desc: () => 'Return to the title.' },

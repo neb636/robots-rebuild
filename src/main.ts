@@ -98,7 +98,6 @@ class App {
     this.pmrem = new THREE.PMREMGenerator(gl);
     this.applyQuality();
     this.applyMood();
-    this.post.setPainterly(state.painterly);
     if (state.cam === 'cinematic') { state.cam = 'follow'; this.setCam('cinematic', false); }
     this.resetCamera();
     this.bindInput();
@@ -170,7 +169,6 @@ class App {
   }
 
   setMood(k: keyof typeof MOODS) { state.mood = k; this.applyMood(); this.ui?.sync(); saveSettings(); }
-  setPainterly(on: boolean) { state.painterly = on; this.post.setPainterly(on); this.ui?.sync(); saveSettings(); }
   private savedPose: { pos: THREE.Vector3; heading: number } | null = null;
   setCam(c: CamMode, persist = true) {
     if (c === 'cinematic' && state.cam !== 'cinematic') {
@@ -187,8 +185,8 @@ class App {
     // Drop setting params from the URL so they don't override what was just saved.
     state.quality = q;
     const p = new URLSearchParams(location.search);
-    for (const k of ['q', 'mood', 'cam', 'look']) p.delete(k);
-    if (!saveSettings()) { p.set('q', q); p.set('mood', state.mood); p.set('cam', state.cam); if (state.painterly) p.set('look', 'paint'); }
+    for (const k of ['q', 'mood', 'cam']) p.delete(k);
+    if (!saveSettings()) { p.set('q', q); p.set('mood', state.mood); p.set('cam', state.cam); }
     skipTitleOnce();
     const qs = p.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
@@ -210,7 +208,6 @@ class App {
       if (e.code === 'Digit1') this.setMood('ashfall');
       if (e.code === 'Digit2') this.setMood('curfew');
       if (e.code === 'Digit3') this.setMood('pall');
-      if (e.code === 'KeyP') this.setPainterly(!state.painterly);
       if (e.code === 'KeyC') this.setCam(CAMS[(CAMS.indexOf(state.cam) + 1) % CAMS.length]);
       if (e.code === 'KeyH') { state.ui = !state.ui; this.ui?.sync(); }
     });
@@ -529,8 +526,6 @@ class UI {
         <div class="sec"><div class="lab">Mood <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
           <div class="seg" data-k="mood">${Object.entries(MOODS).map(([k, m]) => `<button data-v="${k}">${m.name}</button>`).join('')}</div>
           <div class="blurb"></div></div>
-        <div class="sec"><div class="lab">Render <kbd>P</kbd></div>
-          <div class="seg" data-k="look"><button data-v="pbr">Standard</button><button data-v="paint">Painterly</button></div></div>
         <div class="sec"><div class="lab">Camera <kbd>C</kbd></div>
           <div class="seg" data-k="cam"><button data-v="follow">Follow</button><button data-v="jrpg">JRPG</button><button data-v="cinematic">Cinematic</button></div></div>
         <div class="sec"><div class="lab">Quality</div>
@@ -550,14 +545,13 @@ class UI {
       const b = (e.target as HTMLElement).closest('button'); if (!b) return;
       const k = seg.dataset.k, val = b.dataset.v!;
       if (k === 'mood') a.setMood(val as any);
-      if (k === 'look') a.setPainterly(val === 'paint');
       if (k === 'cam') a.setCam(val as CamMode);
       if (k === 'q') a.setQuality(val as any);
     }));
     this.sync();
   }
   sync() {
-    const cur: Record<string, string> = { mood: state.mood, look: state.painterly ? 'paint' : 'pbr', cam: state.cam, q: state.quality };
+    const cur: Record<string, string> = { mood: state.mood, cam: state.cam, q: state.quality };
     this.root.querySelectorAll<HTMLElement>('.seg').forEach((seg) => seg.querySelectorAll<HTMLElement>('button').forEach((b) => b.classList.toggle('on', cur[seg.dataset.k!] === b.dataset.v)));
     this.blurb.textContent = MOODS[state.mood].blurb;
     this.root.classList.toggle('hidden', !state.ui);
