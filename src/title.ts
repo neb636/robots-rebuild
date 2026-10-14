@@ -16,21 +16,19 @@ import {
 import { GradeEffect } from './post';
 import { rain } from './fx';
 import { glowTex } from './textures';
+import { latticeNoise2D, VNOISE_2D_GLSL } from './noisetex';
 import { rng, wnoise } from './noise';
 import { state, params } from './settings';
 import { Menu } from './menu';
+import { frameLoop } from './frameloop';
 
 /** Where the moon breaks through the clouds: high, behind the hand, a little to the right. */
 const SUN = new THREE.Vector3(0.32, 0.36, -1).normalize();
 /** Wind blows left to right across the screen (world +x). */
 const FOG = '#4f5b6d';
 
-const NOISE_GLSL = /* glsl */`
-  float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-  float vnoise(vec2 p) {
-    vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash12(i), hash12(i + vec2(1, 0)), f.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), f.x), f.y);
-  }
+// value noise from a lattice texture (see noisetex.ts); every material using it binds noiseTex2
+const NOISE_GLSL = /* glsl */`${VNOISE_2D_GLSL}
   float fbm(vec2 p) {
     float s = 0.0, a = 0.5;
     for (int i = 0; i < 5; i++) { s += a * vnoise(p); p = mat2(1.6, 1.2, -1.2, 1.6) * p + 3.1; a *= 0.5; }
@@ -54,6 +52,7 @@ function groundH(x: number, z: number) {
 function weather<M extends THREE.MeshStandardMaterial | THREE.MeshLambertMaterial>(mat: M, o: { dust: string; dustAmt: number; grime: number; scale: number }) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.dustCol = { value: new THREE.Color(o.dust) };
+    sh.uniforms.noiseTex2 = { value: latticeNoise2D() };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec3 vWNrm;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vWNrm = normalize(mat3(modelMatrix) * objectNormal);');
@@ -272,6 +271,9 @@ export class TitleScene {
     back.shadow.mapSize.set(high ? 2048 : 1024, high ? 2048 : 1024);
     const sc = back.shadow.camera; sc.left = -4; sc.right = 4; sc.top = 5; sc.bottom = -3; sc.near = 10; sc.far = 50;
     back.shadow.bias = -0.0004; back.shadow.normalBias = 0.02;
+    // nothing that casts a shadow ever moves here (the cloth, rain and mist only receive), so the
+    // shadow map is drawn once instead of every frame
+    back.shadow.autoUpdate = false; back.shadow.needsUpdate = true;
     const fill = new THREE.DirectionalLight('#8094b6', 1.1); fill.position.set(-7, 5, 10);
     const hemi = new THREE.HemisphereLight('#62759a', '#16181e', 0.6);
     s.add(back, back.target, fill, hemi);
@@ -330,7 +332,7 @@ export class TitleScene {
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
       uniforms: {
-        t: this.t, sun: { value: SUN },
+        t: this.t, sun: { value: SUN }, noiseTex2: { value: latticeNoise2D() },
         zen: { value: new THREE.Color('#0c1018') }, hor: { value: new THREE.Color(FOG) }, glow: { value: new THREE.Color('#c6d6ee') },
         cDark: { value: new THREE.Color('#0b0f16') }, cLit: { value: new THREE.Color('#8e9db4') },
       },
@@ -378,7 +380,7 @@ export class TitleScene {
   private mist(o: { z: number; w: number; h: number; op: number; sp: number; sc: number; seed: number }) {
     const mat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, fog: false,
-      uniforms: { t: this.t, col: { value: new THREE.Color(FOG).multiplyScalar(1.15) }, op: { value: o.op }, sp: { value: o.sp }, sc: { value: o.sc }, seed: { value: o.seed } },
+      uniforms: { t: this.t, noiseTex2: { value: latticeNoise2D() }, col: { value: new THREE.Color(FOG).multiplyScalar(1.15) }, op: { value: o.op }, sp: { value: o.sp }, sc: { value: o.sc }, seed: { value: o.seed } },
       vertexShader: /* glsl */`varying vec2 vUv; varying vec3 vW; void main(){ vUv = uv; vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.0); }`,
       fragmentShader: /* glsl */`
         varying vec2 vUv; varying vec3 vW;
@@ -509,7 +511,7 @@ export class TitleScene {
 export class TitleScreen {
   private scene: TitleScene;
   private menu: Menu;
-  private raf = 0;
+  private stopLoop = () => {};
   private onResize = () => this.resize();
 
   constructor(private gl: THREE.WebGLRenderer, host: HTMLElement) {
@@ -525,14 +527,12 @@ export class TitleScreen {
     this.gl.compile(this.scene.scene, this.scene.camera);
     let last = performance.now();
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const loop = (now: number) => {
+    this.stopLoop = frameLoop((now) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       this.scene.update(reduced ? dt * 0.4 : dt);
       this.menu.update();
       this.scene.render(dt);
-      this.raf = requestAnimationFrame(loop);
-    };
-    this.raf = requestAnimationFrame(loop);
+    });
     // start on the second frame so the fade-in doesn't begin over a blank canvas
     requestAnimationFrame(() => requestAnimationFrame(() => this.menu.show()));
     return this.menu.chosen.then(() => this.dispose());
@@ -545,7 +545,7 @@ export class TitleScreen {
   }
 
   private dispose() {
-    cancelAnimationFrame(this.raf);
+    this.stopLoop();
     removeEventListener('resize', this.onResize);
     window.visualViewport?.removeEventListener('resize', this.onResize);
     this.scene.dispose();

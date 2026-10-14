@@ -27,34 +27,49 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 | Zoom | wheel | pinch | |
 | Mood | 1 / 2 / 3 | settings panel | |
 | Camera | C | settings panel | |
-| Painterly render | P | settings panel | |
 | Hide UI | H | × / ☰ button | |
 
 ## Settings
 
-Mood, camera, render style and quality are player settings, saved on the device (localStorage)
+Mood, camera and quality are player settings, saved on the device (localStorage)
 and restored on the next visit:
 
 - **Mood:** Curfew (night rain, the default), Ashfall (dusk), Grey Pall (dead fog). Each mood is a block of
   data in `MOODS` (`src/scene.ts`): sky, fog, grade, moonlight, rain, wet ground.
 - **Camera:** Follow (third-person), JRPG (diorama angle), Cinematic (hand-placed shots, `CINE` in
   `src/main.ts`).
-- **Render:** Standard or Painterly (a generalized Kuwahara filter, run at half resolution).
 - **Quality:** High, or Low (no SSAO or depth of field, 1x pixel ratio, no MSAA). Touch devices
   default to Low.
 
 The same settings can be changed from **Options** on the title screen before starting.
 
 URL params override the saved settings without changing them, for sharing a specific setup:
-`?mood=curfew&look=paint&cam=jrpg&q=low&ui=0&card=0`. `?menu=0` skips the title screen and goes
+`?mood=curfew&cam=jrpg&q=low&ui=0&card=0`. `?menu=0` skips the title screen and goes
 straight into the game. `?debug` exposes `window.__THREE` (and `window.__title` on the title screen).
+
+## Frame rate and browser testing
+
+The loop is capped at **60 fps**, so 120 Hz screens (ProMotion iPhones and Macs) don't render twice
+as many frames for nothing and then throttle from the heat. `?fps=N` changes the cap (`?fps=0` is
+uncapped, for benchmarking).
+
+Automated browsers (Playwright, `playwright-cli`, anything that sets `navigator.webdriver`) get a
+gentler default, because headless browsers aren't vsync-limited and a session left open after a
+test would keep the GPU and a CPU core pinned:
+
+- capped at **30 fps**, at full visual quality, so screenshots look exactly like the real game;
+- after **30 s with no input** the loop drops to 4 fps until the next key, click or mouse move.
+
+When driving the game from an agent, `?menu=0&card=0` goes straight to the street, `?q=low` is
+lighter still if the screenshot doesn't need the high-quality look, and closing the browser when
+done (`playwright-cli close`) stops the rendering entirely.
 
 ## Why this tech stack
 
 **Three.js + TypeScript + Vite, rendered in the browser.**
 
 - Three.js covers the lighting, shadows, PBR materials and instancing, and the `postprocessing`
-  library supplies the effect-composer stack the custom fog, grade and painterly passes plug into.
+  library supplies the effect-composer stack the custom fog and grade passes plug into.
 - **All art and audio are procedural code.** Textures, geometry, characters, music and SFX are
   generated at load time, so there are no asset pipelines to break.
 - **Fast to iterate and test.** It runs in any browser, reloads instantly, and can be screenshotted
@@ -71,7 +86,7 @@ src/
   menu.css       title menu layout
   scene.ts       the lane layout, walkable heights, lights, the Converted, the drone, moods
   post.ts        post stack: SSAO, volumetric height fog + light halos + spot beam, DOF, bloom,
-                 AgX tone map, film grade, painterly Kuwahara, vignette, grain
+                 AgX tone map, film grade, vignette, grain
   character.ts   parametric 3D characters (hero, Converted) with a procedural walk/idle rig
   buildings.ts   rowhouses: windows (intact/broken/boarded/lit), stoops, cornices, bow fronts
   flagstones.ts  Voronoi flagstones as real beveled geometry, plus gap points for grass
@@ -80,7 +95,11 @@ src/
   sky.ts         sky dome, distant skyline, State House dome, the Superintelligence spire
   textures.ts    procedural PBR texture sets (albedo / normal / roughness)
   fx.ts          ash, embers, rain, fog banks
-  batch.ts       static geometry batching by material
+  batch.ts       static geometry batching by material (chunked so culling still works), and
+                 merging of rigid hierarchies (characters, lamps, the tree) into few draw calls
+  frameloop.ts   the render loop with its frame-rate cap (and the idle mode for automated browsers)
+  noisetex.ts    lattice textures that make GPU value noise one texture fetch per octave
+  shaderpatches.ts  three.js shader patch: skip lights that can't reach a pixel
   noise.ts       value / fbm / cellular noise and small math helpers
   audio.ts       WebAudio synth, step sequencer, songs, ambience, SFX
   style.css      loader, in-game settings panel, title card, touch stick

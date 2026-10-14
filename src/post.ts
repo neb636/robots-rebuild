@@ -1,12 +1,13 @@
 // Post stack for the stylized 3D look:
 //   scene (HDR) → SSAO → volumetric height fog + light shafts → depth of field → bloom
-//   → AgX/ACES tone map → film grade → optional painterly (Kuwahara) → vignette, grain, lens CA.
+//   → AgX/ACES tone map → film grade → vignette, grain, lens CA.
 import * as THREE from 'three';
 import {
   EffectComposer, RenderPass, EffectPass, Effect, EffectAttribute, BloomEffect, VignetteEffect,
   ToneMappingEffect, ToneMappingMode, NoiseEffect, BlendFunction, ChromaticAberrationEffect,
-  DepthOfFieldEffect, SSAOEffect, NormalPass, Pass,
+  DepthOfFieldEffect, SSAOEffect, NormalPass,
 } from 'postprocessing';
+import { latticeNoise3D } from './noisetex';
 
 export const MAX_LIGHTS = 12;
 
@@ -44,11 +45,13 @@ export class FogEffect extends Effect {
       uniform float spotTan;
       uniform float spotLen;
 
-      float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      uniform sampler3D noiseTex;
+      // Value noise: lattice values come from a tiling 3D texture, and the hardware's trilinear
+      // filter does the interpolation with the smoothstep folded into the lookup coordinate. The same
+      // value noise as hashing the 8 cell corners in the shader, at one texture fetch instead of 8 hashes.
       float n3(vec3 x) {
         vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
-                   mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z);
+        return texture(noiseTex, (i + f + 0.5) * ${(1 / 32).toFixed(5)}).r;
       }
       float fbm3(vec3 p) { return n3(p) * 0.55 + n3(p * 2.03 + 7.1) * 0.3 + n3(p * 4.1 + 3.3) * 0.15; }
       float hDens(float y) { return density * exp(-falloff * (y - fogBase)); }
@@ -145,6 +148,7 @@ export class FogEffect extends Effect {
     `, {
       attributes: EffectAttribute.DEPTH,
       uniforms: new Map<string, THREE.Uniform>([
+        ['noiseTex', new THREE.Uniform(latticeNoise3D(32))],
         ['projInv', new THREE.Uniform(new THREE.Matrix4())],
         ['camWorld', new THREE.Uniform(new THREE.Matrix4())],
         ['camPos', new THREE.Uniform(new THREE.Vector3())],
@@ -220,131 +224,6 @@ export class GradeEffect extends Effect {
   }
 }
 
-/**
- * Painterly filter: 8-sector generalized Kuwahara (smooth flat brush regions that keep edges)
- * plus a faint luminance-edge ink line and canvas tooth.
- *
- * The Kuwahara is the most expensive thing on screen (dozens of taps × 8 sectors per pixel), so it
- * runs at half resolution and is upsampled. The brush regions are flat anyway, so the drop in
- * resolution barely shows. Ink lines and canvas tooth are drawn at full resolution to keep them crisp.
- */
-const FULLSCREEN_VERT = /* glsl */`
-  varying vec2 vUv;
-  void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 1.0, 1.0); }`;
-
-export class PaintPass extends Pass {
-  private half = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
-  private kuwahara: THREE.ShaderMaterial;
-  private combine: THREE.ShaderMaterial;
-  /** resolution of the brush pass relative to the screen */
-  scale = 0.5;
-
-  constructor() {
-    super('PaintPass');
-    this.kuwahara = new THREE.ShaderMaterial({
-      name: 'PaintKuwahara', depthTest: false, depthWrite: false, toneMapped: false,
-      uniforms: { inputBuffer: { value: null }, texelSize: { value: new THREE.Vector2() }, radius: { value: 0.8 } },
-      vertexShader: FULLSCREEN_VERT,
-      fragmentShader: /* glsl */`
-        uniform sampler2D inputBuffer; uniform vec2 texelSize; uniform float radius;
-        varying vec2 vUv;
-        // Generalized Kuwahara with polynomial sector weights (Kyprianidis et al.): 8 soft, overlapping
-        // sectors over a disc. Picks the low-variance brush direction without the box filter's blockiness.
-        void main() {
-          const int R = 4;
-          const float q = 8.0;
-          float zeta = 2.0 / float(R);
-          float sz = sin(0.58);
-          float eta = (zeta + cos(0.58)) / (sz * sz);
-          vec4 m[8]; vec3 s[8];
-          for (int k = 0; k < 8; k++) { m[k] = vec4(0.0); s[k] = vec3(0.0); }
-          for (int j = -R; j <= R; j++) for (int i = -R; i <= R; i++) {
-            vec2 v = vec2(float(i), float(j)) / float(R);
-            if (dot(v, v) > 1.0) continue;
-            vec3 c = min(texture2D(inputBuffer, vUv + vec2(float(i), float(j)) * texelSize * radius).rgb, vec3(4.0));
-            float w[8]; float sum = 0.0; float z;
-            float vxx = zeta - eta * v.x * v.x, vyy = zeta - eta * v.y * v.y;
-            z = max(0.0, v.y + vxx); w[0] = z * z; sum += w[0];
-            z = max(0.0, -v.x + vyy); w[2] = z * z; sum += w[2];
-            z = max(0.0, -v.y + vxx); w[4] = z * z; sum += w[4];
-            z = max(0.0, v.x + vyy); w[6] = z * z; sum += w[6];
-            vec2 r = 0.70710678 * vec2(v.x - v.y, v.x + v.y);
-            vxx = zeta - eta * r.x * r.x; vyy = zeta - eta * r.y * r.y;
-            z = max(0.0, r.y + vxx); w[1] = z * z; sum += w[1];
-            z = max(0.0, -r.x + vyy); w[3] = z * z; sum += w[3];
-            z = max(0.0, -r.y + vxx); w[5] = z * z; sum += w[5];
-            z = max(0.0, r.x + vyy); w[7] = z * z; sum += w[7];
-            float g = exp(-3.125 * dot(v, v)) / max(sum, 1e-4);
-            for (int k = 0; k < 8; k++) { float wk = w[k] * g; m[k] += vec4(c * wk, wk); s[k] += c * c * wk; }
-          }
-          vec3 col = vec3(0.0); float ws = 0.0;
-          for (int k = 0; k < 8; k++) {
-            if (m[k].w <= 0.0) continue;
-            vec3 mu = m[k].rgb / m[k].w;
-            vec3 va = abs(s[k] / m[k].w - mu * mu);
-            float sig = va.r + va.g + va.b;
-            float w = 1.0 / (1.0 + pow(1000.0 * sig, 0.5 * q));
-            col += mu * w; ws += w;
-          }
-          gl_FragColor = vec4(ws > 0.0 ? col / ws : texture2D(inputBuffer, vUv).rgb, 1.0);
-        }`,
-    });
-    this.combine = new THREE.ShaderMaterial({
-      name: 'PaintCombine', depthTest: false, depthWrite: false, toneMapped: false,
-      uniforms: { inputBuffer: { value: null }, paintBuffer: { value: null }, texelSize: { value: new THREE.Vector2() }, paintTexel: { value: new THREE.Vector2() }, resolution: { value: new THREE.Vector2() }, ink: { value: 0.3 }, sharpen: { value: 0.6 } },
-      vertexShader: FULLSCREEN_VERT,
-      fragmentShader: /* glsl */`
-        uniform sampler2D inputBuffer; uniform sampler2D paintBuffer; uniform vec2 texelSize; uniform vec2 paintTexel; uniform vec2 resolution; uniform float ink; uniform float sharpen;
-        varying vec2 vUv;
-        float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-        void main() {
-          vec4 src = texture2D(inputBuffer, vUv);
-          // upsample the half-res brush image with a light unsharp mask so stroke edges stay crisp
-          vec3 col = texture2D(paintBuffer, vUv).rgb;
-          vec3 nb = texture2D(paintBuffer, vUv + vec2(paintTexel.x, 0.0)).rgb + texture2D(paintBuffer, vUv - vec2(paintTexel.x, 0.0)).rgb
-                  + texture2D(paintBuffer, vUv + vec2(0.0, paintTexel.y)).rgb + texture2D(paintBuffer, vUv - vec2(0.0, paintTexel.y)).rgb;
-          col = max(col + (col - nb * 0.25) * sharpen, vec3(0.0));
-          // ink: luminance Sobel on the full-res image, faint
-          vec2 t = texelSize * 1.5;
-          float tl = lum(texture2D(inputBuffer, vUv + vec2(-t.x, t.y)).rgb), tr = lum(texture2D(inputBuffer, vUv + vec2(t.x, t.y)).rgb);
-          float bl = lum(texture2D(inputBuffer, vUv + vec2(-t.x, -t.y)).rgb), br = lum(texture2D(inputBuffer, vUv + vec2(t.x, -t.y)).rgb);
-          float gx = (tr + br) - (tl + bl), gy = (tl + tr) - (bl + br);
-          float e = smoothstep(0.1, 0.4, sqrt(gx * gx + gy * gy));
-          col *= 1.0 - e * ink;
-          // canvas tooth
-          vec2 p = vUv * resolution;
-          float tooth = sin(p.x * 1.7 + sin(p.y * 0.31) * 2.0) * sin(p.y * 1.9 + sin(p.x * 0.27) * 2.0);
-          col *= 0.975 + tooth * 0.025;
-          gl_FragColor = vec4(col, src.a);
-        }`,
-    });
-    this.fullscreenMaterial = this.kuwahara;
-  }
-
-  render(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget, outputBuffer: THREE.WebGLRenderTarget) {
-    this.kuwahara.uniforms.inputBuffer.value = inputBuffer.texture;
-    this.fullscreenMaterial = this.kuwahara;
-    renderer.setRenderTarget(this.half);
-    renderer.render(this.scene, this.camera);
-    this.combine.uniforms.inputBuffer.value = inputBuffer.texture;
-    this.combine.uniforms.paintBuffer.value = this.half.texture;
-    this.fullscreenMaterial = this.combine;
-    renderer.setRenderTarget(this.renderToScreen ? null : outputBuffer);
-    renderer.render(this.scene, this.camera);
-  }
-
-  setSize(w: number, h: number) {
-    const hw = Math.max(1, Math.round(w * this.scale)), hh = Math.max(1, Math.round(h * this.scale));
-    this.half.setSize(hw, hh);
-    this.kuwahara.uniforms.texelSize.value.set(1 / hw, 1 / hh);
-    this.combine.uniforms.paintTexel.value.set(1 / hw, 1 / hh);
-    this.combine.uniforms.texelSize.value.set(1 / w, 1 / h);
-    this.combine.uniforms.resolution.value.set(w, h);
-  }
-
-  dispose() { this.half.dispose(); this.kuwahara.dispose(); this.combine.dispose(); super.dispose(); }
-}
-
 export interface Grade {
   exposure: number;
   tone: 'agx' | 'aces' | 'neutral';
@@ -371,17 +250,19 @@ export class Post {
   bloom: BloomEffect;
   tone: ToneMappingEffect;
   grade: GradeEffect;
-  paint: PaintPass;
   vignette: VignetteEffect;
   noise: NoiseEffect;
   chroma: ChromaticAberrationEffect;
   private aoPass: EffectPass;
   private dofPass: EffectPass;
-  painterly = false;
   quality: 'high' | 'low' = 'high';
+  private pong = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
 
   constructor(private gl: THREE.WebGLRenderer, scene: THREE.Scene, private camera: THREE.PerspectiveCamera, msaa: number) {
     this.composer = new EffectComposer(gl, { frameBufferType: THREE.HalfFloatType, multisampling: msaa });
+    // effect passes never need MSAA or depth: give them single-sample buffers (see render())
+    this.composer.outputBuffer.dispose();
+    this.composer.outputBuffer = this.pong.clone();
     this.renderPass = new RenderPass(scene, camera);
     this.normalPass = new NormalPass(scene, camera);
     this.ssao = new SSAOEffect(camera, this.normalPass.texture, {
@@ -394,7 +275,6 @@ export class Post {
     this.bloom = new BloomEffect({ intensity: 1.1, luminanceThreshold: 0.9, luminanceSmoothing: 0.35, mipmapBlur: true, radius: 0.72, levels: 8 });
     this.tone = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
     this.grade = new GradeEffect();
-    this.paint = new PaintPass();
     this.vignette = new VignetteEffect({ darkness: 0.55, offset: 0.3 });
     this.noise = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
     this.noise.blendMode.opacity.value = 0.08;
@@ -407,10 +287,8 @@ export class Post {
     this.dofPass = new EffectPass(camera, this.dof);
     this.composer.addPass(this.dofPass);
     this.composer.addPass(new EffectPass(camera, this.bloom, this.tone, this.grade));
-    this.composer.addPass(this.paint);
     this.composer.addPass(new EffectPass(camera, this.chroma));
     this.composer.addPass(new EffectPass(camera, this.vignette, this.noise));
-    this.paint.enabled = false;
   }
 
   setQuality(q: 'high' | 'low') {
@@ -420,8 +298,6 @@ export class Post {
     this.dofPass.enabled = q === 'high';
     this.fog.set('steps', q === 'high' ? 14 : 6);
   }
-
-  setPainterly(on: boolean) { this.painterly = on; this.paint.enabled = on; }
 
   applyGrade(g: Grade) {
     this.gl.toneMappingExposure = g.exposure;
@@ -450,6 +326,30 @@ export class Post {
     fx.set('noiseAmt', f.noise); fx.set('halo', f.halo); fx.set('skyDist', f.skyDist);
   }
 
-  setSize(w: number, h: number) { this.composer.setSize(w, h, false); }
-  render(dt: number) { this.composer.render(dt); }
+  setSize(w: number, h: number) {
+    this.composer.setSize(w, h, false);
+    const s = this.gl.getDrawingBufferSize(new THREE.Vector2());
+    this.pong.setSize(s.x, s.y);
+  }
+
+  /**
+   * Like EffectComposer.render, but only the scene render is multisampled. The composer's own
+   * ping-pong reuses its (MSAA + depth) input buffer as an effect target, so every fullscreen pass
+   * would be drawn at 4x and then resolved, colour and depth, for no visible gain. Here the scene
+   * lands in the composer's input buffer once, and the effect passes alternate between two plain
+   * single-sample buffers.
+   */
+  render(dt: number) {
+    const gl = this.gl, c = this.composer;
+    const scene = c.inputBuffer;
+    let input = scene, output = c.outputBuffer;
+    for (const pass of c.passes) {
+      if (!pass.enabled) continue;
+      pass.render(gl, input, output, dt, false);
+      if (pass.needsSwap) {
+        const next = input === scene ? this.pong : input;
+        input = output; output = next;
+      }
+    }
+  }
 }

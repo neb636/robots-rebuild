@@ -1,4 +1,4 @@
-// Player settings shared by the title menu and the game: mood, camera, render style, quality.
+// Player settings shared by the title menu and the game: mood, camera, quality.
 // They persist on this device. URL params still win, so a shared link like ?mood=curfew&cam=jrpg
 // opens exactly that setup.
 import { MOODS } from './scene';
@@ -9,13 +9,13 @@ export const params = new URLSearchParams(location.search);
 export const isTouch = matchMedia('(pointer: coarse)').matches;
 
 const SETTINGS_KEY = 'quiet-machines.settings.v1';
-type Saved = { mood?: string; cam?: string; painterly?: boolean; quality?: string };
+type Saved = { mood?: string; cam?: string; quality?: string };
 function loadSettings(): Saved {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
 export function saveSettings(): boolean {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ mood: state.mood, cam: state.cam, painterly: state.painterly, quality: state.quality }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ mood: state.mood, cam: state.cam, quality: state.quality }));
     return true;
   } catch { return false; /* storage blocked (private mode): settings just won't persist */ }
 }
@@ -24,7 +24,6 @@ const pick = <T extends string>(v: string | null | undefined, ok: readonly strin
 
 export const state = {
   mood: pick<keyof typeof MOODS>(params.get('mood') ?? saved.mood, Object.keys(MOODS), 'curfew'),
-  painterly: params.has('look') ? params.get('look') === 'paint' : saved.painterly === true,
   cam: pick<CamMode>(params.get('cam') ?? saved.cam, CAMS, 'follow'),
   quality: pick<'high' | 'low'>(params.get('q') ?? saved.quality, ['high', 'low'], isTouch ? 'low' : 'high'),
   ui: params.get('ui') !== '0',

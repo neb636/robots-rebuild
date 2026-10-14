@@ -1,9 +1,10 @@
 // Sky dome (gradient, drifting overcast with fire-lit undersides, moon), plus the distant skyline:
 // the collapsed State House dome and the Superintelligence Inc. spire looming over the city.
 import * as THREE from 'three';
-import { Batch, wbox } from './batch';
+import { Batch, wbox, mergeStatic } from './batch';
 import { pbrMat, glowMat, glowSprite, FogLight } from './props';
 import { rng } from './noise';
+import { latticeNoise2D, VNOISE_2D_GLSL } from './noisetex';
 
 export interface SkySettings {
   zenith: string; horizon: string; glow: string; glowDir: [number, number, number]; glowAmt: number;
@@ -18,6 +19,7 @@ export function skyDome() {
       glowDir: { value: new THREE.Vector3(1, 0, 0) }, glowAmt: { value: 1 },
       cloud: { value: new THREE.Color() }, cloudLit: { value: new THREE.Color() }, cloudAmt: { value: 1 },
       moon: { value: 1 }, moonDir: { value: new THREE.Vector3(0, 1, 0) }, stars: { value: 0 }, t: { value: 0 },
+      noiseTex2: { value: latticeNoise2D() },
     },
     vertexShader: /* glsl */`varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`,
     fragmentShader: /* glsl */`
@@ -25,8 +27,8 @@ export function skyDome() {
       uniform vec3 zenith, horizon, glow, glowDir, cloud, cloudLit, moonDir;
       uniform float glowAmt, cloudAmt, moon, stars, t;
       float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
-      float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-      float fbm(vec2 p){ float s=0., a=.5; for(int i=0;i<6;i++){ s+=a*n(p); p=p*2.03+vec2(1.7,9.2); a*=.5; } return s; }
+      ${VNOISE_2D_GLSL}
+      float fbm(vec2 p){ float s=0., a=.5; for(int i=0;i<6;i++){ s+=a*vnoise(p); p=p*2.03+vec2(1.7,9.2); a*=.5; } return s; }
       void main(){
         vec3 d = normalize(vDir);
         float y = max(d.y, -0.1);
@@ -111,12 +113,14 @@ export function skyline(parent: THREE.Object3D, b: Batch, lights: FogLight[]) {
   // dome with a torn-open wedge, ribs exposed
   const dome = add(new THREE.SphereGeometry(8.6, 48, 24, 0.9, Math.PI * 2 - 1.5, 0, Math.PI / 2), gold, 0, 9, 0);
   dome.material = gold; (dome.material as THREE.Material).side = THREE.DoubleSide;
+  const ribMat = new THREE.MeshStandardMaterial({ color: '#2a2420', roughness: 0.8 });
   for (let i = 0; i < 6; i++) {
     const a = -0.6 + i * 0.25 + 0.9 - 0.9;
-    const rib = add(new THREE.TorusGeometry(8.6, 0.12, 6, 24, Math.PI / 2 * (0.5 + R() * 0.5)), new THREE.MeshStandardMaterial({ color: '#2a2420', roughness: 0.8 }), 0, 9, 0);
+    const rib = add(new THREE.TorusGeometry(8.6, 0.12, 6, 24, Math.PI / 2 * (0.5 + R() * 0.5)), ribMat, 0, 9, 0);
     rib.rotation.set(0, a + 0.15, Math.PI / 2);
   }
   add(new THREE.CylinderGeometry(1.2, 1.4, 2.6, 16), gold, 2.2, 16.6, -1.5).rotation.z = 0.35;
+  mergeStatic(sh);
 
   // ---- The Superintelligence Inc. spire: a black monolith that has no business being here
   const spire = new THREE.Group(); spire.position.set(70, 0, -340); parent.add(spire);
