@@ -91,3 +91,45 @@ html, body {
   .help { display: none; }
   .brand { left: 14px; top: 12px; }
 }
+
+/* ---------------------------------------------------------------- story: text box, prompts, fades */
+.veil { position: absolute; inset: 0; z-index: 20; background: #000; opacity: 0; pointer-events: none; }
+.bigcard { position: absolute; left: 0; right: 0; top: 42%; z-index: 21; text-align: center; padding: 0 24px; opacity: 0; transition: opacity 1.4s ease; pointer-events: none; }
+.bigcard.show { opacity: 1; }
+.bigcard.narr { font: italic 500 clamp(18px, 2.2vw, 26px) var(--serif); color: #d8d2c4; letter-spacing: 0.02em; }
+.bigcard.title { font: 600 clamp(24px, 3.6vw, 44px) var(--serif); color: #ece4d2; letter-spacing: 0.5em; padding-left: 0.5em; }
+
+.dlg { position: absolute; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 22; width: min(760px, calc(100% - 32px)); transform: translate(-50%, 12px); opacity: 0; pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease;
+  padding: 18px 24px 20px; min-height: 96px; border-radius: 10px; background: linear-gradient(180deg, rgba(28, 40, 92, 0.94), rgba(12, 18, 48, 0.96));
+  border: 2px solid #e8e4f4; box-shadow: 0 0 0 3px #1a2250, 0 0 0 4px rgba(232, 228, 244, 0.35), 0 14px 40px rgba(0, 0, 0, 0.5); font: 500 clamp(16px, 1.6vw, 19px)/1.5 var(--sans); color: #f4f2fa; cursor: pointer; }
+.dlg.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.dlg .who { position: absolute; top: -15px; left: 18px; padding: 3px 12px; border-radius: 5px; background: #e8e4f4; color: #1a2250; font: 700 12px var(--sans); letter-spacing: 0.14em; text-transform: uppercase; }
+.dlg .who:empty { display: none; }
+.dlg.inner .txt { font-style: italic; color: #dcdcf0; }
+.dlg .more { position: absolute; right: 16px; bottom: 8px; font-size: 11px; color: var(--gold-hi); opacity: 0; }
+.dlg.done .more { opacity: 1; animation: dlg-more 0.8s ease-in-out infinite; }
+@keyframes dlg-more { 50% { transform: translateY(3px); } }
+.dlg.tv { background: linear-gradient(180deg, rgba(10, 22, 44, 0.96), rgba(4, 8, 18, 0.97)); border-color: #b8d0f0; box-shadow: 0 0 0 3px #0a1426, 0 0 24px rgba(140, 180, 255, 0.35), 0 14px 40px rgba(0, 0, 0, 0.5); }
+.dlg.tv .who { background: #b8d0f0; color: #0a1426; }
+.dlg.tv .txt { font-family: ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.02em; color: #e0ecff; text-shadow: 0 0 8px rgba(140, 180, 255, 0.6); }
+.dlg.phone .who { background: #8ad89a; color: #0e2a16; }
+.dlg.item { text-align: center; }
+.dlg.item .txt { color: var(--gold-hi); font-weight: 700; letter-spacing: 0.06em; }
+
+.iprompt { position: absolute; left: 0; top: 0; z-index: 19; display: flex; align-items: center; gap: 8px; padding: 5px 11px 5px 6px; border-radius: 99px; pointer-events: none; opacity: 0; transition: opacity 0.15s ease;
+  background: rgba(16, 22, 52, 0.85); border: 1px solid rgba(232, 228, 244, 0.6); color: #f4f2fa; font: 600 13px var(--sans); white-space: nowrap; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
+.iprompt.show { opacity: 1; }
+.iprompt .v { padding: 2px 8px; border-radius: 99px; background: #e8e4f4; color: #1a2250; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.objective { position: absolute; left: 22px; top: 64px; z-index: 11; font: 600 14px var(--sans); color: #fffaf0; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); opacity: 0; transform: translateX(-8px); transition: opacity 0.6s ease, transform 0.6s ease; pointer-events: none; }
+.objective.show { opacity: 1; transform: none; }
+.objective span { color: var(--gold-hi); margin-right: 4px; }
+
+.actbtn { position: absolute; right: calc(28px + env(safe-area-inset-right)); bottom: calc(140px + env(safe-area-inset-bottom)); z-index: 18; width: 66px; height: 66px; border-radius: 50%; border: 2px solid #e8e4f4; background: rgba(28, 40, 92, 0.85); color: #fff; font: 800 28px var(--sans); touch-action: manipulation; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
+
+/* indoors there's no mood or camera choice: the room has its own light */
+.ui.interior .sec.street { display: none; }
+@media (max-width: 700px) {
+  .objective { top: 52px; left: 14px; font-size: 13px; }
+  .dlg { padding: 16px 16px 18px; }
+}

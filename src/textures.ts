@@ -194,6 +194,35 @@ const GEN: Record<string, () => PBRSet> = {
     return [g, g * 0.98, g * 0.97, p, 0.55 + p * 0.1];
   }),
   /** Asphalt / packed earth for the far road. */
+  /** Warm oak floorboards: staggered plank ends, clean grain, a little sheen (for interiors). */
+  oak: () => build(512, 2.2, (u, v) => {
+    const planks = 6, px = u * planks, pi = Math.floor(px), fx = px - pi;
+    // each plank row is cut at its own offset so the end joints stagger
+    const off = Math.abs(Math.sin(pi * 78.233)), pv = v * 2 + off, pj = Math.floor(pv), fy = pv - pj;
+    const gap = Math.min(sstep(0, 0.03, fx), sstep(0, 0.03, 1 - fx), sstep(0, 0.006, fy), sstep(0, 0.006, 1 - fy));
+    const id = pi * 7 + pj * 3;
+    const grain = vnoise(u * 30 + id * 5.1, v * 2.5, 30, 64) * 0.55 + vnoise(u * 140, v * 7, 140, 65) * 0.45;
+    const tone = Math.abs(Math.sin(id * 12.9898)) * 0.6;
+    let c = mixc(hex('#b07a4a'), hex('#d8a46c'), grain * 0.5 + tone * 0.5);
+    c = mixc(c, hex('#8a5a34'), sstep(0.6, 0.9, vnoise(u * 60 + id, v * 4, 60, 66)) * 0.35);
+    c = mixc(c, hex('#3a2616'), 1 - gap);
+    return [c[0], c[1], c[2], gap * (0.6 + grain * 0.3), 0.55 + grain * 0.2];
+  }),
+  /** Painted plaster: a soft roller texture with faint trowel blooms. Neutral (tint with color). */
+  plaster: () => build(256, 1.2, (u, v) => {
+    const n = fbm(u, v, 8, 4, 91), f = vnoise(u * 120, v * 120, 120, 92);
+    const g = 0.93 + n * 0.05 + f * 0.02;
+    return [g, g, g * 0.99, n * 0.5 + f * 0.2, 0.85 + f * 0.1];
+  }),
+  /** Small white subway tile with grey grout. */
+  tile: () => build(256, 3, (u, v) => {
+    const cx = u * 4, cy = v * 8 + (Math.floor(u * 4) % 2) * 0.5;
+    const fx = cx - Math.floor(cx), fy = cy - Math.floor(cy);
+    const grout = Math.min(sstep(0, 0.04, fx), sstep(0, 0.04, 1 - fx), sstep(0, 0.07, fy), sstep(0, 0.07, 1 - fy));
+    const n = vnoise(u * 40, v * 40, 40, 93) * 0.04;
+    const c = mixc(hex('#a8a49c'), [0.94 + n, 0.94 + n, 0.92 + n], grout);
+    return [c[0], c[1], c[2], grout * 0.8, lerp(0.8, 0.12, grout)];
+  }),
   asphalt: () => build(512, 2.5, (u, v) => {
     const n = fbm(u, v, 8, 5, 131), g = vnoise(u * 220, v * 220, 220, 132);
     const crack = sstep(0.015, 0.0, Math.abs(fbm(u, v, 3, 4, 133) - 0.5));

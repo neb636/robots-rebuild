@@ -1,13 +1,17 @@
 # Quiet Machines — Prologue: "Static"
 
-A dark, stylized 3D JRPG set in a ruined, overgrown Boston. The current build is a walkable
-vertical slice of a Beacon Hill lane: carved flagstones, volumetric fog with lantern halos, a
-drone searchlight, and the Converted standing in the haze.
+A dark, stylized 3D JRPG set in a ruined, overgrown Boston. The current build opens on **Day Zero**
+in Theo's sunny one-bedroom on Mt. Vernon St.: a dollhouse-cutaway apartment to explore, with a
+couple dozen small things to poke at (the bed, Biscuit the cat, the alarm clock, the coffee maker,
+the crossword, Gerald the pothos...). Spend a little while in the living room and the TV turns itself
+on. After the broadcast, Marcus calls, you head out the door, and the screen goes black:
+**two years later**, a walkable vertical slice of a Beacon Hill lane: carved flagstones, volumetric
+fog with lantern halos, a drone searchlight, and the Converted standing in the haze.
 
 It opens on a title screen: a dead machine's hand rising out of an ash field on a rainy night.
 The hand never moves. Only the weather does: clouds creep right, mist slides along the ground, rain
-falls, a strip of cloth streams from the wrist, and one indicator light breathes. The street is
-built after **New Game**.
+falls, a strip of cloth streams from the wrist, and one indicator light breathes. The apartment is
+built after **New Game**, and the street is built during the fade to black.
 
 **Play it:** https://neb636.github.io/robots-rebuild/
 
@@ -23,16 +27,19 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 |---|---|---|---|
 | Move | WASD / arrows | left-thumb stick | left stick |
 | Run | Shift | push the stick to the edge | full stick |
+| Interact / advance text | Space, Enter, F | **!** button, tap the text box | A |
 | Look | mouse drag, Q / E | right-thumb drag | right stick |
 | Zoom | wheel | pinch | |
-| Mood | 1 / 2 / 3 | settings panel | |
-| Camera | C | settings panel | |
+| Mood (street) | 1 / 2 / 3 | settings panel | |
+| Camera (street) | C | settings panel | |
 | Hide UI | H | × / ☰ button | |
 
 ## Settings
 
 Mood, camera and quality are player settings, saved on the device (localStorage)
 and restored on the next visit:
+
+Indoors, the apartment has its own fixed morning light and dollhouse camera, so only Quality shows.
 
 - **Mood:** Curfew (night rain, the default), Ashfall (dusk), Grey Pall (dead fog). Each mood is a block of
   data in `MOODS` (`src/scene.ts`): sky, fog, grade, moonlight, rain, wet ground.
@@ -45,7 +52,7 @@ The same settings can be changed from **Options** on the title screen before sta
 
 URL params override the saved settings without changing them, for sharing a specific setup:
 `?mood=curfew&cam=jrpg&q=low&ui=0&card=0`. `?menu=0` skips the title screen and goes
-straight into the game. `?debug` exposes `window.__THREE` (and `window.__title` on the title screen).
+straight into the game. `?start=street` skips Day Zero and starts on Acorn Lane. `?debug` exposes `window.__THREE` (and `window.__title` on the title screen).
 
 ## Frame rate and browser testing
 
@@ -60,7 +67,8 @@ test would keep the GPU and a CPU core pinned:
 - capped at **30 fps**, at full visual quality, so screenshots look exactly like the real game;
 - after **30 s with no input** the loop drops to 4 fps until the next key, click or mouse move.
 
-When driving the game from an agent, `?menu=0&card=0` goes straight to the street, `?q=low` is
+When driving the game from an agent, `?menu=0&card=0` goes straight into the apartment (no intro
+fade), `?menu=0&card=0&start=street` straight to the street, `?q=low` is
 lighter still if the screenshot doesn't need the high-quality look, and closing the browser when
 done (`playwright-cli close`) stops the rendering entirely.
 
@@ -84,6 +92,9 @@ src/
   title.ts       title screen backdrop: the hand, ash field, drifting sky, mist, cloth, its post stack
   menu.ts        title menu: options, controls, credits, brush-stroke highlight, all input types
   menu.css       title menu layout
+  apartment.ts   Day Zero: Theo's apartment, cutaway walls, sunbeams, Biscuit, the TV, the morning light
+  prologue.ts    Day Zero's script: every interaction's lines, the broadcast, Marcus's call, the fade
+  dialogue.ts    JRPG text box, interaction prompt, objective line, fades and captions
   scene.ts       the lane layout, walkable heights, lights, the Converted, the drone, moods
   post.ts        post stack: SSAO, volumetric height fog + light halos + spot beam, DOF, bloom,
                  AgX tone map, film grade, vignette, grain

@@ -1,0 +1,136 @@
+// JRPG text box, interaction prompt, objective line and full-screen fades/cards. Pure DOM over the
+// canvas; the game drives it (see prologue.ts) and forwards the interact button to `press()`.
+import * as THREE from 'three';
+import { audio } from './audio';
+import { isTouch } from './settings';
+
+/** Something the hero can walk up to and use. */
+export interface Interactable {
+  id: string;
+  /** shown in the prompt */
+  name: string;
+  /** verb on the prompt button ("Look", "Pet", "Answer") */
+  verb?: string;
+  /** world point the prompt floats over; distance is measured to it on the floor plane */
+  pos: THREE.Vector3;
+  radius: number;
+  enabled?: () => boolean;
+  use: () => void | Promise<void>;
+}
+
+/** A line of dialogue: plain text is the hero's inner voice (no name tag). */
+export type Line = string | { who: string; text: string; style?: 'tv' | 'phone' | 'item' };
+
+const el = (tag: string, cls: string, html = '') => { const e = document.createElement(tag); e.className = cls; e.innerHTML = html; return e; };
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+export class Dialogue {
+  private box = el('div', 'dlg', '<div class="who"></div><div class="txt"></div><div class="more">▼</div>');
+  private prompt = el('div', 'iprompt', '<span class="v"></span><span class="n"></span>');
+  private actBtn = el('button', 'actbtn', '!');
+  private obj = el('div', 'objective');
+  private veil = el('div', 'veil');
+  private card = el('div', 'bigcard');
+  private resolve: (() => void) | null = null;
+  private lines: Line[] = [];
+  private full = '';
+  private shown = 0;
+  private typing = false;
+  private acc = 0;
+  open = false;
+  /** called when the interact control is pressed while no dialogue is open */
+  onInteract: (() => void) | null = null;
+
+  constructor(private host: HTMLElement) {
+    host.append(this.veil, this.card, this.obj, this.prompt, this.box, this.actBtn);
+    this.box.addEventListener('pointerdown', (e) => { e.preventDefault(); this.press(); });
+    this.actBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.press(); });
+    this.actBtn.style.display = 'none';
+  }
+
+  /** the interact / advance control (Space, Enter, F, gamepad A, tap) */
+  press() {
+    if (this.open) {
+      if (this.typing) { this.shown = this.full.length; return; }
+      this.next();
+      return;
+    }
+    this.onInteract?.();
+  }
+
+  /** Show lines one after another; resolves when the last one is dismissed. */
+  say(lines: Line | Line[]): Promise<void> {
+    this.lines = Array.isArray(lines) ? [...lines] : [lines];
+    this.open = true;
+    this.box.classList.add('show');
+    this.setPrompt(null);
+    return new Promise((r) => { this.resolve = r; this.next(); });
+  }
+
+  private next() {
+    const l = this.lines.shift();
+    if (l === undefined) {
+      this.open = false;
+      this.box.classList.remove('show');
+      const r = this.resolve; this.resolve = null; r?.();
+      return;
+    }
+    audio.sfx('cursor', 0.5);
+    const who = typeof l === 'string' ? '' : l.who;
+    this.full = typeof l === 'string' ? l : l.text;
+    this.box.className = 'dlg show' + (typeof l !== 'string' && l.style ? ' ' + l.style : '') + (who ? '' : ' inner');
+    (this.box.querySelector('.who') as HTMLElement).textContent = who;
+    this.shown = 0; this.acc = 0; this.typing = true;
+    this.render();
+  }
+
+  private render() {
+    (this.box.querySelector('.txt') as HTMLElement).textContent = this.full.slice(0, Math.floor(this.shown));
+    this.box.classList.toggle('done', !this.typing);
+  }
+
+  /** typewriter; call every frame */
+  tick(dt: number) {
+    if (!this.open || !this.typing) return;
+    const before = Math.floor(this.shown);
+    this.shown = Math.min(this.full.length, this.shown + dt * 48);
+    this.acc += Math.floor(this.shown) - before;
+    if (this.acc >= 3) { this.acc = 0; audio.sfx('blip', 0.6); }
+    if (this.shown >= this.full.length) this.typing = false;
+    this.render();
+  }
+
+  /** floating "[verb] name" over the thing in reach, or null to hide */
+  setPrompt(i: Interactable | null, screen?: { x: number; y: number }) {
+    const show = !!i && !this.open;
+    this.prompt.classList.toggle('show', show);
+    this.actBtn.style.display = show && isTouch ? 'block' : 'none';
+    if (!show || !i || !screen) return;
+    (this.prompt.querySelector('.v') as HTMLElement).textContent = isTouch ? (i.verb ?? 'Look') : `${i.verb ?? 'Look'}  ␣`;
+    (this.prompt.querySelector('.n') as HTMLElement).textContent = i.name;
+    this.prompt.style.transform = `translate(${Math.round(screen.x)}px, ${Math.round(screen.y)}px) translate(-50%, -100%)`;
+  }
+
+  objective(text: string | null) {
+    this.obj.classList.toggle('show', !!text);
+    if (text) this.obj.innerHTML = `<span>◆</span> ${text}`;
+  }
+
+  /** fade the screen to black (1) or back (0) */
+  async fade(to: 0 | 1, ms = 1200) {
+    this.veil.style.transition = `opacity ${ms}ms ease`;
+    this.veil.style.opacity = String(to);
+    await wait(ms);
+  }
+
+  /** centred text over the black veil (italic narration or a big title) */
+  async caption(html: string, ms: number, kind: 'narr' | 'title' = 'narr') {
+    this.card.className = 'bigcard ' + kind;
+    this.card.innerHTML = html;
+    await wait(30);
+    this.card.classList.add('show');
+    await wait(ms);
+    this.card.classList.remove('show');
+    await wait(900);
+  }
+}
