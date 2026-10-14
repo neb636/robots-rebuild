@@ -133,3 +133,4 @@ html, body {
   .objective { top: 52px; left: 14px; font-size: 13px; }
   .dlg { padding: 16px 16px 18px; }
 }
+.ui.interior .seg[data-k="cam"] button[data-v="cinematic"] { display: none; }

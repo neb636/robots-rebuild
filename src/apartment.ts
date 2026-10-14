@@ -26,7 +26,7 @@ export const MORNING: Mood = {
   name: 'Morning', blurb: 'Day Zero. A sunny Tuesday on Beacon Hill.',
   sky: { zenith: '#4f86c8', horizon: '#d4e2ec', glow: '#ffe2b0', glowDir: [0.35, 0.3, -1], glowAmt: 0.35, cloud: '#e6eaee', cloudLit: '#fff8ea', cloudAmt: 0.55, moon: 0, moonDir: [0, 1, 0], stars: 0 },
   fog: { color: '#cfd8e0', sun: '#fff0d0', sunDir, density: 0.0015, falloff: 0.04, base: 0, noise: 0.3, halo: 0.25, skyDist: 120 },
-  grade: { exposure: 1.18, tone: 'agx', lift: [0.004, 0.003, 0.0], gamma: [1.0, 1.0, 1.0], gain: [1.03, 1.0, 0.96], sat: 1.16, contrast: 1.12, shadowTint: '#5a6a8a', highlightTint: '#ffe0b0', split: 0.3, bloom: 0.5, bloomThreshold: 1.0, vignette: 0.3, grain: 0.035 },
+  grade: { exposure: 1.0, tone: 'neutral', lift: [0.004, 0.003, 0.0], gamma: [1.0, 1.0, 1.0], gain: [1.03, 1.0, 0.96], sat: 1.0, contrast: 1.05, shadowTint: '#5a6a8a', highlightTint: '#ffe0b0', split: 0.3, bloom: 0.5, bloomThreshold: 1.0, vignette: 0.3, grain: 0.035 },
   moon: { color: '#fff0da', intensity: 4.4, dir: sunDir },
   hemi: { sky: '#e8eef8', ground: '#d0a880', intensity: 1.9 },
   env: 0.7, lamps: 1, fill: 0.35, rim: { color: '#ffffff', strength: 0.03 }, ash: 0, rain: false, wet: false, fogBank: '#ffffff',
@@ -45,6 +45,10 @@ export interface Apartment extends Built {
   lamps: { bedside: () => void; floor: () => boolean };
   /** the drones' first migration over the city (after the broadcast) */
   startFlock(): void;
+  /** follow camera indoors: show the ceiling and stop cutting walls down */
+  setFollow(on: boolean): void;
+  /** fraction (0..1) of the way from `from` to `to` before a wall is hit (1 = clear) */
+  cameraBlock(from: THREE.Vector3, to: THREE.Vector3): number;
 }
 
 // --------------------------------------------------------------------------------------- materials
@@ -208,15 +212,15 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   const oak = pbrMat('oak', '#ffffff');
   const tile = pbrMat('tile', '#ffffff');
   const tileFloor = pbrMat('tile', '#d8dce0');
-  const bedWall = pbrMat('plaster', '#cfdde6');
-  const livWall = pbrMat('plaster', '#f2e8d8');
-  const bathWall = pbrMat('plaster', '#e2ecea');
-  const brick = pbrMat('brick', '#f0c4b0', { normalScale: 1.2 });
+  const bedWall = pbrMat('plaster', '#c4dcec');
+  const livWall = pbrMat('plaster', '#f6e6c8');
+  const bathWall = pbrMat('plaster', '#cfe8e0');
+  const brick = pbrMat('cleanbrick', '#ffffff');
   const trim = paint('#f6f2ea', 0.55);
-  const wood = pbrMat('wood', '#e8b888');
-  const darkWood = pbrMat('wood', '#a87850');
-  const fabricBlue = pbrMat('canvas', '#5d7f9a');
-  const fabricMustard = pbrMat('canvas', '#d6a23e');
+  const wood = pbrMat('finewood', '#e0a874');
+  const darkWood = pbrMat('finewood', '#8a5634');
+  const fabricBlue = pbrMat('linen', '#5a84ac');
+  const fabricMustard = pbrMat('linen', '#dca23e');
   const steel = paint('#c8ccd0', 0.3, { metalness: 0.8 });
   const black = paint('#1c1d20', 0.4);
 
@@ -301,13 +305,13 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     const d = w.def, wb = new Batch();
     const ac = (o.a0 + o.a1) / 2, la = o.a1 - o.a0, h = o.y1;
     const [x, z] = place(d, ac);
-    wb.add(wbox(d.axis === 'x' ? la - 0.04 : 0.05, h - 0.02, d.axis === 'x' ? 0.05 : la - 0.04, 1), pbrMat('wood', color), x, h / 2, z);
+    wb.add(wbox(d.axis === 'x' ? la - 0.04 : 0.05, h - 0.02, d.axis === 'x' ? 0.05 : la - 0.04, 1), pbrMat('finewood', color), x, h / 2, z);
     // casing
     for (const a of [o.a0 - 0.04, o.a1 + 0.04]) { const [cx, cz] = place(d, a); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? 0.08 : T + 0.05, h + 0.06, d.axis === 'x' ? T + 0.05 : 0.08), trim, cx, (h + 0.06) / 2, cz); }
     { const [cx, cz] = place(d, ac); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la + 0.16 : T + 0.05, 0.08, d.axis === 'x' ? T + 0.05 : la + 0.16), trim, cx, h + 0.04, cz); }
     // panels and knobs on both faces
     for (const s of [-1, 1]) {
-      for (const [py, ph] of [[0.55, 0.7], [1.5, 0.8]]) { const [px, pz] = place(d, ac, s * 0.03); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la * 0.65 : 0.01, ph, d.axis === 'x' ? 0.01 : la * 0.65), pbrMat('wood', color), px, py, pz); }
+      for (const [py, ph] of [[0.55, 0.7], [1.5, 0.8]]) { const [px, pz] = place(d, ac, s * 0.03); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la * 0.65 : 0.01, ph, d.axis === 'x' ? 0.01 : la * 0.65), pbrMat('finewood', color), px, py, pz); }
       const [kx, kz] = place(d, ac + knobSide * la * 0.38, s * 0.06);
       wb.add(new THREE.SphereGeometry(0.035, 12, 10), paint('#c8a050', 0.25, { metalness: 1 }), kx, 1.0, kz);
     }
@@ -343,6 +347,18 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     wb.add(new THREE.BoxGeometry(T + 0.05, 0.08, doorway.a1 - doorway.a0 + 0.16), trim, -1, 2.19, (doorway.a0 + doorway.a1) / 2);
     wb.flush(part.group);
   }
+  // the visible ceiling, for the follow camera (the overhead view leaves it off)
+  const ceiling = new THREE.Group(); root.add(ceiling);
+  {
+    const cm = new THREE.Mesh(wplane(12, 8, 0.5), pbrMat('plaster', '#fbf6ee'));
+    cm.rotation.x = Math.PI / 2; cm.position.set(0, H - 0.001, 0); cm.receiveShadow = true; ceiling.add(cm);
+    const fixture = new THREE.MeshStandardMaterial({ color: '#fff8ec', emissive: '#fff0d8', emissiveIntensity: 0.6, roughness: 0.5 });
+    for (const [fx, fz] of [[-3.5, -1.2], [2.0, -0.6]] as const) {
+      const f = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), fixture);
+      f.position.set(fx, H, fz); ceiling.add(f);
+    }
+    ceiling.visible = false;
+  }
   // ceiling for the sun's shadow map only
   shadowB.add(new THREE.BoxGeometry(12.6, 0.2, 8.6), shadowMat, 0, H + 0.1, 0);
   const shadowG = new THREE.Group(); root.add(shadowG);
@@ -352,14 +368,13 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
 
   // ------------------------------------------------------------------ bedroom
   // rug + bed (head against the left wall)
-  box(2.7, 0.015, 2.3, pbrMat('canvas', '#c4694a'), -4.6, 0, -1.6);
+  b.add(new THREE.PlaneGeometry(2.7, 2.3).rotateX(-Math.PI / 2), pbrMat('rug', '#c8d4f0'), -4.6, 0.012, -1.6);
   box(2.2, 0.28, 1.66, wood, -4.9, 0.08, -1.6);
   for (const [lx, lz] of [[-5.9, -2.35], [-5.9, -0.85], [-3.9, -2.35], [-3.9, -0.85]]) box(0.07, 0.1, 0.07, darkWood, lx, 0, lz);
-  box(0.08, 1.15, 1.72, wood, -5.96, 0, -1.6);
   rbox(2.1, 0.26, 1.56, 0.06, paint('#f4f2ec', 0.9), -4.9, 0.34, -1.6);
   // duvet thrown back in a heap, as if someone just got up
-  rbox(1.45, 0.14, 1.64, 0.06, pbrMat('canvas', '#8fb2d6'), -4.4, 0.56, -1.6);
-  rbox(0.6, 0.16, 1.5, 0.07, pbrMat('canvas', '#8fb2d6'), -5.0, 0.6, -1.75, 0.08, 0.22, 0.25);
+  rbox(1.45, 0.14, 1.64, 0.06, pbrMat('linen', '#9cc4ee'), -4.4, 0.56, -1.6);
+  rbox(0.6, 0.16, 1.5, 0.07, pbrMat('linen', '#9cc4ee'), -5.0, 0.6, -1.75, 0.08, 0.22, 0.25);
   for (const pz of [-2.0, -1.2]) rbox(0.42, 0.14, 0.62, 0.06, paint('#fbf8f0', 0.9), -5.6, 0.6, pz, 0, 0.1 * (pz + 1.6), 0.18);
   solid(-6, -2.45, -3.78, -0.75);
   at.bed = v3(-4.6, 0.7, -1.6);
@@ -392,11 +407,11 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   }
   at.water = v3(-5.65, 0.7, -2.78);
   // curtains
-  for (const s of [-1, 1]) rbox(0.36, 1.85, 0.06, 0.025, pbrMat('canvas', '#f2dcae'), (winBed.a0 + winBed.a1) / 2 + s * 1.0, 0.65, -3.86, 0, 0, 0, b);
+  for (const s of [-1, 1]) rbox(0.36, 1.85, 0.06, 0.025, pbrMat('linen', '#f2dcae'), (winBed.a0 + winBed.a1) / 2 + s * 1.0, 0.65, -3.86, 0, 0, 0, b);
   box(2.4, 0.03, 0.03, steel, -3.7, 2.6, -3.85);
   at.winBed = v3(-3.7, 1.3, -3.85);
   // dresser with a stack of identical navy cat sweaters, a mirror and a cactus
-  box(1.3, 0.92, 0.5, pbrMat('wood', '#f0e6d6'), -1.85, 0, -3.66);
+  box(1.3, 0.92, 0.5, paint('#f4eee4', 0.45), -1.85, 0, -3.66);
   for (let i = 0; i < 3; i++) { box(1.18, 0.005, 0.01, paint('#b0a080', 0.6), -1.85, 0.3 + i * 0.29, -3.405); cyl(0.02, 0.02, 0.02, paint('#c8a050', 0.3, { metalness: 1 }), -1.85, 0.16 + i * 0.29, -3.4); }
   for (let i = 0; i < 4; i++) rbox(0.34, 0.06, 0.28, 0.02, pbrMat('knit', '#22305c'), -2.25, 0.92 + i * 0.062, -3.65, 0, (R() - 0.5) * 0.15, 0);
   b.add(new THREE.BoxGeometry(0.46, 0.66, 0.03), trim, -1.6, 1.25, -3.87, -0.1, 0, 0);
@@ -446,18 +461,16 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     rbox(0.5, 0.2, 0.4, 0.06, paint('#ffffff', 0.25), -5.7, 0.78, 2.35);
     cyl(0.04, 0.04, 0.78, paint('#ffffff', 0.25), -5.7, 0, 2.35);
     box(0.02, 0.6, 0.45, paint('#b8ccd8', 0.04, { metalness: 0.9 }), -5.91, 1.2, 2.35);
-    box(0.06, 0.8, 0.5, pbrMat('canvas', '#7ab0a0'), -4.3, 1.0, 1.75);
   }
   // closet: a rail of navy sweaters
   {
     box(2.2, 0.03, 0.03, steel, -2.2, 1.75, 3.55);
     for (let i = 0; i < 10; i++) rbox(0.06, 0.7, 0.5, 0.02, pbrMat('knit', i === 7 ? '#2a2a2a' : '#22305c'), -3.1 + i * 0.2, 1.0, 3.55);
-    for (const [x, s] of [[-3.0, 0.4], [-2.4, 0.35], [-1.5, 0.45]] as const) box(s, s, s, pbrMat('canvas', '#c8a878'), x, 0, 2.2);
+    for (const [x, s] of [[-3.0, 0.4], [-2.4, 0.35], [-1.5, 0.45]] as const) box(s, s, s, pbrMat('linen', '#c8a878'), x, 0, 2.2);
   }
 
   // ------------------------------------------------------------------ living room
-  box(3.4, 0.015, 2.6, pbrMat('canvas', '#e0bc78'), 1.6, 0, -1.7);
-  box(3.0, 0.016, 2.2, pbrMat('canvas', '#bc5a40'), 1.6, 0, -1.7);
+  b.add(new THREE.PlaneGeometry(3.4, 2.6).rotateX(-Math.PI / 2), pbrMat('rug', '#ffffff'), 1.6, 0.012, -1.7);
   // TV on a low console, between the two windows
   box(1.7, 0.5, 0.42, darkWood, 1.6, 0.04, -3.7);
   for (const lx of [0.85, 2.35]) box(0.05, 0.04, 0.3, black, lx, 0, -3.7);
@@ -534,7 +547,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     rbox(0.8, 0.5, 0.18, 0.06, fabricMustard, 0, 0.38, 0.31, 0, 0, 0, g);
     for (const s of [-1, 1]) rbox(0.14, 0.32, 0.78, 0.05, fabricMustard, s * 0.36, 0.3, 0, 0, 0, 0, g);
     for (const [lx, lz] of [[-0.33, -0.33], [0.33, -0.33], [-0.33, 0.33], [0.33, 0.33]]) g.add(new THREE.CylinderGeometry(0.025, 0.018, 0.16, 8), darkWood, lx, 0.08, lz);
-    const ch = new THREE.Group(); ch.position.set(-0.25, 0, -1.75); ch.rotation.y = 0.75; root.add(ch); g.flush(ch);
+    const ch = new THREE.Group(); ch.position.set(-0.25, 0, -1.75); ch.rotation.y = -0.76; // angled at the TV root.add(ch); g.flush(ch);
     solid(-0.7, -2.2, 0.2, -1.3);
   }
   const floorLamp = new THREE.PointLight('#ffd8a0', 0, 5, 2); floorLamp.position.set(-0.6, 1.55, -3.35); root.add(floorLamp);
@@ -606,7 +619,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   }
   // kitchen: L-shaped counter, sink under the window, coffee maker, fridge
   {
-    const cab = paint('#7c9aa8', 0.6), top = paint('#efebe4', 0.35);
+    const cab = paint('#5f9ab0', 0.5), top = paint('#efebe4', 0.35);
     box(2.0, 0.86, 0.6, cab, 5.0, 0.04, -3.68); box(2.06, 0.05, 0.66, top, 4.97, 0.9, -3.68);
     box(0.6, 0.86, 2.9, cab, 5.68, 0.04, -1.95); box(0.66, 0.05, 2.9, top, 5.68, 0.9, -1.95);
     box(2.0, 0.04, 0.5, black, 5.0, 0, -3.62); box(0.5, 0.04, 2.9, black, 5.62, 0, -1.95);
@@ -649,13 +662,13 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   }
   // the front door: mat, shoes, coat hooks with Marcus's flashlight
   {
-    box(0.6, 0.015, 0.9, pbrMat('canvas', '#8a6a4a'), 5.6, 0, 2.6);
+    box(0.6, 0.015, 0.9, pbrMat('linen', '#8a6a4a'), 5.6, 0, 2.6);
     rbox(0.12, 0.09, 0.26, 0.03, paint('#26305a', 0.75), 5.45, 0.015, 2.25, 0, 0.3, 0);
     rbox(0.12, 0.09, 0.26, 0.03, paint('#26305a', 0.75), 5.6, 0.015, 2.35, 0, -0.2, 0);
     decoOn(right, (bb) => {
       box(0.03, 0.08, 0.9, darkWood, 5.9, 1.62, 1.35, 0, bb);
       for (let i = 0; i < 3; i++) bb.add(new THREE.CylinderGeometry(0.012, 0.012, 0.08).rotateZ(Math.PI / 2), steel, 5.86, 1.68, 1.05 + i * 0.3);
-      bb.add(new RoundedBoxGeometry(0.12, 0.75, 0.42, 3, 0.05), pbrMat('canvas', '#6a5a3a'), 5.82, 1.3, 1.05);
+      bb.add(new RoundedBoxGeometry(0.12, 0.75, 0.42, 3, 0.05), pbrMat('linen', '#6a5a3a'), 5.82, 1.3, 1.05);
       bb.add(new THREE.CylinderGeometry(0.022, 0.026, 0.2, 12), paint('#d8b030', 0.35, { metalness: 0.4 }), 5.84, 1.52, 1.65);
       bb.add(new THREE.CylinderGeometry(0.032, 0.026, 0.05, 12), black, 5.84, 1.41, 1.65);
       bb.add(new THREE.TorusGeometry(0.03, 0.005, 6, 12), black, 5.84, 1.64, 1.65);
@@ -844,9 +857,11 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
 
   // ------------------------------------------------------------------ cutaway
   const camXZ = new THREE.Vector2(), pXZ = new THREE.Vector2();
+  let follow = false;
   const cutaway = (dt: number, cam: THREE.Camera, player: THREE.Vector3) => {
     camXZ.set(cam.position.x, cam.position.z); pXZ.set(player.x, player.z);
     for (const w of walls) {
+      if (follow) { w.k = 1; w.group.scale.y = 1; w.deco.visible = true; continue; }
       const d = w.def;
       const [ax, az] = place(d, d.a0), [bx, bz] = place(d, d.a1);
       let low = false;
@@ -875,6 +890,27 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     music: 'apartment', ambience: 'city',
     mood: MORNING, hero: HERO_DAY0, normalHidden,
     at, inLiving, tv, clock, phone, cat, lamps,
+    setFollow(on: boolean) { follow = on; ceiling.visible = on; },
+    cameraBlock(from, to) {
+      // walls as thin lines; walkable doorways are gaps the camera can see through
+      let best = 1;
+      const dx = to.x - from.x, dz = to.z - from.z;
+      for (const w of walls) {
+        const d = w.def;
+        const spans: [number, number][] = [];
+        let a = d.a0;
+        for (const o of [...(d.open ?? [])].filter((o) => o.walk).sort((p, q) => p.a0 - q.a0)) { spans.push([a, o.a0 + 0.15]); a = o.a1 - 0.15; }
+        spans.push([a, d.a1]);
+        for (const [s0, s1] of spans) {
+          const [ax, az] = place(d, s0), [bx, bz] = place(d, s1);
+          const ex = bx - ax, ez = bz - az, den = dx * ez - dz * ex;
+          if (Math.abs(den) < 1e-9) continue;
+          const t = ((ax - from.x) * ez - (az - from.z) * ex) / den, u = ((ax - from.x) * dz - (az - from.z) * dx) / den;
+          if (t > 0 && t < best && u >= 0 && u <= 1) best = t;
+        }
+      }
+      return best;
+    },
     startFlock() { flockOn = true; flock.children.forEach((c) => (c.visible = true)); },
     update(dt, t, cam, player) {
       cutaway(dt, cam, player);

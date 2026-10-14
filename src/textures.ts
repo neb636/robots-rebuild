@@ -194,6 +194,56 @@ const GEN: Record<string, () => PBRSet> = {
     return [g, g * 0.98, g * 0.97, p, 0.55 + p * 0.1];
   }),
   /** Asphalt / packed earth for the far road. */
+  /** Clean furniture wood: long warm grain streaks and soft figure, no grime. Near-white (tint it). */
+  finewood: () => build(512, 1.6, (u, v) => {
+    const warp = fbm(u, v, 3, 3, 111) * 0.6;
+    const ring = Math.sin((u * 18 + warp * 6 + vnoise(u * 6, v * 1.5, 6, 112) * 1.5) * Math.PI * 2) * 0.5 + 0.5;
+    const streak = vnoise(u * 90, v * 3, 90, 113);
+    const g = 0.78 + ring * 0.12 + streak * 0.1;
+    const c = mixc([g * 0.96, g * 0.86, g * 0.72], [g, g * 0.95, g * 0.86], ring);
+    return [c[0], c[1], c[2], ring * 0.25 + streak * 0.2, 0.42 + streak * 0.18];
+  }),
+  /** Soft upholstery / linen weave: bright and clean, a little slub. Neutral (tint it). */
+  linen: () => build(256, 2.2, (u, v) => {
+    const a = Math.sin(u * 96 * Math.PI) ** 2, b = Math.sin(v * 96 * Math.PI) ** 2;
+    const slub = vnoise(u * 40, v * 160, 40, 121) * 0.5 + vnoise(u * 160, v * 30, 160, 122) * 0.5;
+    const g = 0.88 + Math.max(a, b) * 0.08 + slub * 0.06;
+    return [g, g, g * 0.98, Math.max(a, b) * 0.5 + slub * 0.3, 0.95];
+  }),
+  /** Clean interior brick: warm, varied reds with pale lime mortar, no soot. */
+  cleanbrick: () => {
+    const pal = ['#a8503a', '#b85e44', '#9a4632', '#c4704e', '#8e4030', '#b0624a', '#a25a40'].map(hex);
+    return build(1024, 3.5, (u, v) => {
+      const rows = 24, per = 8;
+      const ry = v * rows, row = Math.floor(ry), fy = ry - row;
+      const rx = u * per + (row % 2) * 0.5, cx = Math.floor(rx), fx = rx - cx;
+      const edge = Math.min(sstep(0, 0.035, fx), sstep(0, 0.035, 1 - fx), sstep(0, 0.11, fy), sstep(0, 0.11, 1 - fy));
+      const k = Math.abs((Math.sin((cx % per) * 127.1 + row * 311.7) * 43758.5453) % 1);
+      let c = pal[Math.floor(k * pal.length) % pal.length];
+      const n = fbm(u, v, 16, 4, 131);
+      c = mixc(c, hex('#d89070'), n * 0.25);
+      const mortar = mixc(hex('#e0d8c8'), hex('#c8bea8'), fbm(u, v, 40, 2, 132));
+      const out = mixc(mortar, c, edge);
+      return [out[0], out[1], out[2], edge * (0.75 + n * 0.25), 0.85 - edge * 0.05];
+    });
+  },
+  /** A woven rug: border bands and a diamond field, in its own colours (don't tint). */
+  rug: () => build(512, 2, (u, v) => {
+    const d = Math.min(u, v, 1 - u, 1 - v);
+    const weave = (Math.sin(u * 256 * Math.PI) ** 2) * 0.05 + vnoise(u * 200, v * 200, 200, 141) * 0.05;
+    let c = hex('#b8503c');
+    if (d < 0.06) c = hex('#2e4a6a');
+    else if (d < 0.08) c = hex('#e8d4a8');
+    else if (d < 0.12) c = hex('#d8963c');
+    else if (d < 0.135) c = hex('#e8d4a8');
+    else {
+      const x = (u - 0.5) * 6, y = (v - 0.5) * 6;
+      const dm = Math.abs(x - Math.round(x)) + Math.abs(y - Math.round(y));
+      if (dm < 0.18) c = hex('#e8d4a8'); else if (dm < 0.3) c = hex('#2e4a6a'); else if (Math.abs(dm - 0.75) < 0.05) c = hex('#d8963c');
+    }
+    const g = 1 - weave;
+    return [c[0] * g, c[1] * g, c[2] * g, weave * 4, 0.97];
+  }),
   /** Warm oak floorboards: staggered plank ends, clean grain, a little sheen (for interiors). */
   oak: () => build(512, 2.2, (u, v) => {
     const planks = 6, px = u * planks, pi = Math.floor(px), fx = px - pi;

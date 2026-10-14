@@ -127,6 +127,8 @@ class App {
   }
 
   get interior() { return this.built.kind === 'interior'; }
+  /** indoors the camera is either a shoulder-height follow cam or a low overhead view (the JRPG setting) */
+  get indoorFollow() { return this.interior && state.cam !== 'jrpg'; }
 
   /** Put the shared actors (hero, weather, fill light) into a level and set it up. */
   attach(built: Built) {
@@ -244,7 +246,7 @@ class App {
   setMood(k: keyof typeof MOODS) { state.mood = k; if (!this.interior) this.applyMood(); this.ui?.sync(); saveSettings(); }
   private savedPose: { pos: THREE.Vector3; heading: number } | null = null;
   setCam(c: CamMode, persist = true) {
-    if (this.interior) { state.cam = c; this.ui?.sync(); if (persist) saveSettings(); return; }
+    if (this.interior) { state.cam = c === 'cinematic' ? 'follow' : c; this.resetCamera(); this.ui?.sync(); if (persist) saveSettings(); return; }
     if (c === 'cinematic' && state.cam !== 'cinematic') {
       this.savedPose = { pos: this.pos.clone(), heading: this.heading };
       this.pos.set(CINE_POSE.x, 0, CINE_POSE.z); this.heading = CINE_POSE.heading;
@@ -269,8 +271,10 @@ class App {
 
   resetCamera() {
     if (this.interior) {
-      this.yaw = 0; this.pitch = 0.95; this.dist = 8.2;
-      this.camera.fov = 38; this.camera.updateProjectionMatrix();
+      (this.built as Apartment).setFollow?.(this.indoorFollow);
+      if (this.indoorFollow) { this.yaw = this.heading + Math.PI; this.pitch = 0.3; this.dist = 3.2; this.camera.fov = 50; }
+      else { this.yaw = 0; this.pitch = 0.68; this.dist = 6.2; this.camera.fov = 42; }
+      this.camera.updateProjectionMatrix();
       this.placeCamera(1, true);
       return;
     }
@@ -289,7 +293,7 @@ class App {
       if (e.code === 'Digit1') this.setMood('ashfall');
       if (e.code === 'Digit2') this.setMood('curfew');
       if (e.code === 'Digit3') this.setMood('pall');
-      if (e.code === 'KeyC') this.setCam(CAMS[(CAMS.indexOf(state.cam) + 1) % CAMS.length]);
+      if (e.code === 'KeyC') this.setCam(this.interior ? (state.cam === 'jrpg' ? 'follow' : 'jrpg') : CAMS[(CAMS.indexOf(state.cam) + 1) % CAMS.length]);
       if (e.code === 'KeyH') { state.ui = !state.ui; this.ui?.sync(); }
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -299,7 +303,7 @@ class App {
   }
 
   zoom(delta: number) {
-    if (this.interior) { this.dist = THREE.MathUtils.clamp(this.dist + delta, 5, 12); return; }
+    if (this.interior) { this.dist = THREE.MathUtils.clamp(this.dist + delta, this.indoorFollow ? 1.8 : 4, this.indoorFollow ? 5 : 9); return; }
     const jrpg = state.cam === 'jrpg';
     this.dist = THREE.MathUtils.clamp(this.dist + delta, jrpg ? 9 : 2.6, jrpg ? 22 : 9);
   }
@@ -527,10 +531,20 @@ class App {
 
   updateCamera(dt: number, speed: number) {
     const L = this.look; L.dx *= 1; L.dy *= 1;
-    if (this.interior) {
-      // dollhouse camera: orbit a little around the room, never behind the back wall
+    if (this.indoorFollow) {
+      this.yaw -= L.dx * 0.005;
+      this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.004, 0.05, 0.75);
+      if (this.keys.has('KeyQ')) { this.yaw += dt * 1.6; this.lastLook = this.t; }
+      if (this.keys.has('KeyE')) { this.yaw -= dt * 1.6; this.lastLook = this.t; }
+      // swing back behind the hero while walking, a little quicker than outdoors (rooms are small)
+      if (speed > 0.5 && this.t - this.lastLook > 1.5) {
+        let d = this.heading + Math.PI - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+        if (Math.abs(d) < 2.6) this.yaw += d * Math.min(1, dt * 1.4);
+      }
+    } else if (this.interior) {
+      // overhead camera: orbit a little around the room, never behind the back wall
       this.yaw = THREE.MathUtils.clamp(this.yaw - L.dx * 0.004 + (this.keys.has('KeyQ') ? dt * 1.2 : 0) - (this.keys.has('KeyE') ? dt * 1.2 : 0), -0.85, 0.85);
-      this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.003, 0.55, 1.25);
+      this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.003, 0.45, 1.0);
     } else if (state.cam !== 'cinematic') {
       this.yaw -= L.dx * 0.005;
       this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.004, state.cam === 'jrpg' ? 0.45 : -0.05, state.cam === 'jrpg' ? 1.1 : 0.75);
@@ -552,10 +566,23 @@ class App {
     let pos: THREE.Vector3, look: THREE.Vector3;
     if (this.interior) {
       if (this.shot) { pos = this.shot.pos; look = this.shot.look; } else {
-        const target = this.pos.clone().add(new THREE.Vector3(0, 0.9, 0));
+        const follow = this.indoorFollow;
+        const target = this.pos.clone().add(new THREE.Vector3(0, follow ? 1.3 : 0.9, 0));
         const cp = Math.cos(this.pitch);
         pos = target.clone().add(new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp).multiplyScalar(this.dist));
         look = target;
+        if (follow) {
+          // look a little past the hero, and keep the camera inside the apartment, under the ceiling
+          look = target.clone().add(new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).multiplyScalar(0.9)).add(new THREE.Vector3(0, 0.1, 0));
+          // pull in in front of any wall between the hero and the camera
+          const t = (this.built as Apartment).cameraBlock(target, pos);
+          if (t < 1) {
+            pos.lerpVectors(target, pos, Math.max(0.12, t - 0.25 / Math.max(this.dist, 0.1)));
+            // squeezed against a wall: rise and look down over the hero's shoulder instead
+            pos.y += (1 - t) * 0.9;
+          }
+          pos.y = THREE.MathUtils.clamp(pos.y, 0.6, 2.45);
+        }
       }
       // the hero steps out of frame when a cutscene shot would look through the back of their head
       this.player.group.visible = !this.shot || this.camPos.distanceTo(this.pos.clone().setY(this.pos.y + 1.4)) > 2.4;
@@ -679,7 +706,7 @@ class UI {
         <div class="sec street"><div class="lab">Mood <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
           <div class="seg" data-k="mood">${Object.entries(MOODS).map(([k, m]) => `<button data-v="${k}">${m.name}</button>`).join('')}</div>
           <div class="blurb"></div></div>
-        <div class="sec street"><div class="lab">Camera <kbd>C</kbd></div>
+        <div class="sec"><div class="lab">Camera <kbd>C</kbd></div>
           <div class="seg" data-k="cam"><button data-v="follow">Follow</button><button data-v="jrpg">JRPG</button><button data-v="cinematic">Cinematic</button></div></div>
         <div class="sec"><div class="lab">Quality</div>
           <div class="seg" data-k="q"><button data-v="high">High</button><button data-v="low">Low</button></div></div>
@@ -709,6 +736,7 @@ class UI {
     this.blurb.textContent = MOODS[state.mood].blurb;
     this.root.classList.toggle('hidden', !state.ui);
     this.root.classList.toggle('interior', this.a.interior);
+    this.root.querySelector<HTMLElement>('.seg[data-k="cam"] [data-v="jrpg"]')!.textContent = this.a.interior ? 'Overhead' : 'JRPG';
     this.root.querySelector('.b2')!.textContent = this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static';
     this.toggle.textContent = state.ui ? '×' : '☰';
     this.toggle.classList.toggle('off', !state.ui);

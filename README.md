@@ -31,7 +31,7 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 | Look | mouse drag, Q / E | right-thumb drag | right stick |
 | Zoom | wheel | pinch | |
 | Mood (street) | 1 / 2 / 3 | settings panel | |
-| Camera (street) | C | settings panel | |
+| Camera | C | settings panel | |
 | Hide UI | H | × / ☰ button | |
 
 ## Settings
@@ -39,7 +39,8 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 Mood, camera and quality are player settings, saved on the device (localStorage)
 and restored on the next visit:
 
-Indoors, the apartment has its own fixed morning light and dollhouse camera, so only Quality shows.
+Indoors, the apartment has its own fixed morning light, so Mood is hidden; Camera switches between
+a shoulder-height **Follow** camera (the default) and an **Overhead** dollhouse view (C).
 
 - **Mood:** Curfew (night rain, the default), Ashfall (dusk), Grey Pall (dead fog). Each mood is a block of
   data in `MOODS` (`src/scene.ts`): sky, fog, grade, moonlight, rain, wet ground.
