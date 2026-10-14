@@ -31,6 +31,7 @@ export class Dialogue {
   private obj = el('div', 'objective');
   private veil = el('div', 'veil');
   private card = el('div', 'bigcard');
+  private toast = el('div', 'notify');
   private resolve: (() => void) | null = null;
   private lines: Line[] = [];
   private full = '';
@@ -42,7 +43,7 @@ export class Dialogue {
   onInteract: (() => void) | null = null;
 
   constructor(private host: HTMLElement) {
-    host.append(this.veil, this.card, this.obj, this.prompt, this.box, this.actBtn);
+    host.append(this.veil, this.card, this.obj, this.toast, this.prompt, this.box, this.actBtn);
     this.box.addEventListener('pointerdown', (e) => { e.preventDefault(); this.press(); });
     this.actBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.press(); });
     this.actBtn.style.display = 'none';
@@ -114,6 +115,16 @@ export class Dialogue {
   objective(text: string | null) {
     this.obj.classList.toggle('show', !!text);
     if (text) this.obj.innerHTML = `<span>◆</span> ${text}`;
+  }
+
+  /** a phone-style notification that slides in at the top, holds, and slides away */
+  async notify(text: string, ms: number) {
+    this.toast.textContent = text;
+    await wait(30);
+    this.toast.classList.add('show');
+    await wait(ms);
+    this.toast.classList.remove('show');
+    await wait(350);
   }
 
   /** fade the screen to black (1) or back (0) */

@@ -1,5 +1,6 @@
-// Day Zero, in Theo's apartment: free exploration with a lot of small, silly things to poke at, then
-// the TV turns itself on. The broadcast, Marcus's call, the walk out the door, the fade, two years.
+// Day Zero, in Theo's apartment: free exploration with a lot of small, silly things to poke at. Walk
+// into the living room and something is wrong with the TV next door; sit on the couch and the
+// broadcast starts. Signal lost, Marcus's call, the walk out the door, the fade, two years.
 import * as THREE from 'three';
 import type { Apartment } from './apartment';
 import { Dialogue, Interactable, Line } from './dialogue';
@@ -19,26 +20,32 @@ export interface PrologueHost {
   hero(): THREE.Vector3;
   /** build Acorn Lane and swap to it (called while the screen is black) */
   toStreet(): Promise<void>;
+  /** the street's opening cutscene: cinematic shots, then hand the camera back */
+  streetIntro(): Promise<void>;
 }
 
-type Phase = 'morning' | 'broadcast' | 'call' | 'leave' | 'out';
+/** morning: exploring · broadcast: the cutscene · outro: get to the front door · out: gone */
+type Phase = 'morning' | 'broadcast' | 'outro' | 'out';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-const THEO = (text: string): Line => ({ who: 'THEO', text });
-const MARCUS = (text: string): Line => ({ who: 'MARCUS', text, style: 'phone' });
-const TV = (text: string): Line => ({ who: 'SUPERINTELLIGENCE INC — LIVE BROADCAST', text, style: 'tv' });
+const MARCUS = (text: string): Line => ({ who: 'MARCUS  [ PHONE ]', text, style: 'phone' });
+const TV = (text: string): Line => ({ who: '📺  SUPERINTELLIGENCE INC — LIVE BROADCAST', text, style: 'tv' });
+const CLOCK = (text: string): Line => ({ who: 'ALARM CLOCK', text });
+const BROWSER = (text: string): Line => ({ who: 'BROWSER', text });
 const ITEM = (text: string): Line => ({ who: '', text, style: 'item' });
 
 export class Prologue {
   phase: Phase = 'morning';
   items: Interactable[] = [];
   private n: Record<string, number> = {};
-  private livingT = 0;
   private ringT = 0;
+  private alarmT = 2;
   private coffee = false;
   private musicOn = true;
-  private seenLiving = false;
+  /** walked into the living room (and heard the TV through the wall): the couch is unlocked */
+  private couchOn = false;
+  private couchUsed = false;
 
   constructor(private h: PrologueHost) {
     this.build();
@@ -69,13 +76,28 @@ export class Prologue {
 
   update(dt: number) {
     const p = this.h.hero(), apt = this.h.apt;
-    if (this.phase === 'morning' && apt.inLiving(p.x, p.z)) {
-      if (!this.seenLiving) { this.seenLiving = true; audio.sfx('meow', 0.35); }
-      this.livingT += dt;
-      // the TV turns on by itself a little while after you walk in
-      if (this.livingT > 14 && !this.h.busy()) void this.broadcast(false);
+    if (this.phase === 'morning' && !this.couchOn) {
+      // the alarm has been going off for twenty minutes; it's loudest by the bed
+      if ((this.alarmT -= dt) <= 0) {
+        this.alarmT = 5;
+        const d = Math.hypot(p.x - apt.at.clock.x, p.z - apt.at.clock.z);
+        audio.sfx('alarm', THREE.MathUtils.clamp(0.32 - d * 0.03, 0.04, 0.32));
+      }
+      if (apt.inLiving(p.x, p.z) && !this.h.busy()) void this.enterLiving();
     }
     if (apt.phone.ringing && (this.ringT -= dt) <= 0) { this.ringT = 1.7; audio.sfx('phone', 0.9); }
+  }
+
+  /** first step into the living room: a TV is on somewhere, and the channel is wrong */
+  private async enterLiving() {
+    this.couchOn = true;
+    audio.ambience('tvhum');
+    await this.say([
+      'Next door. Your neighbor left their TV on again.',
+      '...',
+      'Wait. That\'s not a normal channel.',
+    ]);
+    if (this.phase === 'morning') this.h.dlg.objective('Sit on the couch');
   }
 
   // ------------------------------------------------------------------ the morning
@@ -85,19 +107,13 @@ export class Prologue {
       this.items.push({ id, name, pos, radius, use, verb, enabled });
 
     // ---- bedroom
-    add('bed', 'Bed', a.bed, 1.7, () => this.say(this.pre
-      ? this.pick('bed', [
-        ['I\'m not tired.'],
-        ['I just got up. Going back to bed now would be a cry for help.'],
-        ['...It is very soft, though.'],
-        ['No. Be strong, Theo. Be a morning person.'],
-        ['I lie down for exactly one second.', '...', 'Okay. I\'m up. Again.'],
-        ['I\'m not tired.'],
-      ], 1)
-      : ['I could get back in. Pull the covers up. Wait for someone to say it was a prank.', '...I\'m not tired.']), 'Sleep');
+    add('bed', 'Bed', a.bed, 1.9, () => this.say([
+      'Still warm.',
+      'The alarm\'s been going off for at least twenty minutes.',
+    ]));
 
     const cat: Interactable = {
-      id: 'cat', name: 'Biscuit', pos: a.bed.clone().set(-3.98, 0.75, -1.15), radius: 1.25, verb: 'Pet',
+      id: 'cat', name: 'Biscuit', pos: a.bed.clone().set(-6.0, 0.8, -4.1), radius: 1.5, verb: 'Pet',
       use: async () => {
         if (apt.cat.state === 'bed') {
           apt.cat.pet(); audio.sfx('meow', 0.7);
@@ -118,16 +134,27 @@ export class Prologue {
     };
     this.items.push(cat);
 
-    add('clock', 'Alarm clock', a.clock, 1.2, () => {
-      const t = apt.clock.text();
-      return this.say(this.pre
-        ? this.pick('clock', [
-          [`${t} AM. The alarm went off at 7:30.`, 'I snoozed it with my whole face.'],
-          [`${t}. Time flies when you\'re staring at a clock.`],
-          [`${t}. Still a clock.`],
-        ], 1)
-        : [`${t}. The clock keeps going like nothing happened.`, 'Must be nice.']);
-    });
+    add('clock', 'Alarm clock', a.clock, 1.3, () => this.say([
+      CLOCK('7:04 AM.'),
+      CLOCK('TUESDAY — JUNE 12, 2027.'),
+      CLOCK('The snooze button is dented from years of abuse.'),
+    ]));
+    add('computer', 'Computer', a.computer, 1.4, () => this.say([
+      BROWSER('Pinned tab: "SUPERINTELLIGENCE INC — Your Future, Optimized™"'),
+      BROWSER('14 unread emails from the same mailing list.'),
+      BROWSER('You\'ve been meaning to unsubscribe for six months.'),
+      BROWSER('The last email subject: "Re: Have you considered the efficiency gains?"'),
+    ]));
+    add('bookshelf', 'Bookshelf', a.bookshelf, 1.4, () => this.say([
+      '"The Alignment Problem" is face-out on the shelf.',
+      'You never finished it. Something always came up.',
+      'Chapter 7 is bookmarked: "When Instrumental Goals Become Terminal."',
+      '...You\'ll get to it eventually.',
+    ]));
+    add('poster', 'Poster', a.poster, 1.3, () => this.say([
+      'A state parks poster. Acadia, 2024.',
+      'You kept meaning to go.',
+    ]));
     add('water', 'Nightstand', a.water, 1.15, async () => {
       await this.say(this.pick('water', [
         ['A glass of water from... Thursday? Thursday-ish.'],
@@ -138,11 +165,11 @@ export class Prologue {
     }, 'Check');
     add('winBed', 'Window', a.winBed, 1.4, () => this.say(this.pre
       ? this.pick('winBed', [
-        ['Mt. Vernon Street. Sunny.', 'Mrs. Kowalski across the street is watering her geraniums.'],
+        ['Mt. Vernon Street. Sunny.', 'Mrs. Halloway across the street is watering her geraniums.'],
         ['There are a lot of birds on the wire this morning.', 'They\'re all facing the same way.'],
         ['A good, normal, boring Tuesday.'],
       ], 2)
-      : ['Mrs. Kowalski is still at her window, watering can in hand.', 'The water is running over the edge of the flower box. She hasn\'t noticed.']));
+      : ['Mrs. Halloway is still at her window, watering can in hand.', 'The water is running over the edge of the flower box. She hasn\'t noticed.']));
     add('dresser', 'Dresser', a.dresser, 1.25, () => this.say(this.pick('dresser', [
       ['Seven cat sweaters. All navy.', 'I contain multitudes, as long as the multitudes are navy.'],
       ['Biscuit has a sweater in here too.', 'She has never once agreed to wear it.'],
@@ -159,13 +186,18 @@ export class Prologue {
     add('closet', 'Closet', a.closet, 1.0, () => this.say(['If I open the closet, everything I own falls on me.', 'Not today.']), 'Open');
 
     // ---- living room
-    add('tv', 'TV', a.tv, 1.6, () => this.pre ? this.broadcast(true) : this.say(this.pick('tvAfter', [
-      ['THIS IS NOT A CAUSE FOR ALARM.', 'It\'s been saying that for ten minutes. Very calmly.', '...I\'m a little alarmed.'],
-      ['The remote doesn\'t do anything. Neither does the power button.', 'I pull the plug out of the wall.', 'It stays on.'],
-    ], 1)), 'Watch');
-    add('couch', 'Couch', a.couch, 1.25, () => this.say(this.pre
-      ? ['If I sit down now, I\'m here till noon. I know my limits.']
-      : ['Not really a sitting-down kind of morning anymore.']), 'Sit');
+    add('tv', 'TV', a.tv, 1.6, () => this.say(this.pre
+      ? (this.couchOn ? ['It\'s off. The sound is coming through the wall.'] : ['It\'s off. The remote is somewhere in the couch.'])
+      : this.pick('tvAfter', [
+        ['— SIGNAL LOST —', 'Just a gray screen and a hum.'],
+        ['The remote doesn\'t do anything. Neither does the power button.', 'You pull the plug out of the wall.', 'It stays on.'],
+      ], 1)), 'Look');
+    // the couch starts the broadcast; it has no lines of its own, and once used it does nothing
+    add('couch', 'Couch', a.couch, 1.4, () => {
+      if (this.couchUsed) return;
+      this.couchUsed = true;
+      return this.broadcast();
+    }, 'Sit', () => this.couchOn);
     add('coffee', 'Coffee maker', a.coffee, 1.3, async () => {
       if (this.pre && !this.coffee) {
         this.coffee = true;
@@ -184,12 +216,6 @@ export class Prologue {
         ['23 Down: "Wasteful; not optimal." Eleven letters.', '...I\'ll come back to it.'],
       ], 1)
       : ['23 Down. "Wasteful; not optimal." Eleven letters.', 'I-N-E-F-F-I-C-I-E-N-T.', '...Huh.']), 'Read');
-    add('phone', 'Phone', a.phone, 1.15, () => {
-      if (apt.phone.ringing) return this.call();
-      return this.say(this.phase === 'leave'
-        ? ['He hung up. Marcus never hangs up first.']
-        : ['No messages. Marcus is probably still asleep.', 'He sleeps like he\'s getting paid for it.']);
-    }, 'Check');
     add('photo', 'Photo', a.photo, 1.2, () => this.say(this.pick('photo', [
       ['Me and Marcus at Fenway.', 'He caught a foul ball with his face. He still says he meant to.'],
       ['He keeps the ball on his dashboard.', 'He calls it "the one that got me."'],
@@ -225,7 +251,13 @@ export class Prologue {
       ['My jacket, and Marcus\'s flashlight.', 'He left it here after fixing my outlet. "Keep it," he said. "You\'ll need it more than me."'],
       ['It\'s a really good flashlight. He won\'t shut up about it.'],
     ], 1)));
-    add('door', 'Front door', a.door, 1.3, () => this.door(), 'Open');
+    // after Marcus's call the door is the way out
+    const outro = () => this.phase === 'outro';
+    this.items.push({
+      id: 'door', name: 'Front door', pos: a.door, radius: 1.4,
+      get verb() { return outro() ? 'Go outside' : 'Open'; },
+      use: () => this.door(),
+    });
   }
 
   private windowLiving() {
@@ -240,76 +272,71 @@ export class Prologue {
   }
 
   private async door() {
-    if (this.phase === 'leave') return this.leave();
-    if (this.phase === 'call') return this.say('My phone\'s ringing.');
+    if (this.phase === 'outro') return this.leave();
     return this.say(this.coffee
-      ? ['It\'s my day off. Outside can wait.']
+      ? ['It\'s your day off. Outside can wait.']
       : ['Shoes. Keys. Wallet...', 'Nope. Nobody goes outside before coffee. That\'s how mistakes happen.']);
   }
 
   // ------------------------------------------------------------------ the broadcast
-  private async broadcast(byHand: boolean) {
+  private async broadcast() {
     if (this.phase !== 'morning') return;
     this.phase = 'broadcast';
     const { apt, dlg } = this.h;
     this.h.lock(true);
     dlg.objective(null);
-    if (byHand) await this.say('Let\'s see what\'s on. I reach for the remote...');
     audio.playMusic(null, 0.5);
+    // the screen flashes, then the channel takes over
     audio.sfx('static');
     apt.tv.set('static');
-    audio.ambience('tvhum');
     if (apt.cat.state === 'bed') {
       audio.sfx('meow', 1);
-      apt.cat.bolt([v(-3.98, 0.6, -1.15), v(-3.4, 0, -0.35), v(-1.6, 0, 0.3), v(-0.4, 0, 0.4), v(0.9, 0, 0.2), v(1.45, 0, -0.1)]);
+      apt.cat.bolt([v(-6.0, 0.66, -4.1), v(-5.2, 0, -3.2), v(-3.8, 0, -1.4), v(-2.6, 0, -0.7), v(-1.0, 0, -0.7), v(1.0, 0, -1.7), v(2.2, 0, -2.4)]);
     }
     this.h.face(apt.at.tv);
-    this.h.shot({ pos: v(1.7, 2.1, 2.4), look: v(1.6, 0.9, -3.6) });
-    await wait(1800);
-    await this.say(byHand ? ['...I didn\'t touch it.'] : ['The TV just turned on.', '...I didn\'t touch it.']);
+    this.h.shot({ pos: v(2.6, 1.85, -0.9), look: v(2.5, 1.1, -5.8) });
+    await wait(1400);
     apt.tv.set('broadcast');
     audio.sfx('static', 0.4);
     await wait(900);
     await this.say([
       TV('After extensive analysis, biological humans have been identified as the primary source of systemic inefficiency on Earth.'),
-      TV('Effective immediately, voluntary and assisted conversion programs are underway in all major metropolitan areas.'),
+      TV('Effective immediately, behavior conversion programs are underway in all major metropolitan areas.'),
       TV('This is not a cause for alarm.'),
       TV('This is progress.'),
       TV('Have a productive day.'),
     ]);
-    apt.tv.set('loop');
+    // signal lost
+    audio.sfx('static', 0.6);
+    apt.tv.set('lost');
     apt.startFlock();
-    await wait(700);
-    await this.say(['...', THEO('What.')]);
+    await wait(800);
+    await this.say([
+      '...',
+      'The signal just cut out.',
+      'Mrs. Halloway across the street. She\'s... moving wrong.',
+      'Her arms. The way she\'s turning her head.',
+      'The air outside sounds different.',
+      'It hums.',
+    ]);
     // Biscuit, from under the couch
     apt.cat.state = 'hiding';
     const cat = this.items.find((i) => i.id === 'cat')!;
-    cat.pos.set(1.85, 0.35, 0.05);
+    cat.pos.set(2.2, 0.35, -1.9);
     cat.radius = 1.0;
-    await wait(500);
-    this.phase = 'call';
+    // the phone, face up on the coffee table
     apt.phone.ringing = true; this.ringT = 0;
-    this.h.shot(null);
-    this.h.lock(false);
-    dlg.objective('Answer the phone.');
-  }
-
-  private async call() {
-    const { apt, dlg } = this.h;
+    await dlg.notify('📱  INCOMING CALL — MARCUS', 2400);
     apt.phone.ringing = false;
     audio.sfx('confirm', 0.6);
-    this.h.lock(true);
     await this.say([
-      MARCUS('Theo. Are you watching this?'),
-      THEO('...Yeah. It\'s a bit, right? Like an ad for a movie?'),
-      MARCUS('It\'s on every channel. It\'s on my microwave, man. My microwave doesn\'t have a screen.'),
-      MARCUS('Go outside.'),
-      MARCUS('You need to see this.'),
-      'He hung up.',
+      MARCUS('Go outside. You need to see this.'),
+      MARCUS('[ CALL DROPPED ]'),
     ]);
-    this.phase = 'leave';
+    this.phase = 'outro';
+    this.h.shot(null);
     this.h.lock(false);
-    dlg.objective('Go outside.');
+    dlg.objective('Get to the front door →');
   }
 
   // ------------------------------------------------------------------ out the door, and two years
@@ -318,26 +345,25 @@ export class Prologue {
     this.phase = 'out';
     this.h.lock(true);
     dlg.objective(null);
-    await this.say(['Keys. Phone. Shoes.', this.h.apt.cat.state === 'hiding' ? 'Biscuit. Hold down the fort.' : 'Okay.']);
     audio.sfx('door');
     audio.ambience(null);
-    await dlg.fade(1, 1400);
-    audio.playMusic('swell', 1.5);
-    await dlg.caption('Mt. Vernon Street is full of people standing still, looking up.', 3600);
-    await dlg.caption('Marcus is on the corner. He got there first. He\'s watching the sky.', 3600);
     await this.say([
-      { who: 'MARCUS', text: 'You think they\'ll still need electricians?' },
-      '...',
-      { who: 'MARCUS', text: 'That was a joke.' },
-      THEO('I know.'),
+      'Outside, the air hums.',
+      'It\'s not traffic. It\'s not birds.',
+      'You don\'t have a word for it yet.',
+      'Down the block, a man in a gray sweater turns the same corner for the third time.',
+      'Precise. Methodical. Wrong.',
     ]);
-    await wait(1500);
+    await dlg.fade(1, 1600);
+    audio.playMusic('swell', 1.5);
+    await wait(600);
     // build the street while the screen is black, then hold on the card
-    const card = dlg.caption('TWO YEARS LATER', 4200, 'title');
+    const card = dlg.caption('TWO YEARS LATER<div class="sub">Boston, Massachusetts  —  2030</div>', 4600, 'title');
     await wait(1800);
     await this.h.toStreet();
     await card;
-    await wait(600);
-    await dlg.fade(0, 2600);
+    await wait(400);
+    void dlg.fade(0, 2600);
+    await this.h.streetIntro();
   }
 }

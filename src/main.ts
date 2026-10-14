@@ -155,6 +155,7 @@ class App {
         busy: () => this.busyN > 0 || this.dlg.open || this.locked,
         hero: () => this.pos,
         toStreet: () => this.toStreet(),
+        streetIntro: () => this.streetIntro(),
       });
     } else this.prologue = null;
     this.ui?.sync();
@@ -175,7 +176,19 @@ class App {
     this.gl.compile(next.scene, this.camera);
     old.scene.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     if (state.sound) { audio.ambience(next.ambience); audio.playMusic(next.music, 4); }
+    // open on the cinematic shots (not saved: the player's own camera setting comes back after)
+    this.setCam('cinematic', false);
     setTimeout(() => this.ui?.titleCard(), 2400);
+  }
+
+  /** Acorn Lane's opening: 30 s of the cinematic shots, then a quick fade into the follow camera. */
+  async streetIntro() {
+    const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    await wait(30000);
+    await this.dlg.fade(1, 700);
+    this.setCam('follow', false);
+    await wait(200);
+    await this.dlg.fade(0, 1000);
   }
 
   start() {
@@ -526,7 +539,6 @@ class App {
     this.dlg.tick(dt);
     this.updateFocus();
     this.post.render(dt);
-    this.ui?.tick();
   }
 
   updateCamera(dt: number, speed: number) {
@@ -581,7 +593,7 @@ class App {
             // squeezed against a wall: rise and look down over the hero's shoulder instead
             pos.y += (1 - t) * 0.9;
           }
-          pos.y = THREE.MathUtils.clamp(pos.y, 0.6, 2.45);
+          pos.y = THREE.MathUtils.clamp(pos.y, 0.6, 2.65);
         }
       }
       // the hero steps out of frame when a cutscene shot would look through the back of their head
@@ -681,7 +693,7 @@ const CINE = [
   { from: v(5.6, 4.6, 2), to: v(5.0, 5.4, -4), lookFrom: v(-2, 2, -14), lookTo: v(-1, 6, -17) },
   { from: v(4.3, 4.5, -14.6), to: v(4.6, 4.5, -16.8), lookFrom: v(6.6, 4.3, -21), lookTo: v(6.6, 4.4, -21) },
 ];
-const ROOM_CENTER = v(0, 0, -0.5);
+const ROOM_CENTER = v(0, 0, 0);
 /** where the hero stands while the cinematic plays */
 const CINE_POSE = { x: 0.6, z: -1.5, heading: Math.PI };
 
@@ -690,60 +702,22 @@ function el(tag: string, cls: string, html = '') { const e = document.createElem
 
 class UI {
   root = el('div', 'ui');
-  panel: HTMLElement;
-  fpsEl: HTMLElement;
   scanEl = el('div', 'scan', '<span>COMPLIANCE SCAN</span>');
   scanVig = el('div', 'scanvig');
   cine = el('div', 'cinefade');
   bars = el('div', 'bars', '<i></i><i></i>');
-  blurb: HTMLElement;
-  toggle: HTMLElement;
   constructor(private a: App) {
     this.root.innerHTML = `
       <div class="brand"><div class="b1">QUIET MACHINES</div><div class="b2">Prologue · Static</div></div>
-      <div class="panel">
-        <div class="ptitle">Settings <span>saved on this device</span></div>
-        <div class="sec street"><div class="lab">Mood <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
-          <div class="seg" data-k="mood">${Object.entries(MOODS).map(([k, m]) => `<button data-v="${k}">${m.name}</button>`).join('')}</div>
-          <div class="blurb"></div></div>
-        <div class="sec"><div class="lab">Camera <kbd>C</kbd></div>
-          <div class="seg" data-k="cam"><button data-v="follow">Follow</button><button data-v="jrpg">JRPG</button><button data-v="cinematic">Cinematic</button></div></div>
-        <div class="sec"><div class="lab">Quality</div>
-          <div class="seg" data-k="q"><button data-v="high">High</button><button data-v="low">Low</button></div></div>
-        <div class="foot"><span class="fps"></span><span>${isTouch ? '' : 'H hides UI'}</span></div>
-      </div>
       <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run · <b>Space</b> interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
-    this.panel = this.root.querySelector('.panel')!;
-    this.fpsEl = this.root.querySelector('.fps')!;
-    this.blurb = this.root.querySelector('.blurb')!;
-    // always-visible toggle so the panel can be hidden without a keyboard (iPad)
-    this.toggle = el('button', 'uitoggle', '');
-    this.toggle.setAttribute('aria-label', 'Toggle settings');
-    this.toggle.addEventListener('click', () => { state.ui = !state.ui; this.sync(); });
-    app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl, this.toggle);
-    this.root.querySelectorAll<HTMLElement>('.seg').forEach((seg) => seg.addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest('button'); if (!b) return;
-      const k = seg.dataset.k, val = b.dataset.v!;
-      if (k === 'mood') a.setMood(val as any);
-      if (k === 'cam') a.setCam(val as CamMode);
-      if (k === 'q') a.setQuality(val as any);
-    }));
+    app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl);
     this.sync();
   }
   sync() {
-    const cur: Record<string, string> = { mood: state.mood, cam: state.cam, q: state.quality };
-    this.root.querySelectorAll<HTMLElement>('.seg').forEach((seg) => seg.querySelectorAll<HTMLElement>('button').forEach((b) => b.classList.toggle('on', cur[seg.dataset.k!] === b.dataset.v)));
-    this.blurb.textContent = MOODS[state.mood].blurb;
     this.root.classList.toggle('hidden', !state.ui);
-    this.root.classList.toggle('interior', this.a.interior);
-    this.root.querySelector<HTMLElement>('.seg[data-k="cam"] [data-v="jrpg"]')!.textContent = this.a.interior ? 'Overhead' : 'JRPG';
     this.root.querySelector('.b2')!.textContent = this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static';
-    this.toggle.textContent = state.ui ? '×' : '☰';
-    this.toggle.classList.toggle('off', !state.ui);
     this.bars.classList.toggle('on', state.cam === 'cinematic' && !this.a.interior);
   }
-  private n = 0;
-  tick() { if (++this.n % 20 === 0) this.fpsEl.textContent = `${Math.round(this.a.fps)} fps`; }
   setScan(k: number) { this.scanEl.style.opacity = String(k > 0.05 ? Math.min(1, k * 1.4) * (0.75 + 0.25 * Math.sin(performance.now() / 90)) : 0); this.scanVig.style.opacity = String(k * 0.9); }
   cineFade(k: number) { this.cine.style.opacity = String(k); }
   titleCard() {

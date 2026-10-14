@@ -37,20 +37,6 @@ html, body {
 .brand { position: absolute; left: 22px; top: 18px; text-shadow: 0 1px 8px rgba(0,0,0,0.8); }
 .brand .b1 { font: 700 15px var(--serif); letter-spacing: 0.3em; color: var(--gold); }
 .brand .b2 { font: 500 10.5px var(--serif); letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-dim); margin-top: 4px; }
-.panel { position: absolute; right: 16px; top: 64px; width: 272px; padding: 14px 14px 10px; background: var(--glass); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); pointer-events: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.45); }
-.sec + .sec { margin-top: 12px; }
-.lab { font: 500 10px var(--serif); letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 6px; display: flex; gap: 4px; align-items: center; }
-.lab kbd { font: 600 9px var(--sans); color: var(--ink-dim); border: 1px solid rgba(255,255,255,0.18); border-radius: 3px; padding: 0 4px; letter-spacing: 0; }
-.lab kbd:first-of-type { margin-left: auto; }
-.seg { display: flex; border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; overflow: hidden; }
-.seg button { flex: 1; padding: 7px 4px; background: transparent; border: 0; color: var(--ink); font: 500 12px var(--sans); cursor: pointer; transition: background 0.15s, color 0.15s; }
-.seg button + button { border-left: 1px solid rgba(255,255,255,0.1); }
-.seg button:hover { background: rgba(255,255,255,0.06); }
-.seg button.on { background: rgba(216,180,90,0.2); color: var(--gold-hi); }
-.blurb { font-size: 11.5px; line-height: 1.45; color: var(--ink-dim); margin-top: 7px; }
-.ptitle { font: 700 11px var(--serif); letter-spacing: 0.26em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; display: flex; align-items: baseline; justify-content: space-between; }
-.ptitle span { font: 500 10px var(--sans); letter-spacing: 0.02em; text-transform: none; color: var(--ink-dim); }
-.foot { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10.5px; color: var(--ink-dim); }
 .help { position: absolute; left: 22px; bottom: 18px; font-size: 12px; color: var(--ink-dim); text-shadow: 0 1px 6px #000; }
 .help b { color: var(--ink); font-weight: 600; }
 
@@ -70,24 +56,11 @@ html, body {
 .bars i:first-child { top: 0; } .bars i:last-child { bottom: 0; }
 .bars.on i { height: 9vh; }
 
-/* panel toggle (always visible) */
-.uitoggle { position: absolute; right: 16px; top: 16px; z-index: 13; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--glass); color: var(--gold-hi); font: 400 20px/1 var(--sans); cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); touch-action: manipulation; }
-.uitoggle.off { opacity: 0.55; }
-
-/* bigger targets for fingers */
-@media (pointer: coarse) {
-  .seg button { padding: 11px 4px; font-size: 13px; touch-action: manipulation; }
-  .uitoggle { width: 46px; height: 46px; }
-  .panel { top: 72px; }
-}
-
 /* touch stick */
 .stick { position: absolute; display: none; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: rgba(0,0,0,0.2); z-index: 12; pointer-events: none; }
 .stick i { position: absolute; left: 35px; top: 35px; width: 40px; height: 40px; border-radius: 50%; background: rgba(216,180,90,0.5); }
 
 @media (max-width: 700px) {
-  .panel { width: auto; left: 12px; right: 12px; top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); padding: 10px; }
-  .panel .blurb, .panel .foot, .panel .ptitle { display: none; }
   .help { display: none; }
   .brand { left: 14px; top: 12px; }
 }
@@ -98,6 +71,10 @@ html, body {
 .bigcard.show { opacity: 1; }
 .bigcard.narr { font: italic 500 clamp(18px, 2.2vw, 26px) var(--serif); color: #d8d2c4; letter-spacing: 0.02em; }
 .bigcard.title { font: 600 clamp(24px, 3.6vw, 44px) var(--serif); color: #ece4d2; letter-spacing: 0.5em; padding-left: 0.5em; }
+.bigcard .sub { margin-top: 18px; font: 500 clamp(13px, 1.3vw, 16px) var(--serif); letter-spacing: 0.32em; text-transform: uppercase; color: var(--gold); }
+.notify { position: absolute; left: 50%; top: calc(18px + env(safe-area-inset-top)); z-index: 23; transform: translate(-50%, -140%); padding: 12px 22px; border-radius: 14px; background: rgba(14, 22, 18, 0.92); border: 1px solid #8ad89a; color: #e8f8ec; font: 700 14px var(--sans); letter-spacing: 0.14em; box-shadow: 0 0 22px rgba(138, 216, 154, 0.35), 0 10px 30px rgba(0, 0, 0, 0.5); pointer-events: none; opacity: 0; transition: transform 0.35s cubic-bezier(.2,.9,.3,1.2), opacity 0.25s ease; white-space: nowrap; }
+.notify.show { opacity: 1; transform: translate(-50%, 0); animation: notify-buzz 0.5s ease-in-out 0.35s 3; }
+@keyframes notify-buzz { 0%, 100% { margin-left: 0; } 25% { margin-left: -3px; } 75% { margin-left: 3px; } }
 
 .dlg { position: absolute; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 22; width: min(760px, calc(100% - 32px)); transform: translate(-50%, 12px); opacity: 0; pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease;
   padding: 18px 24px 20px; min-height: 96px; border-radius: 10px; background: linear-gradient(180deg, rgba(28, 40, 92, 0.94), rgba(12, 18, 48, 0.96));
@@ -127,10 +104,7 @@ html, body {
 
 .actbtn { position: absolute; right: calc(28px + env(safe-area-inset-right)); bottom: calc(140px + env(safe-area-inset-bottom)); z-index: 18; width: 66px; height: 66px; border-radius: 50%; border: 2px solid #e8e4f4; background: rgba(28, 40, 92, 0.85); color: #fff; font: 800 28px var(--sans); touch-action: manipulation; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
 
-/* indoors there's no mood or camera choice: the room has its own light */
-.ui.interior .sec.street { display: none; }
 @media (max-width: 700px) {
   .objective { top: 52px; left: 14px; font-size: 13px; }
   .dlg { padding: 16px 16px 18px; }
 }
-.ui.interior .seg[data-k="cam"] button[data-v="cinematic"] { display: none; }
