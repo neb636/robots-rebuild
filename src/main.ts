@@ -304,6 +304,8 @@ class App {
     addEventListener('keydown', (e) => {
       this.keys.add(e.code);
       this.enableAudio();
+      // Space interacts when there's something to interact with, and jumps otherwise
+      if (e.code === 'Space' && !this.dlg.open && !this.focus) { e.preventDefault(); if (!e.repeat) this.jump(); return; }
       if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyF') { e.preventDefault(); if (!e.repeat) this.dlg.press(); return; }
       if (e.repeat) return;
       if (e.code === 'Digit1') this.setMood('ashfall');
@@ -476,6 +478,13 @@ class App {
   }
 
   // ---------------------------------------------------------------- simulation
+  /** height of the hero above the ground, and its vertical speed */
+  jumpY = 0; jumpV = 0;
+  jump() {
+    if (this.frozen || this.jumpY > 0 || this.jumpV !== 0 || (state.cam === 'cinematic' && !this.interior)) return;
+    this.jumpV = 3.9;
+  }
+
   blocked(x: number, z: number) {
     const r = 0.28;
     for (const c of this.built.colliders) if (x + r > c.x0 && x - r < c.x1 && z + r > c.z0 && z - r < c.z1) return true;
@@ -515,10 +524,18 @@ class App {
     }
     const gy = heightAt(this.pos.x, this.pos.z);
     if (!isNaN(gy)) this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 14);
+    if (this.jumpV !== 0 || this.jumpY > 0) {
+      this.jumpV -= 15 * dt;
+      this.jumpY += this.jumpV * dt;
+      if (this.jumpY <= 0) { this.player.land(Math.min(1, -this.jumpV / 4)); this.jumpY = 0; this.jumpV = 0; }
+    }
+    this.player.air = this.jumpY > 0 ? 1 : 0; this.player.vy = this.jumpV;
     this.player.group.position.copy(this.pos);
+    this.player.group.position.y += this.jumpY;
     this.player.group.rotation.y = this.heading;
     this.player.update(dt, speed);
     this.pShadow.position.set(this.pos.x, this.pos.y + 0.02, this.pos.z);
+    this.pShadow.scale.setScalar(1 - Math.min(0.4, this.jumpY * 0.6));
 
     // the Converted turn their heads to follow you
     const head = this.pos.clone().add(new THREE.Vector3(0, 1.4, 0));
@@ -712,7 +729,7 @@ class UI {
   constructor(private a: App) {
     this.root.innerHTML = `
       <div class="brand"><div class="b1">QUIET MACHINES</div><div class="b2">Prologue · Static</div></div>
-      <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run · <b>Space</b> interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
+      <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run · <b>Space</b> jump / interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
     app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl);
     this.sync();
   }
