@@ -29,6 +29,9 @@ const loader = el('div', 'loader', `<div class="lt">QUIET MACHINES</div><div cla
 const setLoad = (p: number, msg: string) => { (loader.querySelector('.bar i') as HTMLElement).style.width = `${p * 100}%`; loader.querySelector('.lm')!.textContent = msg; };
 
 async function boot() {
+  // Best effort autoplay: browsers may keep Web Audio suspended until a gesture.
+  // The menu and game input handlers call init() again to resume in that case.
+  try { audio.init(); audio.ambience('wind'); } catch { /* audio is optional */ }
   await document.fonts.ready.catch(() => {});
   const gl = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
   gl.setPixelRatio(Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1));

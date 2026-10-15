@@ -158,7 +158,7 @@ class AudioEngine {
   noiseBuf!: AudioBuffer;
   ready = false;
 
-  volMusic = 0.7;
+  volMusic = 0.9;
   volSfx = 0.8;
 
   private currentSong: string | null = null;
@@ -174,7 +174,7 @@ class AudioEngine {
     if (this.ready) { this.ctx.resume(); return; }
     this.ctx = new AudioContext();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.8;
+    this.master.gain.value = 1;
     const comp = this.ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 3;
     this.master.connect(comp).connect(this.ctx.destination);
