@@ -91,6 +91,8 @@ const plain = (color: string, rough = 0.7, extra: THREE.MeshStandardMaterialPara
 // ------------------------------------------------------------------------------------ geometry
 const ell = (rx: number, ry: number, rz: number, ws = 28, hs = 20) => new THREE.SphereGeometry(1, ws, hs).scale(rx, ry, rz);
 function lathe(pts: [number, number][], seg = 28, zScale = 1) {
+  // LatheGeometry faces outward only for a bottom-to-top profile; flip top-down ones so they aren't culled inside out
+  if (pts[0][1] > pts[pts.length - 1][1]) pts = [...pts].reverse();
   const g = new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
   g.scale(1, 1, zScale);
   return g;
@@ -124,6 +126,11 @@ export class Character {
   /** world-space point the head turns toward (null = straight ahead) */
   lookAt: THREE.Vector3 | null = null;
   stiff = false;
+  /** airborne: 0 grounded .. 1 mid-jump (set by the game each frame) */
+  air = 0;
+  /** vertical speed while airborne, for the rising/falling pose */
+  vy = 0;
+  private airK = 0; private squash = 0;
   private headYaw = 0; private headPitch = 0;
   private eyes: THREE.Mesh[] = [];
 
@@ -132,6 +139,9 @@ export class Character {
     this.group = this.rig.root;
     this.stiff = !!spec.glowEyes;
   }
+
+  /** a landing: knees give and the body dips for a moment */
+  land(strength = 1) { this.squash = Math.max(this.squash, Math.min(1, strength)); }
 
   /** speed in world units/sec */
   update(dt: number, speed: number) {
@@ -169,6 +179,30 @@ export class Character {
     r.shL.rotation.z = this.stiff ? 0.04 : 0.12 + 0.05 * w; r.shR.rotation.z = -(this.stiff ? 0.04 : 0.12 + 0.05 * w);
     r.elL.rotation.x = -(this.stiff ? 0.05 : 0.22) - (0.25 + Math.max(0, s) * 0.3) * w - run * 0.7;
     r.elR.rotation.x = -(this.stiff ? 0.05 : 0.22) - (0.25 + Math.max(0, -s) * 0.3) * w - run * 0.7;
+
+    // jump: tuck the legs and throw the arms up on the way up, reach down for the ground when falling
+    this.airK += (this.air - this.airK) * Math.min(1, dt * 14);
+    const j = this.airK;
+    if (j > 0.001) {
+      const rise = THREE.MathUtils.clamp(this.vy / 3, -1, 1);
+      const mix = (cur: number, to: number) => cur + (to - cur) * j;
+      r.thL.rotation.x = mix(r.thL.rotation.x, -0.75 + 0.3 * (1 - rise)); r.thR.rotation.x = mix(r.thR.rotation.x, -0.25 + 0.15 * (1 - rise));
+      r.knL.rotation.x = mix(r.knL.rotation.x, 1.1 - 0.3 * (1 - rise)); r.knR.rotation.x = mix(r.knR.rotation.x, 0.5);
+      r.anL.rotation.x = mix(r.anL.rotation.x, 0.35); r.anR.rotation.x = mix(r.anR.rotation.x, 0.25);
+      r.shL.rotation.x = mix(r.shL.rotation.x, -0.9 - 0.4 * rise); r.shR.rotation.x = mix(r.shR.rotation.x, -0.5 - 0.3 * rise);
+      r.shL.rotation.z = mix(r.shL.rotation.z, 0.45); r.shR.rotation.z = mix(r.shR.rotation.z, -0.45);
+      r.elL.rotation.x = mix(r.elL.rotation.x, -0.6); r.elR.rotation.x = mix(r.elR.rotation.x, -0.6);
+      r.torso.rotation.x = mix(r.torso.rotation.x, 0.08 - 0.12 * rise);
+    }
+    if (this.squash > 0.001) {
+      const q = Math.sin(Math.min(1, this.squash) * Math.PI * 0.5);
+      r.hips.position.y -= q * 0.07;
+      r.thL.rotation.x -= q * 0.45; r.thR.rotation.x -= q * 0.45;
+      r.knL.rotation.x += q * 0.9; r.knR.rotation.x += q * 0.9;
+      r.anL.rotation.x -= q * 0.45; r.anR.rotation.x -= q * 0.45;
+      r.torso.rotation.x += q * 0.15;
+      this.squash = Math.max(0, this.squash - dt * 5);
+    }
 
     // head: idle glances, or track a world point
     let yaw = 0, pitch = 0;
@@ -230,11 +264,14 @@ function build(spec: Char3DSpec, eyesOut: THREE.Mesh[]): Rig {
   }
 
   // ---- pelvis / shorts
-  const pel = lathe([[0, 0.06], [0.17, 0.06], [0.172, 0.0], [0.165, -0.08], [0.12, -0.12], [0, -0.13]], 28, 0.8);
-  mesh(pel, bottom, hips);
   if (spec.shorts) {
-    const belt = new THREE.TorusGeometry(0.172, 0.012, 6, 32); belt.rotateX(Math.PI / 2); belt.scale(1, 1, 0.8);
-    mesh(belt, plain('#3a2a1e', 0.6), hips, 0, 0.0, 0);
+    // one seat that runs down into a closed crotch, so no skin shows between the leg openings
+    const pel = lathe([[0, 0.06], [0.17, 0.06], [0.174, 0.0], [0.176, -0.07], [0.16, -0.13], [0.11, -0.17], [0, -0.18]], 32, 0.82);
+    mesh(pel, bottom, hips);
+    const belt = new THREE.TorusGeometry(0.175, 0.012, 6, 32); belt.rotateX(Math.PI / 2); belt.scale(1, 1, 0.82);
+    mesh(belt, plain('#3a2a1e', 0.6), hips, 0, 0.03, 0);
+  } else {
+    mesh(lathe([[0, 0.06], [0.17, 0.06], [0.172, 0.0], [0.165, -0.08], [0.12, -0.12], [0, -0.13]], 28, 0.8), bottom, hips);
   }
 
   // ---- legs
@@ -242,10 +279,12 @@ function build(spec: Char3DSpec, eyesOut: THREE.Mesh[]): Rig {
   for (const side of [1, -1]) {
     const th = joint(hips, side * 0.088, -0.03, 0);
     if (spec.shorts) {
-      mesh(lathe([[0.085, 0], [0.092, -0.12], [0.096, -0.21], [0.0, -0.21]], 20), bottom, th);
-      const cuff = new THREE.TorusGeometry(0.094, 0.014, 6, 20); cuff.rotateX(Math.PI / 2);
-      mesh(cuff, bottom, th, 0, -0.205, 0);
-      mesh(new THREE.CapsuleGeometry(0.058, 0.2, 4, 14), skin, th, 0, -0.14, 0);
+      // domed top tucks into the seat when the leg swings; slight flare to a rolled cuff
+      mesh(lathe([[0, 0.07], [0.06, 0.06], [0.092, 0.02], [0.098, -0.08], [0.104, -0.17], [0.106, -0.2]], 24), bottom, th);
+      const cuff = new THREE.TorusGeometry(0.104, 0.016, 8, 24); cuff.rotateX(Math.PI / 2);
+      mesh(cuff, bottom, th, 0, -0.2, 0);
+      // thigh skin only below the hem
+      mesh(new THREE.CapsuleGeometry(0.058, 0.09, 4, 14), skin, th, 0, -0.2, 0);
     } else {
       mesh(lathe([[0.088, 0.02], [0.09, -0.12], [0.078, -0.25], [0, -0.26]], 20), bottom, th);
     }
@@ -306,28 +345,14 @@ function build(spec: Char3DSpec, eyesOut: THREE.Mesh[]): Rig {
     mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.01, 16).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#222', emissive: spec.glowEyes, emissiveIntensity: 3 }), head, 0.188, 0.04, 0.02);
   }
   if (spec.beard) {
-    // full beard: lower shell of a slightly larger sphere, front-facing, plus mustache
-    // phi is centred on +z (front); theta runs from just below the cheekbones to under the chin
-    const bg = new THREE.SphereGeometry(0.198, 40, 24, Math.PI * 0.08, Math.PI * 0.84, Math.PI * 0.6, Math.PI * 0.36);
-    {
-      // ragged top edge + scruffy surface so it reads as hair, not a mask
-      const p = bg.attributes.position as THREE.BufferAttribute, v = new THREE.Vector3();
-      for (let i = 0; i < p.count; i++) {
-        v.fromBufferAttribute(p, i);
-        const edge = THREE.MathUtils.smoothstep(v.y, -0.09, -0.03);
-        const n = Math.sin(v.x * 90) * 0.5 + Math.sin(v.x * 211 + v.y * 70) * 0.5;
-        v.y -= edge * (0.012 + n * 0.012);
-        v.multiplyScalar(1 + Math.sin(v.x * 140 + v.y * 90) * Math.sin(v.z * 120) * 0.025);
-        p.setXYZ(i, v.x, v.y, v.z);
-      }
-      bg.computeVertexNormals();
+    // full beard: a shell lifted off the sculpted jaw (so it follows the face instead of floating
+    // as a mask), plus a two-lobed mustache
+    mesh(beardGeometry(R), hair, head);
+    for (const s of [1, -1]) {
+      const g = new THREE.SphereGeometry(1, 14, 10); g.scale(0.038, 0.016, 0.018); g.translate(s * 0.03, 0, 0);
+      const m = mesh(g, hair, head, s * 0.006, -0.064, 0.184);
+      m.rotation.z = -s * 0.28; m.rotation.y = s * 0.3;
     }
-    const beard = mesh(bg, hair, head, 0, -0.006, 0.006);
-    beard.scale.set(1.03, 1.06, 1.07);
-    const mus = mesh(new THREE.CapsuleGeometry(0.018, 0.06, 4, 10), hair, head, 0, -0.07, 0.178);
-    mus.rotation.z = Math.PI / 2; mus.scale.set(1, 1, 0.8);
-    // chin tuft
-    mesh(ell(0.08, 0.06, 0.06), hair, head, 0, -0.16, 0.11);
   }
   buildHair(spec, head, hair, R);
 
@@ -366,26 +391,64 @@ function build(spec: Char3DSpec, eyesOut: THREE.Mesh[]): Rig {
 }
 
 /** Head: a sphere sculpted with a brow ridge, cheeks, shallow eye sockets and a narrower jaw. */
+function headPoint(v: THREE.Vector3) {
+  const bump = (x: number, y: number, z: number, cx: number, cy: number, cz: number, r: number) =>
+    Math.exp(-((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / (r * r));
+  const front = Math.max(0, v.z);
+  let k = 1;
+  k += 0.05 * bump(v.x, v.y, v.z, 0, 0.42, 0.88, 0.35);                       // brow ridge
+  k += 0.04 * (bump(v.x, v.y, v.z, 0.5, -0.2, 0.8, 0.3) + bump(v.x, v.y, v.z, -0.5, -0.2, 0.8, 0.3)); // cheeks
+  k -= 0.035 * (bump(v.x, v.y, v.z, 0.36, 0.16, 0.92, 0.18) + bump(v.x, v.y, v.z, -0.36, 0.16, 0.92, 0.18)); // eye sockets
+  k -= 0.06 * Math.max(0, -v.z) * Math.max(0, v.y + 0.2);                      // flatter back of skull
+  v.multiplyScalar(k);
+  // jaw tapers toward the chin
+  const jaw = THREE.MathUtils.smoothstep(-v.y, 0.1, 1.0);
+  v.x *= 1 - 0.18 * jaw;
+  v.z += 0.04 * jaw * front;
+  return v.set(v.x * 0.19, v.y * 0.198, v.z * 0.188);
+}
 function headGeometry() {
   const g = new THREE.SphereGeometry(1, 40, 30);
   const p = g.attributes.position as THREE.BufferAttribute, v = new THREE.Vector3();
-  const bump = (x: number, y: number, z: number, cx: number, cy: number, cz: number, r: number) =>
-    Math.exp(-((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / (r * r));
+  for (let i = 0; i < p.count; i++) p.setXYZ(i, ...headPoint(v.fromBufferAttribute(p, i)).toArray());
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * Beard shell: the lower face of the head pushed outward, with a ragged cheek line, sideburns up to
+ * the ears and extra fullness at the chin. Near the cheek line the shell sinks back under the skin,
+ * so the edge is a smooth, per-vertex curve rather than a stair-step of dropped triangles.
+ */
+function beardGeometry(R: () => number) {
+  const g = new THREE.SphereGeometry(1, 64, 48);
+  const p = g.attributes.position as THREE.BufferAttribute, v = new THREE.Vector3(), u = new THREE.Vector3(), n = new THREE.Vector3();
+  const ph = R() * 10;
+  const keepV: boolean[] = [];
   for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    const front = Math.max(0, v.z);
-    let k = 1;
-    k += 0.05 * bump(v.x, v.y, v.z, 0, 0.42, 0.88, 0.35);                       // brow ridge
-    k += 0.04 * (bump(v.x, v.y, v.z, 0.5, -0.2, 0.8, 0.3) + bump(v.x, v.y, v.z, -0.5, -0.2, 0.8, 0.3)); // cheeks
-    k -= 0.035 * (bump(v.x, v.y, v.z, 0.36, 0.16, 0.92, 0.18) + bump(v.x, v.y, v.z, -0.36, 0.16, 0.92, 0.18)); // eye sockets
-    k -= 0.06 * Math.max(0, -v.z) * Math.max(0, v.y + 0.2);                      // flatter back of skull
-    v.multiplyScalar(k);
-    // jaw tapers toward the chin
-    const jaw = THREE.MathUtils.smoothstep(-v.y, 0.1, 1.0);
-    v.x *= 1 - 0.18 * jaw;
-    v.z += 0.04 * jaw * front;
-    p.setXYZ(i, v.x * 0.19, v.y * 0.198, v.z * 0.188);
+    u.fromBufferAttribute(p, i);
+    const side = THREE.MathUtils.smoothstep(Math.abs(u.x), 0.45, 0.85);
+    // cheek line: low under the cheekbones in front, climbing into sideburns at the ears
+    const top = -0.32 + 0.4 * side + 0.04 * Math.sin(u.x * 18 + ph) + 0.012 * Math.sin(u.x * 41 + ph * 2);
+    const back = u.y < -0.55 ? -0.55 : -0.1 + 0.08 * (1 - side);
+    const d = top - u.y;
+    keepV.push(d > -0.12 && u.z > back - 0.08);
+    const grow = THREE.MathUtils.smoothstep(d, -0.03, 0.1) * THREE.MathUtils.smoothstep(u.z, back - 0.06, back + 0.04);
+    const chin = THREE.MathUtils.smoothstep(-u.y, 0.5, 0.95) * THREE.MathUtils.smoothstep(u.z, -0.1, 0.6);
+    const fuzz = Math.sin(u.x * 53 + u.y * 31) * Math.sin(u.z * 47 - u.y * 29);
+    headPoint(v.copy(u));
+    n.copy(v).setY(v.y * 0.7).normalize();
+    v.addScaledVector(n, -0.01 + grow * (0.02 + fuzz * 0.004 + chin * 0.03));
+    v.y -= grow * chin * (0.028 + 0.008 * Math.sin(u.x * 37 + ph));
+    v.x *= 1 - grow * chin * 0.15;
+    p.setXYZ(i, v.x, v.y, v.z);
   }
+  const idx = g.index!, keep: number[] = [];
+  for (let i = 0; i < idx.count; i += 3) {
+    const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
+    if (keepV[a] && keepV[b] && keepV[c]) keep.push(a, b, c);
+  }
+  g.setIndex(keep);
   g.computeVertexNormals();
   return g;
 }
