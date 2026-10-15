@@ -136,6 +136,9 @@ export class Menu {
     this.render();
     addEventListener('keydown', this.onKey);
     for (const t of ['pointerup', 'touchend', 'keydown']) addEventListener(t, this.onGesture, { passive: true });
+    // Try to start the ambience on the first load. Browsers that block autoplay
+    // leave the context suspended; the gesture handlers below resume it.
+    this.unlockAudio();
   }
 
   /** fade up from black, then bring in the title and the menu */
@@ -291,9 +294,11 @@ export class Menu {
 
   /** Browsers only start audio inside a user gesture: bring up the wind on the first one. */
   private unlockAudio() {
-    if (this.audioOn) return;
-    this.audioOn = true;
-    try { audio.init(); audio.ambience('wind'); } catch { /* audio is optional */ }
+    try {
+      audio.init(); // also resumes a context that autoplay policy suspended
+      if (!this.audioOn) audio.ambience('wind');
+      this.audioOn = true;
+    } catch { /* audio is optional */ }
   }
 
   dispose() {
