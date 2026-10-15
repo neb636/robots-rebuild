@@ -181,7 +181,6 @@ export class Prologue {
     add('art', 'Sailboat print', a.art, 1.2, () => this.say(['A print of a sailboat.', 'I\'ve never been on a sailboat. I just liked the vibe.']));
     add('litter', 'Litter box', a.litter, 1.0, () => this.say(['Biscuit\'s litter box.', 'Scooped yesterday. Probably. Let\'s say yesterday.']));
     add('bar', 'Bar cart', a.bar, 1.2, () => this.say(['The bar cart.', 'Two bourbons, a gin I was gifted, and a shaker I\'ve used exactly once.']));
-    add('pool', 'Pool table', a.pool, 1.6, () => this.say(['The pool table.', 'Bought it "for parties." Hosted one party.', 'Still undefeated, though.']));
     add('table', 'Dining table', a.table, 1.4, () => this.say(['The dining table.', 'Seats four. Mostly seats my laptop.']));
     add('bath', 'Bathroom', a.bath, 1.0, () => this.say(this.pick('bath', [
       ['The bathroom. I already brushed my teeth.', '...Probably. I\'ll take the win.'],
