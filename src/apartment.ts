@@ -1,7 +1,7 @@
 // "Day Zero": Theo's one-bedroom on Mt. Vernon St., the morning of the broadcast. A recently gut-
 // renovated unit: white walls, wide-plank floors, big black-framed windows, an open kitchen with a
-// waterfall island. The bedroom is still crammed with polaroids, posters, string lights, books,
-// laundry and a guitar; the living room is calmer, all clean lines and a few good pieces. Sun pours
+// waterfall island. The bedroom is still crammed with polaroids, string lights, books and laundry;
+// the open living room is a grown-up loft: a lounge, a dining table, a pool table, a bar cart. Sun pours
 // in through the street-side windows. In the overhead view the walls between the camera and the hero drop to stubs, like a
 // cutaway; the ceiling and full-height walls still exist for the sun's shadow map only (they write
 // no color or depth), so sunlight reaches the floor through the windows and nowhere else.
@@ -21,7 +21,7 @@ import { HERO } from './character';
 const H = 3.0; // wall height (a gut-renovated Beacon Hill walk-up: tall ceilings)
 const T = 0.16; // wall thickness
 /** the unit's footprint */
-const X0 = -10, X1 = 10, Z0 = -6, Z1 = 6;
+const X0 = -10, X1 = 10, Z0 = -6, Z1 = 4.6;
 
 /** Theo on Day Zero: same sweater, no pack, no bedroll. Nothing to run from yet. */
 export const HERO_DAY0: Char3DSpec = { ...HERO, backpack: undefined, bedroll: undefined };
@@ -154,14 +154,14 @@ function segCross(ax: number, az: number, bx: number, bz: number, cx: number, cz
 }
 
 // --------------------------------------------------------------------------------------- Biscuit
-export type CatState = 'bed' | 'bolting' | 'hiding';
+export type CatState = 'loaf' | 'bolting' | 'hiding';
 export class Cat {
   group = new THREE.Group();
   body = new THREE.Group();
   head = new THREE.Group();
   tail = new THREE.Group();
   legs: THREE.Mesh[] = [];
-  state: CatState = 'bed';
+  state: CatState = 'loaf';
   lookAt: THREE.Vector3 | null = null;
   private path: THREE.Vector3[] = [];
   private seg = 0; private segT = 0; private t = 0; private purr = 0;
@@ -204,7 +204,7 @@ export class Cat {
       this.segT += (dt * 4.2) / Math.max(len, 0.01);
       const k = Math.min(1, this.segT);
       this.group.position.lerpVectors(a, c, k);
-      // little hop when dropping off the bed
+      // little hop when dropping off the beanbag
       if (a.y > c.y + 0.1) this.group.position.y += Math.sin(k * Math.PI) * 0.25;
       this.group.rotation.y = Math.atan2(c.x - a.x, c.z - a.z);
       b.position.y = Math.abs(Math.sin(this.t * 22)) * 0.03;
@@ -220,7 +220,7 @@ export class Cat {
       this.legs.forEach((l) => (l.rotation.x = 0));
       return;
     }
-    // loafing on the bed: breathe, swish the tail, purr when petted
+    // loafing on the beanbag: breathe, swish the tail, purr when petted
     this.purr = Math.max(0, this.purr - dt);
     const br = Math.sin(this.t * (this.purr > 0 ? 9 : 2.2)) * (this.purr > 0 ? 0.012 : 0.02);
     b.scale.set(1 + br * 0.5, 1 + br, 1);
@@ -297,12 +297,8 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   // ------------------------------------------------------------------ the atlas: everything hand-drawn
   const ART = {
     acadia: atlas.add(300, 450, D.acadia),
-    gig: atlas.add(240, 340, (c, w, h) => D.gigPoster(c, w, h, 'THE STATIC HEARTS', 'LIVE · PARADISE ROCK CLUB', '#f0a0b0', '#141418', 5)),
-    gig2: atlas.add(240, 340, (c, w, h) => D.gigPoster(c, w, h, 'LOW TIDE', 'ALL AGES · SAT 9PM', '#e8c040', '#c03a2a', 8)),
     moth: atlas.add(240, 340, D.mothPoster),
-    weird: atlas.add(240, 340, D.weirdPoster),
     tapestry: atlas.add(400, 330, D.tapestry),
-    doodles: atlas.add(512, 256, D.doodles),
     transit: atlas.add(340, 220, D.transitMap),
     calendar: atlas.add(180, 260, D.calendar),
     cover: atlas.add(140, 210, D.alignmentCover),
@@ -310,7 +306,6 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     abstract: atlas.add(180, 240, D.abstractPrint),
     sailboat: atlas.add(192, 144, D.sailboat),
     fenway: atlas.add(160, 120, D.fenway),
-    bunting: atlas.add(512, 120, D.bunting),
     clock: atlas.add(128, 128, D.clockFace),
     cork: atlas.add(300, 200, D.corkboard),
     triptych: [] as D.Rect[],
@@ -383,7 +378,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     const f = new THREE.Mesh(wplane(w, d, 0.5), m); f.rotation.x = -Math.PI / 2; f.position.set(x, y, z); f.receiveShadow = true; root.add(f);
   };
   floor(X1 - X0, Z1 - Z0, oak, 0, 0);
-  floor(3.2, 4.5, tileFloor, -8.4, 3.75, 0.004);               // bathroom
+  floor(3.2, Z1 - 1.5, tileFloor, -8.4, (1.5 + Z1) / 2, 0.004);               // bathroom
   // the building below and around the unit (seen past the cut walls)
   box(X1 - X0 + 0.6, 4.2, Z1 - Z0 + 0.6, pbrMat('brick', '#c89080'), 0, -4.21, 0);
 
@@ -695,7 +690,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     hang(ART.calendar, 0.28, wx, 1.5, -2.6, ry, 0, bb);
     pin(wx - 0.006, 1.68, -2.6, '#e03a2a', bb);
   });
-  // ---- the tall bookshelf along the left wall, with a guitar and a beanbag beside it
+  // ---- the tall bookshelf along the left wall, with a beanbag beside it
   {
     const x = X0 + T / 2 + 0.19, z0 = -3.1, z1 = -1.3, top = 2.3;
     box(0.38, top, 0.04, darkWood, x, 0, z0); box(0.38, top, 0.04, darkWood, x, 0, z1);
@@ -733,18 +728,6 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     vbox(0.02, 0.25, 0.17, '#14243c', vpaint, x + 0.08, 1.23, -2.2, 0, 0, -0.12);
     solid(X0, z0 - 0.03, x + 0.2, z1 + 0.03);
     at.bookshelf = v3(x + 0.35, 1.2, -2.2);
-    // the guitar on a stand, a strap hanging off it
-    const gx = X0 + 0.42, gz = -0.75;
-    const gt = new Batch();
-    gt.add(new THREE.SphereGeometry(1, 24, 16).scale(0.19, 0.22, 0.06), pbrMat('finewood', '#d89a50'), 0, 0.3, 0);
-    gt.add(new THREE.SphereGeometry(1, 24, 16).scale(0.15, 0.16, 0.06), pbrMat('finewood', '#d89a50'), 0, 0.58, 0);
-    gt.add(new THREE.CircleGeometry(0.05, 20), black, 0, 0.5, 0.062);
-    gt.add(new THREE.BoxGeometry(0.05, 0.62, 0.03), darkWood, 0, 1.02, 0);
-    gt.add(new THREE.BoxGeometry(0.08, 0.16, 0.025), darkWood, 0, 1.4, 0);
-    gt.add(new THREE.BoxGeometry(0.1, 0.02, 0.02), black, 0, 0.22, 0.06);
-    const gg = new THREE.Group(); gg.position.set(gx, 0.05, gz); gg.rotation.set(0, Math.PI / 2, -0.18); root.add(gg); gt.flush(gg);
-    box(0.32, 0.03, 0.04, black, gx, 0.02, gz, Math.PI / 2);
-    solid(gx - 0.2, gz - 0.25, gx + 0.25, gz + 0.25);
     // beanbag and a floor cushion, a skateboard shoved half under them
     heap(0.48, 0.42, 0.5, '#8a4a6a', vknit, -8.3, 0, 0.35, 0.4);
     heap(0.3, 0.1, 0.3, '#e8c070', vknit, -7.6, 0, 0.75, 0);
@@ -752,14 +735,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     rbox(0.82, 0.02, 0.22, 0.01, pbrMat('finewood', '#3a8a8a'), -9.45, 0.06, 0.6, 0, 1.45, 0);
     for (const [sx, sz] of [[-0.3, -0.08], [-0.3, 0.08], [0.3, -0.08], [0.3, 0.08]]) { const c = Math.cos(1.45), s = Math.sin(1.45); vcyl(0.027, 0.027, 0.03, '#f0e0a0', vgloss, -9.45 + sx * c + sz * s, 0.0, 0.6 - sx * s + sz * c); }
   }
-  // ---- left wall: doodles in marker, a "stay weird" poster, a big fiddle-leaf fig in the corner
-  decoOn(left, (bb) => {
-    const wx = X0 + T / 2 + 0.006, ry = Math.PI / 2;
-    hang(ART.doodles, 1.7, wx, 1.45, -0.3, ry, 0, bb);
-    hang(ART.weird, 0.5, wx, 1.65, -4.55, ry, 0.03, bb);
-    hang(ART.polaroids[3], 0.11, wx + 0.002, 1.25, -4.12, ry, -0.12, bb);
-    hang(ART.polaroids[6], 0.11, wx + 0.002, 1.3, -3.95, ry, 0.1, bb);
-  });
+  // ---- a big fiddle-leaf fig in the corner
   const leaves: Card[] = [];
   {
     vcyl(0.2, 0.16, 0.36, '#c8a878', vpaint, X0 + 0.45, 0, -5.4);
@@ -777,7 +753,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   }
   for (let k = 0; k < 5; k++) vbox(0.24 - k * 0.01, 0.045, 0.17, ['#a8433a', '#3a5a7a', '#d8b46a', '#5a7a4a', '#2a2a3a'][k], vbook, -9.2, k * 0.045, -3.6, 0, (R() - 0.5) * 0.4, 0);
   vcyl(0.04, 0.036, 0.09, '#e8c040', vpaint, -8.95, 0, -3.35);
-  // ---- the dresser (sweaters, a mirror, a cactus) under bunting and gig posters
+  // ---- the dresser (sweaters, a mirror, a cactus)
   {
     const dx = -5.6, dz = 1.5 - T / 2 - 0.25;
     box(1.3, 0.86, 0.5, paint('#f2f1ee', 0.45), dx, 0.12, dz);
@@ -796,13 +772,6 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     solid(dx - 0.68, dz - 0.3, dx + 0.68, 1.5);
     at.dresser = v3(dx, 1.0, dz - 0.3);
   }
-  decoOn(bedSouth, (bb) => {
-    const wz = 1.5 - T / 2 - 0.006, ry = Math.PI;
-    hang(ART.bunting, 2.0, -5.6, 2.62, wz, ry, 0, bb);
-    hang(ART.gig, 0.5, -7.2, 1.65, wz, ry, 0.02, bb);
-    hang(ART.gig2, 0.46, -4.1, 1.7, wz, ry, -0.03, bb);
-    hang(ART.polaroids[9], 0.1, -6.6, 1.4, wz - 0.002, ry, 0.15, bb);
-  });
   // ---- The Chair: a chair that became a laundry pile
   {
     const x = -4.25, z = 0.55;
@@ -821,20 +790,20 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
 
   // bathroom (seen from above through the cut walls)
   {
-    rbox(1.65, 0.55, 0.75, 0.08, paint('#ffffff', 0.25), -9.1, 0, 5.5);
-    box(1.45, 0.02, 0.55, paint('#cfe4f0', 0.05, { transparent: true, opacity: 0.6 }), -9.1, 0.5, 5.5);
-    rbox(0.38, 0.42, 0.5, 0.1, paint('#ffffff', 0.25), -7.4, 0, 5.55);
-    rbox(0.4, 0.38, 0.18, 0.05, paint('#ffffff', 0.25), -7.4, 0.25, 5.85);
+    rbox(1.65, 0.55, 0.75, 0.08, paint('#ffffff', 0.25), -9.1, 0, Z1 - 0.5);
+    box(1.45, 0.02, 0.55, paint('#cfe4f0', 0.05, { transparent: true, opacity: 0.6 }), -9.1, 0.5, Z1 - 0.5);
+    rbox(0.38, 0.42, 0.5, 0.1, paint('#ffffff', 0.25), -7.4, 0, Z1 - 0.45);
+    rbox(0.4, 0.38, 0.18, 0.05, paint('#ffffff', 0.25), -7.4, 0.25, Z1 - 0.15);
     box(0.5, 0.42, 0.8, darkWood, -9.65, 0.42, 2.6);
     box(0.52, 0.03, 0.82, paint('#f2f1ee', 0.3), -9.65, 0.84, 2.6);
     rbox(0.36, 0.1, 0.5, 0.04, paint('#ffffff', 0.25), -9.65, 0.87, 2.6);
     box(0.02, 0.8, 0.7, paint('#b8ccd8', 0.04, { metalness: 0.9 }), -9.91, 1.15, 2.6);
-    b.add(new THREE.PlaneGeometry(0.7, 0.5).rotateX(-Math.PI / 2), pbrMat('knit', '#e8e6e2'), -8.6, 0.014, 4.2);
+    b.add(new THREE.PlaneGeometry(0.7, 0.5).rotateX(-Math.PI / 2), pbrMat('knit', '#e8e6e2'), -8.4, 0.014, 3.2);
   }
   // closet: a rail of navy sweaters, boxes
   {
-    box(4.2, 0.03, 0.03, steel, -4.4, 1.75, 5.55);
-    for (let i = 0; i < 18; i++) vrbox(0.06, 0.7, 0.5, 0.02, i === 7 ? '#2a2a2a' : i % 5 === 3 ? '#7a2a2a' : '#22305c', vknit, -6.3 + i * 0.22, 1.0, 5.55);
+    box(4.2, 0.03, 0.03, steel, -4.4, 1.75, Z1 - 0.45);
+    for (let i = 0; i < 18; i++) vrbox(0.06, 0.7, 0.5, 0.02, i === 7 ? '#2a2a2a' : i % 5 === 3 ? '#7a2a2a' : '#22305c', vknit, -6.3 + i * 0.22, 1.0, Z1 - 0.45);
     for (const [x, s] of [[-6.2, 0.4], [-5.6, 0.35], [-3.5, 0.45], [-2.9, 0.38]] as const) box(s, s, s, pbrMat('linen', '#c8a878'), x, 0, 2.2);
   }
 
@@ -1025,40 +994,166 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
       hang(r, 0.82, cx, 1.75, wz - 0.041, ry, 0, bb);
     });
   });
-  // ---- a big fiddle-leaf fig in a basket, by the doorway
+  // ---- a big fiddle-leaf fig in a basket, beside the record crate
   {
-    vcyl(0.26, 0.2, 0.4, '#f0eeea', vpaint, -1.3, 0, 5.3);
-    b.add(new THREE.CylinderGeometry(0.02, 0.03, 1.6), darkWood, -1.3, 1.1, 5.3);
-    for (let i = 0; i < 36; i++) { const y = 0.9 + R() * 1.4, a = R() * 6.28, r = 0.1 + R() * 0.32; leaves.push({ x: -1.3 + Math.cos(a) * r, y, z: 5.3 + Math.sin(a) * r, nx: Math.cos(a), ny: 0.4, nz: Math.sin(a), s: 0.24 + R() * 0.1 }); }
-    solid(-1.6, 5.0, -1.0, Z1);
+    const fx = 3.15, fz = Z1 - 0.5;
+    vcyl(0.26, 0.2, 0.4, '#f0eeea', vpaint, fx, 0, fz);
+    b.add(new THREE.CylinderGeometry(0.02, 0.03, 1.6), darkWood, fx, 1.1, fz);
+    for (let i = 0; i < 36; i++) { const y = 0.9 + R() * 1.4, a = R() * 6.28, r = 0.1 + R() * 0.32; leaves.push({ x: fx + Math.cos(a) * r, y, z: fz + Math.sin(a) * r, nx: Math.cos(a), ny: 0.4, nz: Math.sin(a), s: 0.24 + R() * 0.1 }); }
+    solid(fx - 0.3, fz - 0.3, fx + 0.3, Z1);
   }
-  // ---- the dining nook: a round table, two chairs, a pendant over it, a cat tree
-  const pendant = new THREE.PointLight('#ffd8a0', 0.9, 4.5, 2); pendant.position.set(4.8, 2.1, 2.6); root.add(pendant);
+  /** a straight tube between two points (bike frames, chair rails) */
+  const rod = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number, m: THREE.Material, bb = b) => {
+    const d = new THREE.Vector3(bx - ax, by - ay, bz - az);
+    const g = new THREE.CylinderGeometry(r, r, d.length(), 8).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    bb.add(g, m, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
+  };
+  // ---- a slim walnut console behind the couch: a ceramic lamp, a catchall tray, books underneath
   {
-    const tx = 4.8, tz = 2.6;
-    cyl(0.55, 0.55, 0.035, paint('#f2f1ee', 0.3), tx, 0.74, tz, 40);
-    cyl(0.05, 0.07, 0.72, matteBlack, tx, 0.02, tz); cyl(0.28, 0.3, 0.03, matteBlack, tx, 0, tz, 24);
-    for (const [a, rot] of [[-0.6, 0], [2.4, 0]] as const) {
-      const cx = tx + Math.sin(a) * 0.75, cz = tz + Math.cos(a) * 0.75;
+    const sx = 2.5, sz = -1.74, L = 1.6;
+    box(L, 0.035, 0.32, darkWood, sx, 0.72, sz);
+    box(L - 0.06, 0.025, 0.28, darkWood, sx, 0.2, sz);
+    for (const lx of [-1, 1]) for (const lz of [-1, 1]) box(0.03, 0.72, 0.03, matteBlack, sx + lx * (L / 2 - 0.04), 0, sz + lz * 0.13);
+    vcyl(0.07, 0.1, 0.3, '#2f3034', vgloss, sx + 0.58, 0.755, sz);
+    cyl(0.008, 0.008, 0.14, brass, sx + 0.58, 1.05, sz);
+    cyl(0.12, 0.15, 0.2, paint('#f4ead8', 0.9, { emissive: '#ffd8a0', emissiveIntensity: 0.35, side: THREE.DoubleSide }), sx + 0.58, 1.14, sz);
+    vrbox(0.3, 0.02, 0.18, 0.008, '#1c1d20', vgloss, sx - 0.2, 0.755, sz);
+    b.add(new THREE.TorusGeometry(0.02, 0.004, 6, 12).rotateX(Math.PI / 2), brass, sx - 0.25, 0.78, sz);
+    vbox(0.04, 0.005, 0.07, '#2a2a2a', vpaint, sx - 0.14, 0.775, sz + 0.02, 0, 0.4, 0);
+    for (let k = 0; k < 3; k++) vbox(0.3, 0.04, 0.22, ['#2a2a3a', '#c8703a', '#e8e0d0'][k], vbook, sx - 0.45, 0.225 + k * 0.04, sz, 0, (R() - 0.5) * 0.2, 0);
+    vcyl(0.06, 0.05, 0.12, '#e8e4dc', vpaint, sx + 0.3, 0.225, sz);
+    solid(sx - L / 2, sz - 0.17, sx + L / 2, sz + 0.17);
+  }
+  // ---- a listening corner by the bookcase: a cognac leather lounge chair and ottoman turned
+  // toward the speakers, a slim reading lamp
+  {
+    const leather = paint('#8a4a2a', 0.42);
+    const lounge = (x: number, z: number, ry: number, ottoman: boolean) => {
       const g = new Batch();
-      g.add(new RoundedBoxGeometry(0.44, 0.05, 0.44, 2, 0.02), matteBlack, 0, 0.46, 0);
-      for (const [lx, lz] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) g.add(new THREE.CylinderGeometry(0.02, 0.018, 0.46, 8), matteBlack, lx, 0.23, lz);
-      for (let k = 0; k < 4; k++) g.add(new THREE.CylinderGeometry(0.012, 0.012, 0.45, 6), matteBlack, -0.15 + k * 0.1, 0.72, 0.2);
-      g.add(new THREE.BoxGeometry(0.44, 0.06, 0.03), matteBlack, 0, 0.96, 0.2);
-      const o = new THREE.Group(); o.position.set(cx, 0, cz); o.rotation.y = a + Math.PI + rot; root.add(o); g.flush(o);
-      solid(cx - 0.24, cz - 0.24, cx + 0.24, cz + 0.24);
+      const w = ottoman ? 0.56 : 0.78, d = ottoman ? 0.46 : 0.7;
+      g.add(new RoundedBoxGeometry(w + 0.04, 0.06, d + 0.02, 2, 0.02), darkWood, 0, 0.25, 0);
+      g.add(new RoundedBoxGeometry(w, 0.15, d, 3, 0.06), leather, 0, 0.35, 0);
+      if (!ottoman) {
+        g.add(new RoundedBoxGeometry(w + 0.04, 0.66, 0.06, 2, 0.02), darkWood, 0, 0.62, -0.36, -0.22, 0, 0);
+        g.add(new RoundedBoxGeometry(w - 0.04, 0.6, 0.16, 3, 0.07), leather, 0, 0.66, -0.29, -0.22, 0, 0);
+        for (const s of [-1, 1]) g.add(new RoundedBoxGeometry(0.08, 0.05, 0.6, 2, 0.02), darkWood, s * 0.43, 0.52, -0.02);
+      }
+      // a swivel column on a four-star base
+      g.add(new THREE.CylinderGeometry(0.035, 0.035, 0.2, 10), matteBlack, 0, 0.12, 0);
+      for (let k = 0; k < 2; k++) g.add(new THREE.BoxGeometry(0.05, 0.03, ottoman ? 0.5 : 0.7), matteBlack, 0, 0.03, 0, 0, Math.PI / 4 + k * Math.PI / 2, 0);
+      const o = new THREE.Group(); o.position.set(x, 0, z); o.rotation.y = ry; root.add(o); g.flush(o);
+      const r = ottoman ? 0.3 : 0.45;
+      solid(x - r, z - r, x + r, z + r);
+    };
+    const lx = -0.75, lz = 2.65, ry = 0.85;
+    lounge(lx, lz, ry, false);
+    lounge(lx + Math.sin(ry) * 0.85, lz + Math.cos(ry) * 0.85, ry, true);
+    // a tripod reading lamp behind the chair's shoulder
+    const fx = -1.3, fz = 1.85;
+    for (let k = 0; k < 3; k++) { const a = k * 2.094; rod(fx + Math.cos(a) * 0.2, 0, fz + Math.sin(a) * 0.2, fx, 1.1, fz, 0.01, darkWood); }
+    rod(fx, 1.1, fz, fx, 1.45, fz, 0.008, matteBlack);
+    cyl(0.16, 0.2, 0.26, paint('#f4ead8', 0.9, { emissive: '#ffd8a0', emissiveIntensity: 0.35, side: THREE.DoubleSide }), fx, 1.38, fz, 24);
+    solid(fx - 0.2, fz - 0.2, fx + 0.2, fz + 0.2);
+  }
+  // ---- Biscuit's litter box: a covered one, tucked in the corner past the bookcase, on a mat
+  {
+    const lx = -1.68, lz = Z1 - T / 2 - 0.3;
+    b.add(new THREE.PlaneGeometry(0.5, 0.56).rotateX(-Math.PI / 2), pbrMat('knit', '#5a5e62', { normalScale: 0.5 }), lx + 0.42, 0.014, lz);
+    rbox(0.42, 0.14, 0.54, 0.03, paint('#8a9098', 0.5), lx, 0, lz);
+    rbox(0.4, 0.3, 0.52, 0.1, paint('#eceae6', 0.35), lx, 0.12, lz);
+    b.add(new THREE.CircleGeometry(0.1, 20).rotateY(Math.PI / 2), paint('#2a2b2e', 0.8), lx + 0.202, 0.26, lz);
+    b.add(new THREE.TorusGeometry(0.1, 0.012, 6, 20).rotateY(Math.PI / 2), paint('#8a9098', 0.5), lx + 0.203, 0.26, lz);
+    // the scoop, and a few stray granules on the mat
+    vrbox(0.1, 0.012, 0.2, 0.004, '#3a8a8a', vgloss, lx + 0.36, 0.014, lz + 0.16, 0, 0.5, 0);
+    for (let i = 0; i < 9; i++) vbox(0.008, 0.006, 0.008, '#c8c0b0', vpaint, lx + 0.28 + R() * 0.3, 0.014, lz - 0.2 + R() * 0.4, 0, R() * 3, 0);
+    solid(lx - 0.24, lz - 0.3, lx + 0.24, Z1);
+    at.litter = v3(lx + 0.3, 0.4, lz);
+  }
+  // ---- his road bike, hung flat on the front wall, and a cue rack by the pool table
+  decoOn(front, (bb) => {
+    const wz = Z1 - T / 2 - 0.09, cx = 5.6, cy = 1.6;
+    const frame = paint('#2e4a3a', 0.25, { metalness: 0.3 }), tire = paint('#1a1a1c', 0.8);
+    const P = (x: number, y: number): [number, number, number] => [cx + x, cy + y, wz];
+    for (const hx of [-0.5, 0.5]) {
+      bb.add(new THREE.TorusGeometry(0.33, 0.018, 8, 36), tire, cx + hx, cy, wz);
+      bb.add(new THREE.TorusGeometry(0.31, 0.008, 6, 36), steel, cx + hx, cy, wz);
+      bb.add(new THREE.CylinderGeometry(0.025, 0.025, 0.06, 10).rotateX(Math.PI / 2), steel, cx + hx, cy, wz);
+      for (let k = 0; k < 8; k++) { const a = k * Math.PI / 8; rod(cx + hx - Math.cos(a) * 0.3, cy - Math.sin(a) * 0.3, wz, cx + hx + Math.cos(a) * 0.3, cy + Math.sin(a) * 0.3, wz, 0.002, steel, bb); }
     }
-    // on the table: a fruit bowl, the morning paper, a little vase
-    cyl(0.14, 0.08, 0.08, paint('#3a6a8a', 0.4), tx + 0.1, 0.78, tz - 0.1);
-    for (const [fx, fz, c] of [[0.06, -0.12, '#e8c030'], [0.14, -0.06, '#d84a2a'], [0.12, -0.16, '#7ab040']] as const) b.add(tint(new THREE.SphereGeometry(0.045, 12, 10), c), vgloss, tx + fx, 0.88, tz + fz);
-    vbox(0.36, 0.01, 0.26, '#e8e4d8', vpaint, tx - 0.18, 0.78, tz + 0.15, 0, 0.4, 0);
-    vcyl(0.03, 0.04, 0.14, '#f0e8d8', vgloss, tx - 0.2, 0.78, tz - 0.2);
-    solid(tx - 0.56, tz - 0.56, tx + 0.56, tz + 0.56);
-    // the pendant
-    b.add(new THREE.CylinderGeometry(0.005, 0.005, 0.75), black, tx, H - 0.38, tz);
-    const shade = new THREE.Mesh(teardrop(0.22), paint('#2a2b2e', 0.35, { metalness: 0.6, side: THREE.DoubleSide })); shade.position.set(tx, H - 0.85, tz); shade.castShadow = true; root.add(shade);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), bulbMat); bulb.position.set(tx, H - 0.88, tz); root.add(bulb);
-    // a carpeted cat tree in the corner by the window, with a dangling toy
+    const rear = P(-0.5, 0), front2 = P(0.5, 0), bbk = P(-0.06, -0.05), seat = P(-0.2, 0.46), headT = P(0.34, 0.44), headB = P(0.38, 0.3);
+    for (const [a, c] of [[bbk, seat], [seat, headT], [bbk, headB], [bbk, rear], [seat, rear], [headB, front2], [headT, headB]] as const) rod(...a, ...c, 0.016, frame, bb);
+    rod(...seat, cx - 0.23, cy + 0.56, wz, 0.012, steel, bb);
+    bb.add(new RoundedBoxGeometry(0.24, 0.04, 0.09, 2, 0.015), tire, cx - 0.21, cy + 0.58, wz);
+    rod(...headT, cx + 0.42, cy + 0.5, wz, 0.012, steel, bb);
+    bb.add(new THREE.TorusGeometry(0.06, 0.012, 6, 14, Math.PI), tire, cx + 0.48, cy + 0.46, wz, 0, 0, -Math.PI / 2);
+    bb.add(new THREE.CylinderGeometry(0.09, 0.09, 0.01, 20).rotateX(Math.PI / 2), steel, ...bbk);
+    // two black wall hooks under the top tube
+    for (const hx of [-0.05, 0.2]) bb.add(new THREE.BoxGeometry(0.03, 0.03, 0.12), matteBlack, cx + hx, cy + 0.42, wz + 0.04);
+    const rx = 7.4, rz = Z1 - T / 2 - 0.03;
+    for (const y of [0.9, 1.6]) bb.add(new THREE.BoxGeometry(0.5, 0.05, 0.05), darkWood, rx, y, rz);
+    for (let k = 0; k < 3; k++) rod(rx - 0.15 + k * 0.15, 0.4, rz - 0.04, rx - 0.15 + k * 0.15, 1.75, rz - 0.04, 0.012, wood, bb);
+  });
+  // ---- dining: a long walnut table for four, chairs tucked in facing it, a linear pendant over it
+  const pendant = new THREE.PointLight('#ffd8a0', 0.9, 4.5, 2); pendant.position.set(3.0, 2.0, 1.0); root.add(pendant);
+  {
+    const tx = 3.0, tz = 1.0, TL = 1.9, TW = 0.95;
+    b.add(new THREE.PlaneGeometry(3.0, 2.4).rotateX(-Math.PI / 2), pbrMat('knit', '#8c877c', { normalScale: 0.4 }), tx, 0.012, tz);
+    rbox(TL, 0.045, TW, 0.012, darkWood, tx, 0.72, tz);
+    for (const s of [-1, 1]) { box(TL - 0.3, 0.08, 0.025, darkWood, tx, 0.64, tz + s * (TW / 2 - 0.1)); box(0.025, 0.08, TW - 0.24, darkWood, tx + s * (TL / 2 - 0.14), 0.64, tz); }
+    for (const lx of [-1, 1]) for (const lz of [-1, 1]) box(0.065, 0.72, 0.065, darkWood, tx + lx * (TL / 2 - 0.14), 0, tz + lz * (TW / 2 - 0.1));
+    // four chairs, two a side, each facing the table: an oak frame, a black seat, a curved rail back
+    const seatM = paint('#1e1f22', 0.55);
+    for (const s of [-1, 1]) for (const ox of [-0.47, 0.47]) {
+      const cx = tx + ox, cz = tz + s * 0.66;
+      const g = new Batch();
+      g.add(new RoundedBoxGeometry(0.44, 0.045, 0.42, 2, 0.015), seatM, 0, 0.46, 0);
+      for (const [lx, lz] of [[-0.19, -0.18], [0.19, -0.18], [-0.19, 0.18], [0.19, 0.18]]) g.add(new THREE.CylinderGeometry(0.018, 0.014, 0.44, 8), wood, lx, 0.22, lz);
+      for (const lx of [-0.19, 0.19]) g.add(new THREE.CylinderGeometry(0.015, 0.015, 0.36, 8), wood, lx, 0.65, -0.19);
+      g.add(new RoundedBoxGeometry(0.44, 0.08, 0.03, 2, 0.012), wood, 0, 0.84, -0.2, -0.1, 0, 0);
+      const o = new THREE.Group(); o.position.set(cx, 0, cz); o.rotation.y = s > 0 ? Math.PI : 0; root.add(o); g.flush(o);
+    }
+    // on the table: a wooden bowl of lemons, his laptop, a bottle of red and two glasses
+    cyl(0.16, 0.09, 0.08, wood, tx - 0.35, 0.765, tz + 0.05, 24);
+    for (let i = 0; i < 4; i++) b.add(tint(new THREE.SphereGeometry(0.04, 12, 10).scale(1, 0.85, 1.2), '#e8c838'), vgloss, tx - 0.35 + (i % 2 - 0.5) * 0.08, 0.84 + (i > 1 ? 0.03 : 0), tz + 0.05 + (i > 1 ? 0 : (i - 0.5) * 0.06), 0, i, 0);
+    rbox(0.32, 0.016, 0.22, 0.006, paint('#a8acb0', 0.3, { metalness: 0.8 }), tx + 0.35, 0.765, tz - 0.12, 0, 0.15, 0);
+    vcyl(0.035, 0.035, 0.22, '#3a1a20', vgloss, tx + 0.05, 0.765, tz + 0.22);
+    vcyl(0.012, 0.014, 0.08, '#3a1a20', vgloss, tx + 0.05, 0.985, tz + 0.22);
+    for (const gx of [0.18, 0.28]) cyl(0.035, 0.025, 0.1, paint('#e0eef4', 0.05, { transparent: true, opacity: 0.35 }), tx + gx, 0.765, tz + 0.25);
+    solid(tx - TL / 2 - 0.05, tz - 0.9, tx + TL / 2 + 0.05, tz + 0.9);
+    at.table = v3(tx, 0.9, tz);
+    // the pendant: a slim black bar on two cables, warm light down onto the table
+    box(1.2, 0.045, 0.08, matteBlack, tx, H - 1.2, tz);
+    box(1.14, 0.008, 0.05, paint('#fff6e8', 0.4, { emissive: '#ffd8a0', emissiveIntensity: 1.6 }), tx, H - 1.208, tz, 0, b, false);
+    for (const dx of [-0.5, 0.5]) b.add(new THREE.CylinderGeometry(0.003, 0.003, 1.15), black, tx + dx, H - 0.6, tz);
+  }
+  // ---- a pool table between the kitchen and the front door: walnut rails, green felt, a rack and cues
+  {
+    const px = 7.2, pz = 1.3, PL = 2.3, PW = 1.3;
+    const felt = pbrMat('knit', '#2f6a4a', { normalScale: 0.2 });
+    box(PL - 0.5, 0.5, PW - 0.5, darkWood, px, 0.2, pz);
+    for (const lx of [-1, 1]) for (const lz of [-1, 1]) box(0.16, 0.7, 0.16, darkWood, px + lx * (PL / 2 - 0.2), 0, pz + lz * (PW / 2 - 0.2));
+    box(PL - 0.24, 0.04, PW - 0.24, felt, px, 0.74, pz);
+    for (const s of [-1, 1]) { box(PL, 0.08, 0.12, darkWood, px, 0.72, pz + s * (PW / 2 - 0.06)); box(0.12, 0.08, PW - 0.24, darkWood, px + s * (PL / 2 - 0.06), 0.72, pz); }
+    for (const lx of [-1, 0, 1]) for (const lz of [-1, 1]) cyl(0.05, 0.05, 0.006, black, px + lx * (PL / 2 - 0.12), 0.8, pz + lz * (PW / 2 - 0.12), 12);
+    // a racked triangle at one end, the cue ball at the other, a cue left across the felt
+    const balls = ['#e8c030', '#2a4ab8', '#d83a2a', '#6a2a8a', '#e87a2a', '#2a8a4a', '#8a2a2a', '#1a1a1a', '#e8c030', '#2a4ab8'];
+    let n = 0;
+    for (let row = 0; row < 4; row++) for (let k = 0; k <= row; k++) b.add(tint(new THREE.SphereGeometry(0.028, 12, 10), balls[n++]), vgloss, px + 0.5 + row * 0.049, 0.808, pz + (k - row / 2) * 0.057);
+    b.add(tint(new THREE.SphereGeometry(0.028, 12, 10), '#f4f0e6'), vgloss, px - 0.55, 0.808, pz + 0.05);
+    rod(px - 0.95, 0.79, pz + 0.3, px + 0.25, 0.8, pz - 0.15, 0.009, wood);
+    solid(px - PL / 2, pz - PW / 2, px + PL / 2, pz + PW / 2);
+    at.pool = v3(px, 1.0, pz);
+    // a three-shade billiard pendant over it
+    box(1.5, 0.04, 0.06, matteBlack, px, H - 1.05, pz);
+    for (const dx of [-0.6, 0.6]) b.add(new THREE.CylinderGeometry(0.003, 0.003, 1.0), black, px + dx, H - 0.5, pz);
+    for (const dx of [-0.5, 0, 0.5]) {
+      const sh = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.16, 20, 1, true), paint('#2a2b2e', 0.35, { metalness: 0.6, side: THREE.DoubleSide })); sh.position.set(px + dx, H - 1.15, pz); sh.castShadow = true; root.add(sh);
+      const bl = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), bulbMat); bl.position.set(px + dx, H - 1.2, pz); root.add(bl);
+    }
+    const poolLight = new THREE.PointLight('#ffd8a0', 0.8, 4, 2); poolLight.position.set(px, 1.7, pz); root.add(poolLight);
+  }
+  // ---- a carpeted cat tree in the corner by the window, with a dangling toy
+  {
     const ct = new Batch();
     ct.add(new THREE.BoxGeometry(0.6, 0.06, 0.6), pbrMat('knit', '#b8bcc0'), 0, 0.03, 0);
     ct.add(new THREE.CylinderGeometry(0.06, 0.06, 1.2, 12), pbrMat('canvas', '#c8a878'), 0, 0.6, 0);
@@ -1067,6 +1162,26 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     ct.add(new THREE.SphereGeometry(0.04, 10, 8), pbrMat('knit', '#e05a4a'), 0.2, 0.55, 0.2);
     const cto = new THREE.Group(); cto.position.set(6.6, 0, -5.4); root.add(cto); ct.flush(cto);
     solid(6.3, -5.7, 6.9, -5.1);
+  }
+  // ---- a brass bar cart against the right wall: bourbon, a decanter, rocks glasses, a shaker
+  {
+    const bx = X1 - 0.34, bz = -0.65;
+    const glassTop = paint('#2a2b2e', 0.15, { metalness: 0.2 });
+    for (const y of [0.2, 0.76]) box(0.4, 0.02, 0.78, glassTop, bx, y, bz);
+    for (const lx of [-1, 1]) for (const lz of [-1, 1]) cyl(0.012, 0.012, 0.86, brass, bx + lx * 0.19, 0.06, bz + lz * 0.38, 8);
+    for (const lz of [-1, 1]) cyl(0.03, 0.03, 0.03, black, bx - 0.19, 0.03, bz + lz * 0.38, 10);
+    rod(bx - 0.19, 0.92, bz - 0.4, bx + 0.19, 0.92, bz - 0.4, 0.01, brass);
+    for (const [ox, oz, c, h] of [[-0.06, -0.26, '#8a4a1a', 0.26], [0.08, -0.16, '#b8701a', 0.22], [-0.05, -0.05, '#2a4a2a', 0.28]] as const) {
+      vcyl(0.04, 0.04, h, c, vgloss, bx + ox, 0.78, bz + oz);
+      vcyl(0.014, 0.016, 0.07, c, vgloss, bx + ox, 0.78 + h, bz + oz);
+    }
+    b.add(new THREE.SphereGeometry(0.07, 16, 12).scale(1, 1.15, 1), paint('#e0eef4', 0.05, { transparent: true, opacity: 0.4 }), bx + 0.04, 0.86, bz + 0.12);
+    cyl(0.025, 0.025, 0.06, paint('#e0eef4', 0.05, { transparent: true, opacity: 0.4 }), bx + 0.04, 0.93, bz + 0.12);
+    for (const oz of [0.26, 0.33]) cyl(0.035, 0.032, 0.07, paint('#e0eef4', 0.05, { transparent: true, opacity: 0.35 }), bx - 0.08, 0.78, bz + oz);
+    cyl(0.04, 0.035, 0.2, steel, bx + 0.1, 0.78, bz + 0.3, 14);
+    for (let k = 0; k < 4; k++) vbox(0.2, 0.03, 0.26, ['#2a2a3a', '#8a3a2a', '#e8e0d0', '#3a5a7a'][k], vbook, bx, 0.22 + k * 0.03, bz - 0.15, 0, (R() - 0.5) * 0.2, 0);
+    solid(bx - 0.23, bz - 0.42, X1, bz + 0.42);
+    at.bar = v3(bx - 0.2, 1.0, bz);
   }
   // ---- the kitchen: flat-front cabinets (charcoal gloss below, white gloss to the soffit above),
   // white quartz, a grey subway backsplash, stainless appliances, a waterfall island with stools
@@ -1180,13 +1295,18 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
       hang(ART.clock, 0.3, X1 - T / 2 - 0.006, 2.2, -0.2, -Math.PI / 2, 0, bb);
     });
   }
-  // ---- the front door: mat, shoes, coat hooks with Marcus's flashlight, a key table
+  // ---- the front door: mat, shoes, coat hooks over a bench with Marcus's flashlight, a key table
   {
     const dz = (doorFront.a0 + doorFront.a1) / 2;
     box(0.6, 0.015, 0.95, pbrMat('knit', '#4a4c50'), X1 - 0.45, 0, dz);
     vrbox(0.12, 0.09, 0.26, 0.03, '#26305a', vpaint, X1 - 0.6, 0.015, dz - 0.6, 0, 0.3, 0);
     vrbox(0.12, 0.09, 0.26, 0.03, '#26305a', vpaint, X1 - 0.45, 0.015, dz - 0.72, 0, -0.2, 0);
-    vrbox(0.11, 0.14, 0.27, 0.03, '#6a3a2a', vpaint, X1 - 0.35, 0.015, dz + 0.72, 0, 0.1, 0);
+    // an oak bench under the coat hooks, boots tucked beneath
+    box(0.36, 0.04, 1.0, wood, X1 - 0.26, 0.42, 1.95);
+    for (const lz of [-0.44, 0.44]) box(0.32, 0.42, 0.03, wood, X1 - 0.26, 0, 1.95 + lz);
+    vrbox(0.11, 0.14, 0.27, 0.03, '#6a3a2a', vpaint, X1 - 0.3, 0, 1.75, 0, Math.PI / 2 + 0.1, 0);
+    vrbox(0.11, 0.14, 0.27, 0.03, '#6a3a2a', vpaint, X1 - 0.3, 0, 2.0, 0, Math.PI / 2 - 0.05, 0);
+    solid(X1 - 0.45, 1.43, X1, 2.47);
     decoOn(right, (bb) => {
       const wx = X1 - T / 2;
       box(0.03, 0.06, 1.0, matteBlack, wx - 0.015, 1.65, 1.9, 0, bb);
@@ -1196,19 +1316,27 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
       bb.add(new THREE.CylinderGeometry(0.022, 0.026, 0.2, 12), paint('#d8b030', 0.35, { metalness: 0.4 }), wx - 0.08, 1.52, 2.3);
       bb.add(new THREE.CylinderGeometry(0.032, 0.026, 0.05, 12), black, wx - 0.08, 1.41, 2.3);
       bb.add(new THREE.TorusGeometry(0.03, 0.005, 6, 12), black, wx - 0.08, 1.64, 2.3);
-      // a mirror by the door
-      bb.add(new THREE.BoxGeometry(0.03, 0.8, 0.5), matteBlack, wx - 0.015, 1.55, 5.2);
-      bb.add(new THREE.PlaneGeometry(0.42, 0.72).rotateY(-Math.PI / 2), paint('#b8ccd8', 0.04, { metalness: 0.9 }), wx - 0.032, 1.55, 5.2);
+    });
+    // a mirror over the key table, on the front wall in the corner by the door
+    decoOn(front, (bb) => {
+      const wz = Z1 - T / 2;
+      bb.add(new THREE.BoxGeometry(0.5, 0.8, 0.03), matteBlack, 8.95, 1.55, wz - 0.015);
+      bb.add(new THREE.PlaneGeometry(0.42, 0.72).rotateY(Math.PI), paint('#b8ccd8', 0.04, { metalness: 0.9 }), 8.95, 1.55, wz - 0.032);
     });
     // console table with a key bowl and mail, an umbrella in a stand
-    box(0.36, 0.04, 0.9, wood, X1 - 0.26, 0.8, 5.2);
-    for (const lz of [-0.4, 0.4]) box(0.03, 0.8, 0.03, matteBlack, X1 - 0.38, 0, 5.2 + lz);
-    cyl(0.1, 0.06, 0.05, paint('#3a6a8a', 0.4), X1 - 0.26, 0.84, 5.0);
-    vbox(0.2, 0.01, 0.14, '#f0ece0', vpaint, X1 - 0.26, 0.84, 5.4, 0, 0.3, 0);
-    vbox(0.2, 0.01, 0.14, '#e8d8c0', vpaint, X1 - 0.24, 0.85, 5.42, 0, -0.1, 0);
-    vcyl(0.09, 0.09, 0.42, '#2a2a2a', vpaint, X1 - 0.3, 0, 4.55);
-    b.add(new THREE.CylinderGeometry(0.012, 0.012, 0.9), black, X1 - 0.3, 0.5, 4.55, 0.06, 0, 0.05);
-    solid(X1 - 0.45, 4.4, X1, 5.65);
+    {
+      const kx = 8.95, kz = Z1 - T / 2 - 0.2;
+      box(0.9, 0.04, 0.36, wood, kx, 0.8, kz);
+      for (const lx of [-0.4, 0.4]) box(0.03, 0.8, 0.03, matteBlack, kx + lx, 0, kz - 0.12);
+      for (const lx of [-0.4, 0.4]) box(0.03, 0.8, 0.03, matteBlack, kx + lx, 0, kz + 0.12);
+      cyl(0.1, 0.06, 0.05, paint('#3a6a8a', 0.4), kx - 0.2, 0.84, kz);
+      vbox(0.2, 0.01, 0.14, '#f0ece0', vpaint, kx + 0.2, 0.84, kz, 0, 0.3, 0);
+      vbox(0.2, 0.01, 0.14, '#e8d8c0', vpaint, kx + 0.22, 0.85, kz + 0.02, 0, -0.1, 0);
+      solid(kx - 0.47, kz - 0.2, kx + 0.47, Z1);
+    }
+    vcyl(0.09, 0.09, 0.42, '#2a2a2a', vpaint, X1 - 0.24, 0, Z1 - 0.3);
+    b.add(new THREE.CylinderGeometry(0.012, 0.012, 0.9), black, X1 - 0.24, 0.5, Z1 - 0.3, 0.06, 0, 0.05);
+    solid(X1 - 0.35, Z1 - 0.42, X1, Z1);
     at.door = v3(X1 - 0.3, 1.0, dz);
     at.coat = v3(X1 - 0.25, 1.4, 1.9);
   }
@@ -1336,7 +1464,9 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
 
   // ------------------------------------------------------------------ Biscuit
   const cat = new Cat();
-  cat.group.position.set(-6.0, 0.66, -4.1); cat.group.rotation.y = Math.PI / 2 + 0.5;
+  // loafing in the dent of the beanbag, keeping an eye on the room
+  at.cat = v3(-8.3, 0.5, 0.35);
+  cat.group.position.copy(at.cat); cat.group.rotation.y = 2.3;
   root.add(cat.group);
 
   // ------------------------------------------------------------------ the computer screen
