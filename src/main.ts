@@ -1,4 +1,5 @@
-// Quiet Machines: a walkable vertical slice of a ruined Beacon Hill lane in stylized, lit 3D.
+// Quiet Machines: Day Zero in Theo's apartment, then a walkable vertical slice of a ruined Beacon Hill
+// lane two years later, in stylized, lit 3D.
 import '@fontsource/cormorant-garamond/500.css';
 import '@fontsource/cormorant-garamond/600.css';
 import '@fontsource/cormorant-garamond/700.css';
@@ -9,6 +10,9 @@ import { PBR_NAMES, pbr, setAnisotropy } from './textures';
 import { buildScene, heightAt, MOODS, Mood, Built } from './scene';
 import { Post, MAX_LIGHTS } from './post';
 import { Character, HERO, blobShadow, rim } from './character';
+import { buildApartment, Apartment } from './apartment';
+import { Dialogue, Interactable } from './dialogue';
+import { Prologue } from './prologue';
 import { wind } from './foliage';
 import { ash, embers, rain, fogBanks } from './fx';
 import { audio } from './audio';
@@ -44,11 +48,15 @@ async function boot() {
   // the player may have changed quality in the title's options
   gl.setPixelRatio(Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1));
 
-  const msgs = ['Weathering brick…', 'Laying flagstones…', 'Growing moss…', 'Rusting the cars…', 'Knitting a sweater…', 'Lighting the lamps…'];
+  // the game opens on Day Zero in the apartment; ?start=street jumps to Acorn Lane, two years later
+  const street = params.get('start') === 'street';
+  const msgs = street
+    ? ['Weathering brick…', 'Laying flagstones…', 'Growing moss…', 'Rusting the cars…', 'Knitting a sweater…', 'Lighting the lamps…']
+    : ['Sanding the floorboards…', 'Folding sweaters…', 'Watering Gerald…', 'Brewing coffee…', 'Fluffing the cat…', 'Opening the blinds…'];
   for (let i = 0; i < PBR_NAMES.length; i++) { setLoad((i / PBR_NAMES.length) * 0.7, msgs[i % msgs.length]); await nextFrame(); pbr(PBR_NAMES[i]); }
-  setLoad(0.75, 'Building the street…'); await nextFrame();
-  const built = buildScene(state.quality);
-  setLoad(0.9, 'Waking the machines…'); await nextFrame();
+  setLoad(0.75, street ? 'Building the street…' : 'Making the bed (badly)…'); await nextFrame();
+  const built = street ? buildScene(state.quality) : buildApartment(state.quality);
+  setLoad(0.9, street ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
   const app3 = new App(gl, built);
   setLoad(1, ''); await nextFrame();
   // compile shaders up front so the first frames don't hitch
@@ -66,10 +74,12 @@ async function boot() {
 class App {
   camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 1500);
   post: Post;
-  player = new Character(HERO);
+  player: Character;
   pShadow = blobShadow(0.42);
-  pos = new THREE.Vector3(0.6, 0, 5.2);
-  heading = Math.PI; // facing -z
+  pos = new THREE.Vector3();
+  heading = Math.PI;
+  /** heading the hero is turning toward to face something (null = free) */
+  turnTo: number | null = null;
   vel = new THREE.Vector3();
   t = 0;
   // camera
@@ -77,7 +87,7 @@ class App {
   cinT = 0;
   // fx
   ash = ash(state.quality === 'high' ? 2600 : 1200);
-  embers: ReturnType<typeof embers>;
+  embers: ReturnType<typeof embers> | null = null;
   rain = rain(state.quality === 'high' ? 5000 : 2200);
   banks = fogBanks([{ x: -1, y: 1.2, z: -24, s: 9 }, { x: 1.5, y: 0.9, z: -30, s: 10 }, { x: -2, y: 3.2, z: -40, s: 14 }, { x: 6, y: 4.2, z: -22, s: 8 }, { x: 0, y: 4, z: -52, s: 18 }]);
   pmrem: THREE.PMREMGenerator;
@@ -89,23 +99,96 @@ class App {
   look = { dx: 0, dy: 0 };
   ui: UI | undefined;
   fps = 60; scan = 0;
+  // story / interaction
+  dlg = new Dialogue(app);
+  prologue: Prologue | null = null;
+  /** cutscene: the hero can't move */
+  locked = false;
+  /** an interaction is running */
+  busyN = 0;
+  /** fixed camera shot during a cutscene */
+  shot: { pos: THREE.Vector3; look: THREE.Vector3 } | null = null;
+  focus: Interactable | null = null;
+  padA = false;
+  built!: Built;
 
-  constructor(public gl: THREE.WebGLRenderer, public built: Built) {
-    const s = built.scene;
-    s.add(this.player.group, this.pShadow, this.ash.obj, this.rain.obj, this.banks.obj, this.fill);
-    this.player.group.position.copy(this.pos);
-    this.embers = embers(built.emberOrigin, 90);
-    s.add(this.embers.obj);
-    this.post = new Post(gl, s, this.camera, state.quality === 'high' ? 4 : 0);
+  constructor(public gl: THREE.WebGLRenderer, built: Built) {
+    this.player = new Character(built.hero ?? HERO);
+    this.post = new Post(gl, built.scene, this.camera, state.quality === 'high' ? 4 : 0);
     this.pmrem = new THREE.PMREMGenerator(gl);
+    this.dlg.onInteract = () => void this.interact();
     this.applyQuality();
-    this.applyMood();
-    if (state.cam === 'cinematic') { state.cam = 'follow'; this.setCam('cinematic', false); }
-    this.resetCamera();
+    this.attach(built);
     this.bindInput();
     this.ui = new UI(this);
+    this.ui.sync();
     addEventListener('resize', () => this.resize());
     this.resize();
+  }
+
+  get interior() { return this.built.kind === 'interior'; }
+  /** indoors the camera is either a shoulder-height follow cam or a low overhead view (the JRPG setting) */
+  get indoorFollow() { return this.interior && state.cam !== 'jrpg'; }
+
+  /** Put the shared actors (hero, weather, fill light) into a level and set it up. */
+  attach(built: Built) {
+    this.built = built;
+    const s = built.scene;
+    s.add(this.player.group, this.pShadow, this.ash.obj, this.rain.obj, this.banks.obj, this.fill);
+    this.banks.obj.visible = built.kind === 'street';
+    if (this.embers) this.embers.obj.removeFromParent();
+    this.embers = built.emberOrigin ? embers(built.emberOrigin, 90) : null;
+    if (this.embers) s.add(this.embers.obj);
+    this.post.setScene(s);
+    this.post.normalHidden = built.normalHidden ?? [];
+    this.pos.set(built.spawn.x, 0, built.spawn.z); this.heading = built.spawn.heading;
+    this.player.group.position.copy(this.pos);
+    this.applyMood();
+    if (!this.interior && state.cam === 'cinematic') { state.cam = 'follow'; this.setCam('cinematic', false); }
+    this.resetCamera();
+    if (this.interior) {
+      this.prologue = new Prologue({
+        apt: built as Apartment, dlg: this.dlg,
+        lock: (on) => { this.locked = on; },
+        shot: (sh) => { this.shot = sh; },
+        face: (p) => this.faceTo(p),
+        busy: () => this.busyN > 0 || this.dlg.open || this.locked,
+        hero: () => this.pos,
+        toStreet: () => this.toStreet(),
+        streetIntro: () => this.streetIntro(),
+      });
+    } else this.prologue = null;
+    this.ui?.sync();
+  }
+
+  /** Day Zero is over: build Acorn Lane (while the screen is black) and move into it. */
+  async toStreet() {
+    await nextFrame();
+    const next = buildScene(state.quality);
+    await nextFrame();
+    const old = this.built;
+    // two years later Theo carries everything he owns
+    this.player.group.removeFromParent();
+    this.player = new Character(HERO);
+    this.focus = null; this.dlg.setPrompt(null); this.dlg.objective(null);
+    this.shot = null; this.locked = false;
+    this.attach(next);
+    this.gl.compile(next.scene, this.camera);
+    old.scene.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    if (state.sound) { audio.ambience(next.ambience); audio.playMusic(next.music, 4); }
+    // open on the cinematic shots (not saved: the player's own camera setting comes back after)
+    this.setCam('cinematic', false);
+    setTimeout(() => this.ui?.titleCard(), 2400);
+  }
+
+  /** Acorn Lane's opening: 30 s of the cinematic shots, then a quick fade into the follow camera. */
+  async streetIntro() {
+    const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    await wait(30000);
+    await this.dlg.fade(1, 700);
+    this.setCam('follow', false);
+    await wait(200);
+    await this.dlg.fade(0, 1000);
   }
 
   start() {
@@ -116,6 +199,11 @@ class App {
       this.frame(Math.min(0.05, real));
     });
     if (params.get('card') !== '0') this.ui?.titleCard();
+    if (this.prologue) {
+      if (params.get('card') === '0') { void this.dlg.fade(0, 10).then(() => { this.dlg.objective('Start your day. Look around.'); }); return; }
+      this.dlg.fade(1, 0);
+      void this.prologue.intro();
+    }
   }
 
   resize() {
@@ -126,7 +214,7 @@ class App {
   }
 
   // ---------------------------------------------------------------- settings
-  get mood(): Mood { return MOODS[state.mood]; }
+  get mood(): Mood { return this.built.mood ?? MOODS[state.mood]; }
 
   applyMood() {
     const m = this.mood, b = this.built;
@@ -168,9 +256,10 @@ class App {
     this.resize?.();
   }
 
-  setMood(k: keyof typeof MOODS) { state.mood = k; this.applyMood(); this.ui?.sync(); saveSettings(); }
+  setMood(k: keyof typeof MOODS) { state.mood = k; if (!this.interior) this.applyMood(); this.ui?.sync(); saveSettings(); }
   private savedPose: { pos: THREE.Vector3; heading: number } | null = null;
   setCam(c: CamMode, persist = true) {
+    if (this.interior) { state.cam = c === 'cinematic' ? 'follow' : c; this.resetCamera(); this.ui?.sync(); if (persist) saveSettings(); return; }
     if (c === 'cinematic' && state.cam !== 'cinematic') {
       this.savedPose = { pos: this.pos.clone(), heading: this.heading };
       this.pos.set(CINE_POSE.x, 0, CINE_POSE.z); this.heading = CINE_POSE.heading;
@@ -194,6 +283,14 @@ class App {
   }
 
   resetCamera() {
+    if (this.interior) {
+      (this.built as Apartment).setFollow?.(this.indoorFollow);
+      if (this.indoorFollow) { this.yaw = this.heading + Math.PI; this.pitch = 0.3; this.dist = 3.2; this.camera.fov = 50; }
+      else { this.yaw = 0; this.pitch = 0.68; this.dist = 6.2; this.camera.fov = 42; }
+      this.camera.updateProjectionMatrix();
+      this.placeCamera(1, true);
+      return;
+    }
     this.yaw = state.cam === 'jrpg' ? Math.PI / 2 : 0; this.pitch = state.cam === 'jrpg' ? 0.6 : 0.24; this.dist = state.cam === 'jrpg' ? 14 : 5.0;
     this.camera.fov = state.cam === 'jrpg' ? 30 : 40; this.camera.updateProjectionMatrix();
     this.placeCamera(1, true);
@@ -204,11 +301,12 @@ class App {
     addEventListener('keydown', (e) => {
       this.keys.add(e.code);
       this.enableAudio();
+      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyF') { e.preventDefault(); if (!e.repeat) this.dlg.press(); return; }
       if (e.repeat) return;
       if (e.code === 'Digit1') this.setMood('ashfall');
       if (e.code === 'Digit2') this.setMood('curfew');
       if (e.code === 'Digit3') this.setMood('pall');
-      if (e.code === 'KeyC') this.setCam(CAMS[(CAMS.indexOf(state.cam) + 1) % CAMS.length]);
+      if (e.code === 'KeyC') this.setCam(this.interior ? (state.cam === 'jrpg' ? 'follow' : 'jrpg') : CAMS[(CAMS.indexOf(state.cam) + 1) % CAMS.length]);
       if (e.code === 'KeyH') { state.ui = !state.ui; this.ui?.sync(); }
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -218,6 +316,7 @@ class App {
   }
 
   zoom(delta: number) {
+    if (this.interior) { this.dist = THREE.MathUtils.clamp(this.dist + delta, this.indoorFollow ? 1.8 : 4, this.indoorFollow ? 5 : 9); return; }
     const jrpg = state.cam === 'jrpg';
     this.dist = THREE.MathUtils.clamp(this.dist + delta, jrpg ? 9 : 2.6, jrpg ? 22 : 9);
   }
@@ -286,6 +385,8 @@ class App {
       const a = active.get(e.pointerId);
       if (!a) return;
       if (a.stick) { this.stick.x = this.stick.y = 0; stickEl.style.display = 'none'; stickId = null; }
+      // a tap (not a drag) advances dialogue
+      else if (this.dlg.open && Math.hypot(a.x - a.ox, a.y - a.oy) < 8) this.dlg.press();
       active.delete(e.pointerId);
       pinch = 0;
       // iOS only unlocks Web Audio inside a touchend/click gesture
@@ -308,7 +409,8 @@ class App {
   enableAudio() {
     if (state.sound) { try { audio.init(); } catch { /* resume only */ } return; }
     state.sound = true;
-    try { audio.init(); audio.ambience('wind'); audio.playMusic('static', 3); } catch { /* audio is optional */ }
+    const music = this.prologue ? this.prologue.music : this.built.music;
+    try { audio.init(); audio.ambience(this.built.ambience); audio.playMusic(music, 3); } catch { /* audio is optional */ }
     this.ui?.sync();
   }
 
@@ -320,16 +422,54 @@ class App {
     if (k.has('KeyA') || k.has('ArrowLeft')) v.x -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) v.x += 1;
     v.x += this.stick.x; v.y -= this.stick.y;
+    let padA = false;
     for (const p of navigator.getGamepads?.() ?? []) {
       if (!p) continue;
+      padA ||= !!p.buttons[0]?.pressed;
       const ax = p.axes[0] ?? 0, ay = p.axes[1] ?? 0;
       if (Math.hypot(ax, ay) > 0.18) { v.x += ax; v.y -= ay; }
       const cx = p.axes[2] ?? 0, cy = p.axes[3] ?? 0;
       if (Math.abs(cx) > 0.15) { this.look.dx += cx * 14; this.lastLook = this.t; }
       if (Math.abs(cy) > 0.15) this.look.dy += cy * 10;
     }
+    if (padA && !this.padA) this.dlg.press();
+    this.padA = padA;
     if (v.lengthSq() > 1) v.normalize();
     return v;
+  }
+
+  // ---------------------------------------------------------------- interaction
+  get frozen() { return this.locked || this.busyN > 0 || this.dlg.open; }
+
+  async interact() {
+    const f = this.focus;
+    if (!f || this.frozen) return;
+    this.busyN++;
+    this.faceTo(f.pos);
+    this.dlg.setPrompt(null);
+    try { await f.use(); } finally { this.busyN--; }
+  }
+
+  faceTo(p: THREE.Vector3) { this.turnTo = Math.atan2(p.x - this.pos.x, p.z - this.pos.z); }
+
+  /** the closest usable thing in reach, favouring what the hero is facing */
+  updateFocus() {
+    const items = this.prologue?.items;
+    let best: Interactable | null = null, bestS = Infinity;
+    if (items && !this.frozen) {
+      const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+      for (const i of items) {
+        if (i.enabled && !i.enabled()) continue;
+        const dx = i.pos.x - this.pos.x, dz = i.pos.z - this.pos.z, d = Math.hypot(dx, dz);
+        if (d > i.radius) continue;
+        const s = d - ((dx * fx + dz * fz) / Math.max(d, 1e-3)) * 0.45;
+        if (s < bestS) { bestS = s; best = i; }
+      }
+    }
+    this.focus = best;
+    if (!best) { this.dlg.setPrompt(null); return; }
+    const sp = best.pos.clone().add(new THREE.Vector3(0, 0.3, 0)).project(this.camera);
+    this.dlg.setPrompt(best, { x: (sp.x + 1) / 2 * innerWidth, y: (1 - sp.y) / 2 * innerHeight });
   }
 
   // ---------------------------------------------------------------- simulation
@@ -339,7 +479,7 @@ class App {
     return false;
   }
   canStand(x: number, z: number, fromY: number) {
-    const h = heightAt(x, z);
+    const h = this.built.heightAt(x, z);
     return !isNaN(h) && Math.abs(h - fromY) < 0.45 && !this.blocked(x, z);
   }
 
@@ -347,7 +487,9 @@ class App {
     this.t += dt;
     wind.value += dt;
     const run = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || Math.hypot(this.stick.x, this.stick.y) > 0.95;
-    const mv = state.cam === 'cinematic' ? new THREE.Vector2() : this.readMove();
+    const mv0 = this.readMove();
+    const mv = (state.cam === 'cinematic' && !this.interior) || this.frozen ? new THREE.Vector2() : mv0;
+    const heightAt = this.built.heightAt;
     let speed = 0;
     if (mv.lengthSq() > 0.001) {
       const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
@@ -362,6 +504,11 @@ class App {
       const target = Math.atan2(dx, dz);
       let d = target - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.heading += d * Math.min(1, dt * 10);
+    }
+    if (this.turnTo !== null) {
+      let d = this.turnTo - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
+      this.heading += d * Math.min(1, dt * 8);
+      if (Math.abs(d) < 0.02 || speed > 0.1) this.turnTo = null;
     }
     const gy = heightAt(this.pos.x, this.pos.z);
     if (!isNaN(gy)) this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 14);
@@ -385,16 +532,32 @@ class App {
     this.built.sky.update(this.t, this.camera.position);
     this.ash.update(this.t, this.camera.position);
     this.rain.update(this.t, this.camera.position);
-    this.embers.update(this.t);
+    this.embers?.update(this.t);
     this.banks.update(this.t, this.camera);
-    this.post.dof.target = state.cam === 'jrpg' ? this.pos.clone().add(new THREE.Vector3(0, 1, 0)) : this.pos.clone().add(new THREE.Vector3(0, 1.2, 0));
+    this.post.dof.target = this.shot ? this.shot.look.clone() : state.cam === 'jrpg' ? this.pos.clone().add(new THREE.Vector3(0, 1, 0)) : this.pos.clone().add(new THREE.Vector3(0, 1.2, 0));
+    this.prologue?.update(dt);
+    this.dlg.tick(dt);
+    this.updateFocus();
     this.post.render(dt);
-    this.ui?.tick();
   }
 
   updateCamera(dt: number, speed: number) {
     const L = this.look; L.dx *= 1; L.dy *= 1;
-    if (state.cam !== 'cinematic') {
+    if (this.indoorFollow) {
+      this.yaw -= L.dx * 0.005;
+      this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.004, 0.05, 0.75);
+      if (this.keys.has('KeyQ')) { this.yaw += dt * 1.6; this.lastLook = this.t; }
+      if (this.keys.has('KeyE')) { this.yaw -= dt * 1.6; this.lastLook = this.t; }
+      // swing back behind the hero while walking, a little quicker than outdoors (rooms are small)
+      if (speed > 0.5 && this.t - this.lastLook > 1.5) {
+        let d = this.heading + Math.PI - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+        if (Math.abs(d) < 2.6) this.yaw += d * Math.min(1, dt * 1.4);
+      }
+    } else if (this.interior) {
+      // overhead camera: orbit a little around the room, never behind the back wall
+      this.yaw = THREE.MathUtils.clamp(this.yaw - L.dx * 0.004 + (this.keys.has('KeyQ') ? dt * 1.2 : 0) - (this.keys.has('KeyE') ? dt * 1.2 : 0), -0.85, 0.85);
+      this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.003, 0.45, 1.0);
+    } else if (state.cam !== 'cinematic') {
       this.yaw -= L.dx * 0.005;
       this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.004, state.cam === 'jrpg' ? 0.45 : -0.05, state.cam === 'jrpg' ? 1.1 : 0.75);
       if (this.keys.has('KeyQ')) { this.yaw += dt * 1.6; this.lastLook = this.t; }
@@ -413,7 +576,32 @@ class App {
   placeCamera(dt: number, snap: boolean) {
     const k = snap ? 1 : 1 - Math.exp(-dt * 6);
     let pos: THREE.Vector3, look: THREE.Vector3;
-    if (state.cam === 'cinematic') {
+    if (this.interior) {
+      if (this.shot) { pos = this.shot.pos; look = this.shot.look; } else {
+        const follow = this.indoorFollow;
+        const target = this.pos.clone().add(new THREE.Vector3(0, follow ? 1.3 : 0.9, 0));
+        const cp = Math.cos(this.pitch);
+        pos = target.clone().add(new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp).multiplyScalar(this.dist));
+        look = target;
+        if (follow) {
+          // look a little past the hero, and keep the camera inside the apartment, under the ceiling
+          look = target.clone().add(new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).multiplyScalar(0.9)).add(new THREE.Vector3(0, 0.1, 0));
+          // pull in in front of any wall between the hero and the camera
+          const t = (this.built as Apartment).cameraBlock(target, pos);
+          if (t < 1) {
+            pos.lerpVectors(target, pos, Math.max(0.12, t - 0.25 / Math.max(this.dist, 0.1)));
+            // squeezed against a wall: rise and look down over the hero's shoulder instead
+            pos.y += (1 - t) * 0.9;
+          }
+          pos.y = THREE.MathUtils.clamp(pos.y, 0.6, 2.65);
+        }
+      }
+      // the hero steps out of frame when a cutscene shot would look through the back of their head
+      this.player.group.visible = !this.shot || this.camPos.distanceTo(this.pos.clone().setY(this.pos.y + 1.4)) > 2.4;
+      const ks = snap ? 1 : 1 - Math.exp(-dt * (this.shot ? 2.2 : 5));
+      this.ui?.cineFade(0);
+      this.camPos.lerp(pos, ks); this.camLook.lerp(look, snap ? 1 : 1 - Math.exp(-dt * (this.shot ? 2.2 : 8)));
+    } else if (state.cam === 'cinematic') {
       this.cinT += dt;
       const shots = CINE;
       const T = 12, i = Math.floor(this.cinT / T) % shots.length, f = (this.cinT % T) / T;
@@ -449,9 +637,10 @@ class App {
     this.camera.lookAt(this.camLook);
     this.camera.updateMatrixWorld();
     this.fill.position.copy(this.camPos).lerp(this.pos, 0.6).add(new THREE.Vector3(0, 1.0, 0));
-    this.fill.intensity = state.cam === 'follow' ? 2.5 * this.mood.fill : 0;
-    // keep the directional shadow frustum centred on the action
-    const m = this.built.moon, c = state.cam === 'cinematic' ? this.camLook : this.pos;
+    this.fill.intensity = state.cam === 'follow' || this.interior ? 2.5 * this.mood.fill : 0;
+    // keep the directional shadow frustum centred on the action (indoors it stays put, so the
+    // window light doesn't shimmer as the hero walks)
+    const m = this.built.moon, c = this.interior ? ROOM_CENTER : state.cam === 'cinematic' ? this.camLook : this.pos;
     const dir = m.position.clone().sub(m.target.position).normalize();
     m.target.position.set(c.x, 0, c.z);
     m.position.copy(m.target.position).addScaledVector(dir, 60);
@@ -472,6 +661,7 @@ class App {
     });
     f.set('nLights', cand.length);
     // drone searchlight beam
+    if (!this.built.drone) { f.set('spotLen', 0); return; }
     const s = this.built.drone.spot;
     const sp = s.getWorldPosition(new THREE.Vector3()), st = s.target.getWorldPosition(new THREE.Vector3());
     f.u<THREE.Vector3>('spotPos').copy(sp);
@@ -482,6 +672,7 @@ class App {
   }
 
   updateScan(dt: number) {
+    if (!this.built.drone) { this.scan = 0; this.ui?.setScan(0); return; }
     const s = this.built.drone.spot;
     const sp = s.getWorldPosition(new THREE.Vector3()), st = s.target.getWorldPosition(new THREE.Vector3());
     const dir = st.sub(sp).normalize();
@@ -502,6 +693,7 @@ const CINE = [
   { from: v(5.6, 4.6, 2), to: v(5.0, 5.4, -4), lookFrom: v(-2, 2, -14), lookTo: v(-1, 6, -17) },
   { from: v(4.3, 4.5, -14.6), to: v(4.6, 4.5, -16.8), lookFrom: v(6.6, 4.3, -21), lookTo: v(6.6, 4.4, -21) },
 ];
+const ROOM_CENTER = v(0, 0, 0);
 /** where the hero stands while the cinematic plays */
 const CINE_POSE = { x: 0.6, z: -1.5, heading: Math.PI };
 
@@ -510,61 +702,27 @@ function el(tag: string, cls: string, html = '') { const e = document.createElem
 
 class UI {
   root = el('div', 'ui');
-  panel: HTMLElement;
-  fpsEl: HTMLElement;
   scanEl = el('div', 'scan', '<span>COMPLIANCE SCAN</span>');
   scanVig = el('div', 'scanvig');
   cine = el('div', 'cinefade');
   bars = el('div', 'bars', '<i></i><i></i>');
-  blurb: HTMLElement;
-  toggle: HTMLElement;
   constructor(private a: App) {
     this.root.innerHTML = `
       <div class="brand"><div class="b1">QUIET MACHINES</div><div class="b2">Prologue · Static</div></div>
-      <div class="panel">
-        <div class="ptitle">Settings <span>saved on this device</span></div>
-        <div class="sec"><div class="lab">Mood <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
-          <div class="seg" data-k="mood">${Object.entries(MOODS).map(([k, m]) => `<button data-v="${k}">${m.name}</button>`).join('')}</div>
-          <div class="blurb"></div></div>
-        <div class="sec"><div class="lab">Camera <kbd>C</kbd></div>
-          <div class="seg" data-k="cam"><button data-v="follow">Follow</button><button data-v="jrpg">JRPG</button><button data-v="cinematic">Cinematic</button></div></div>
-        <div class="sec"><div class="lab">Quality</div>
-          <div class="seg" data-k="q"><button data-v="high">High</button><button data-v="low">Low</button></div></div>
-        <div class="foot"><span class="fps"></span><span>${isTouch ? '' : 'H hides UI'}</span></div>
-      </div>
-      <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run) · <b>right thumb</b> look · <b>pinch</b> zoom' : '<b>WASD</b> move · <b>Shift</b> run · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
-    this.panel = this.root.querySelector('.panel')!;
-    this.fpsEl = this.root.querySelector('.fps')!;
-    this.blurb = this.root.querySelector('.blurb')!;
-    // always-visible toggle so the panel can be hidden without a keyboard (iPad)
-    this.toggle = el('button', 'uitoggle', '');
-    this.toggle.setAttribute('aria-label', 'Toggle settings');
-    this.toggle.addEventListener('click', () => { state.ui = !state.ui; this.sync(); });
-    app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl, this.toggle);
-    this.root.querySelectorAll<HTMLElement>('.seg').forEach((seg) => seg.addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest('button'); if (!b) return;
-      const k = seg.dataset.k, val = b.dataset.v!;
-      if (k === 'mood') a.setMood(val as any);
-      if (k === 'cam') a.setCam(val as CamMode);
-      if (k === 'q') a.setQuality(val as any);
-    }));
+      <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run · <b>Space</b> interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
+    app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl);
     this.sync();
   }
   sync() {
-    const cur: Record<string, string> = { mood: state.mood, cam: state.cam, q: state.quality };
-    this.root.querySelectorAll<HTMLElement>('.seg').forEach((seg) => seg.querySelectorAll<HTMLElement>('button').forEach((b) => b.classList.toggle('on', cur[seg.dataset.k!] === b.dataset.v)));
-    this.blurb.textContent = MOODS[state.mood].blurb;
     this.root.classList.toggle('hidden', !state.ui);
-    this.toggle.textContent = state.ui ? '×' : '☰';
-    this.toggle.classList.toggle('off', !state.ui);
-    this.bars.classList.toggle('on', state.cam === 'cinematic');
+    this.root.querySelector('.b2')!.textContent = this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static';
+    this.bars.classList.toggle('on', state.cam === 'cinematic' && !this.a.interior);
   }
-  private n = 0;
-  tick() { if (++this.n % 20 === 0) this.fpsEl.textContent = `${Math.round(this.a.fps)} fps`; }
   setScan(k: number) { this.scanEl.style.opacity = String(k > 0.05 ? Math.min(1, k * 1.4) * (0.75 + 0.25 * Math.sin(performance.now() / 90)) : 0); this.scanVig.style.opacity = String(k * 0.9); }
   cineFade(k: number) { this.cine.style.opacity = String(k); }
   titleCard() {
-    const c = el('div', 'titlecard', '<div class="t1">ACORN LANE</div><div class="rule"></div><div class="t2">Beacon Hill · two years after</div>');
+    const [t1, t2] = this.a.built.card;
+    const c = el('div', 'titlecard', `<div class="t1">${t1}</div><div class="rule"></div><div class="t2">${t2}</div>`);
     app.appendChild(c);
     setTimeout(() => c.classList.add('show'), 600);
     setTimeout(() => c.classList.remove('show'), 5200);

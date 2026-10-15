@@ -12,6 +12,7 @@ import { rowhouse, poster, graffiti, placeAABB, AABB } from './buildings';
 import { pbrMat, gasLamp, hangingLantern, barrelFire, wreckedCar, drone, stringLights, balustrade, rubble, trashBags, crate, FogLight, flickerUpdate, ironMat } from './props';
 import { skyDome, skyline, SkySettings } from './sky';
 import { Character, CONVERTED, blobShadow } from './character';
+import type { Char3DSpec } from './character';
 import type { Grade, FogSettings } from './post';
 
 export const TERRACE_Y = 3.2;
@@ -83,21 +84,34 @@ export const MOODS: Record<string, Mood> = {
   },
 };
 
+/** A playable level: the street (outdoors, with moods) or an interior with its own fixed lighting. */
 export interface Built {
+  kind: 'street' | 'interior';
   scene: THREE.Scene;
   sky: ReturnType<typeof skyDome>;
   lights: FogLight[];
   colliders: AABB[];
   converted: Character[];
-  drone: ReturnType<typeof drone>;
   moon: THREE.DirectionalLight;
   hemi: THREE.HemisphereLight;
   wetMats: { m: THREE.MeshStandardMaterial; rough: number; color: THREE.Color }[];
   puddles: THREE.Object3D;
   update: (dt: number, t: number, cam: THREE.Camera, player: THREE.Vector3) => void;
-  emberOrigin: THREE.Vector3;
-  lanternPivots: THREE.Group[];
-  pois: THREE.Vector3[];
+  /** walkable ground height, or NaN where the hero can't stand */
+  heightAt: (x: number, z: number) => number;
+  spawn: { x: number; z: number; heading: number };
+  /** area title card: [name, subtitle] */
+  card: [string, string];
+  music: string; ambience: string;
+  /** fixed lighting (interiors ignore the player's mood setting) */
+  mood?: Mood;
+  hero?: Char3DSpec;
+  drone?: ReturnType<typeof drone>;
+  emberOrigin?: THREE.Vector3;
+  /** kept out of the SSAO normal pass */
+  normalHidden?: THREE.Object3D[];
+  lanternPivots?: THREE.Group[];
+  pois?: THREE.Vector3[];
 }
 
 export function buildScene(quality: 'high' | 'low'): Built {
@@ -396,7 +410,11 @@ export function buildScene(quality: 'high' | 'low'): Built {
   const pois = [new THREE.Vector3(1.5, 1.2, -4.6), new THREE.Vector3(0.4, 1.5, -26), new THREE.Vector3(-4.3, 5, 3), new THREE.Vector3(4.8, 2, -8), new THREE.Vector3(-2.7, 1, -15.6)];
 
   return {
+    kind: 'street',
     scene, sky, lights, colliders, converted, drone: dr, moon, hemi, wetMats, puddles, lanternPivots, pois,
+    heightAt, spawn: { x: 0.6, z: 5.2, heading: Math.PI },
+    card: ['ACORN LANE', 'Beacon Hill · two years after'],
+    music: 'static', ambience: 'wind',
     emberOrigin: fire.emberOrigin,
     update(dt, t, cam, player) {
       for (const u of updaters) u(dt, t, cam, player);

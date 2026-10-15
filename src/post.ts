@@ -256,6 +256,8 @@ export class Post {
   private aoPass: EffectPass;
   private dofPass: EffectPass;
   quality: 'high' | 'low' = 'high';
+  /** objects left out of the normal pass (additive light shafts, shadow-only casters) so SSAO ignores them */
+  normalHidden: THREE.Object3D[] = [];
   private pong = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
 
   constructor(private gl: THREE.WebGLRenderer, scene: THREE.Scene, private camera: THREE.PerspectiveCamera, msaa: number) {
@@ -289,6 +291,11 @@ export class Post {
     this.composer.addPass(new EffectPass(camera, this.bloom, this.tone, this.grade));
     this.composer.addPass(new EffectPass(camera, this.chroma));
     this.composer.addPass(new EffectPass(camera, this.vignette, this.noise));
+  }
+
+  /** Render a different scene through the same stack (level changes). */
+  setScene(scene: THREE.Scene) {
+    this.composer.setMainScene(scene);
   }
 
   setQuality(q: 'high' | 'low') {
@@ -345,7 +352,10 @@ export class Post {
     let input = scene, output = c.outputBuffer;
     for (const pass of c.passes) {
       if (!pass.enabled) continue;
+      const hide = pass === this.normalPass && this.normalHidden.length > 0;
+      if (hide) for (const o of this.normalHidden) o.visible = false;
       pass.render(gl, input, output, dt, false);
+      if (hide) for (const o of this.normalHidden) o.visible = true;
       if (pass.needsSwap) {
         const next = input === scene ? this.pong : input;
         input = output; output = next;

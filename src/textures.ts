@@ -194,6 +194,169 @@ const GEN: Record<string, () => PBRSet> = {
     return [g, g * 0.98, g * 0.97, p, 0.55 + p * 0.1];
   }),
   /** Asphalt / packed earth for the far road. */
+  /** Clean furniture wood: long warm grain streaks and soft figure, no grime. Near-white (tint it). */
+  finewood: () => build(512, 1.6, (u, v) => {
+    const warp = fbm(u, v, 3, 3, 111) * 0.6;
+    const ring = Math.sin((u * 18 + warp * 6 + vnoise(u * 6, v * 1.5, 6, 112) * 1.5) * Math.PI * 2) * 0.5 + 0.5;
+    const streak = vnoise(u * 90, v * 3, 90, 113);
+    const g = 0.78 + ring * 0.12 + streak * 0.1;
+    const c = mixc([g * 0.96, g * 0.86, g * 0.72], [g, g * 0.95, g * 0.86], ring);
+    return [c[0], c[1], c[2], ring * 0.25 + streak * 0.2, 0.42 + streak * 0.18];
+  }),
+  /** Soft upholstery / linen weave: bright and clean, a little slub. Neutral (tint it). */
+  linen: () => build(256, 2.2, (u, v) => {
+    const a = Math.sin(u * 96 * Math.PI) ** 2, b = Math.sin(v * 96 * Math.PI) ** 2;
+    const slub = vnoise(u * 40, v * 160, 40, 121) * 0.5 + vnoise(u * 160, v * 30, 160, 122) * 0.5;
+    const g = 0.88 + Math.max(a, b) * 0.08 + slub * 0.06;
+    return [g, g, g * 0.98, Math.max(a, b) * 0.5 + slub * 0.3, 0.95];
+  }),
+  /** Clean interior brick: warm, varied reds with pale lime mortar, no soot. */
+  cleanbrick: () => {
+    const pal = ['#a8503a', '#b85e44', '#9a4632', '#c4704e', '#8e4030', '#b0624a', '#a25a40'].map(hex);
+    return build(1024, 3.5, (u, v) => {
+      const rows = 24, per = 8;
+      const ry = v * rows, row = Math.floor(ry), fy = ry - row;
+      const rx = u * per + (row % 2) * 0.5, cx = Math.floor(rx), fx = rx - cx;
+      const edge = Math.min(sstep(0, 0.035, fx), sstep(0, 0.035, 1 - fx), sstep(0, 0.11, fy), sstep(0, 0.11, 1 - fy));
+      const k = Math.abs((Math.sin((cx % per) * 127.1 + row * 311.7) * 43758.5453) % 1);
+      let c = pal[Math.floor(k * pal.length) % pal.length];
+      const n = fbm(u, v, 16, 4, 131);
+      c = mixc(c, hex('#d89070'), n * 0.25);
+      const mortar = mixc(hex('#e0d8c8'), hex('#c8bea8'), fbm(u, v, 40, 2, 132));
+      const out = mixc(mortar, c, edge);
+      return [out[0], out[1], out[2], edge * (0.75 + n * 0.25), 0.85 - edge * 0.05];
+    });
+  },
+  /** A woven rug: border bands and a diamond field, in its own colours (don't tint). */
+  rug: () => build(512, 2, (u, v) => {
+    const d = Math.min(u, v, 1 - u, 1 - v);
+    const weave = (Math.sin(u * 256 * Math.PI) ** 2) * 0.05 + vnoise(u * 200, v * 200, 200, 141) * 0.05;
+    let c = hex('#b8503c');
+    if (d < 0.06) c = hex('#2e4a6a');
+    else if (d < 0.08) c = hex('#e8d4a8');
+    else if (d < 0.12) c = hex('#d8963c');
+    else if (d < 0.135) c = hex('#e8d4a8');
+    else {
+      const x = (u - 0.5) * 6, y = (v - 0.5) * 6;
+      const dm = Math.abs(x - Math.round(x)) + Math.abs(y - Math.round(y));
+      if (dm < 0.18) c = hex('#e8d4a8'); else if (dm < 0.3) c = hex('#2e4a6a'); else if (Math.abs(dm - 0.75) < 0.05) c = hex('#d8963c');
+    }
+    const g = 1 - weave;
+    return [c[0] * g, c[1] * g, c[2] * g, weave * 4, 0.97];
+  }),
+  /** Warm oak floorboards: staggered plank ends, clean grain, a little sheen (for interiors). */
+  oak: () => build(512, 2.2, (u, v) => {
+    const planks = 6, px = u * planks, pi = Math.floor(px), fx = px - pi;
+    // each plank row is cut at its own offset so the end joints stagger
+    const off = Math.abs(Math.sin(pi * 78.233)), pv = v * 2 + off, pj = Math.floor(pv), fy = pv - pj;
+    const gap = Math.min(sstep(0, 0.03, fx), sstep(0, 0.03, 1 - fx), sstep(0, 0.006, fy), sstep(0, 0.006, 1 - fy));
+    const id = pi * 7 + pj * 3;
+    const grain = vnoise(u * 30 + id * 5.1, v * 2.5, 30, 64) * 0.55 + vnoise(u * 140, v * 7, 140, 65) * 0.45;
+    const tone = Math.abs(Math.sin(id * 12.9898)) * 0.6;
+    let c = mixc(hex('#b07a4a'), hex('#d8a46c'), grain * 0.5 + tone * 0.5);
+    c = mixc(c, hex('#8a5a34'), sstep(0.6, 0.9, vnoise(u * 60 + id, v * 4, 60, 66)) * 0.35);
+    c = mixc(c, hex('#3a2616'), 1 - gap);
+    return [c[0], c[1], c[2], gap * (0.6 + grain * 0.3), 0.55 + grain * 0.2];
+  }),
+  /** Painted plaster: a soft roller texture with faint trowel blooms. Neutral (tint with color). */
+  plaster: () => build(256, 1.2, (u, v) => {
+    const n = fbm(u, v, 8, 4, 91), f = vnoise(u * 120, v * 120, 120, 92);
+    const g = 0.93 + n * 0.05 + f * 0.02;
+    return [g, g, g * 0.99, n * 0.5 + f * 0.2, 0.85 + f * 0.1];
+  }),
+  /** Small white subway tile with grey grout. */
+  tile: () => build(256, 3, (u, v) => {
+    const cx = u * 4, cy = v * 8 + (Math.floor(u * 4) % 2) * 0.5;
+    const fx = cx - Math.floor(cx), fy = cy - Math.floor(cy);
+    const grout = Math.min(sstep(0, 0.04, fx), sstep(0, 0.04, 1 - fx), sstep(0, 0.07, fy), sstep(0, 0.07, 1 - fy));
+    const n = vnoise(u * 40, v * 40, 40, 93) * 0.04;
+    const c = mixc(hex('#a8a49c'), [0.94 + n, 0.94 + n, 0.92 + n], grout);
+    return [c[0], c[1], c[2], grout * 0.8, lerp(0.8, 0.12, grout)];
+  }),
+  /**
+   * Faded vintage wallpaper: cream ground, sage stripes with a hand-painted climbing vine, a little
+   * sun-bleaching and age. In its own colours (tint only to darken). One tile = 2 m with uv 0.5.
+   */
+  wallpaper: () => build(512, 1.4, (u, v) => {
+    const cols = 4, cu = u * cols, ci = Math.floor(cu), fx = cu - ci;
+    const paper = vnoise(u * 256, v * 256, 256, 151) * 0.04 + fbm(u, v, 6, 3, 152) * 0.06;
+    let c = mixc(hex('#efe2c4'), hex('#e4d2ae'), fbm(u, v, 3, 3, 153));
+    // a pale sage band down the middle of every column, edged by a thin darker pinstripe
+    const band = sstep(0.3, 0.27, Math.abs(fx - 0.5));
+    c = mixc(c, hex('#c8d0ae'), band * 0.55);
+    const pin = sstep(0.008, 0.0, Math.abs(Math.abs(fx - 0.5) - 0.29));
+    c = mixc(c, hex('#8a9a72'), pin * 0.7);
+    // the vine: a wavy stem with alternating leaves and little rose-pink buds
+    const k = v * 10, wave = Math.sin(k * Math.PI * 2) * 0.06;
+    const stem = sstep(0.012, 0.004, Math.abs(fx - 0.5 - wave));
+    const lk = k * 2, li = Math.floor(lk), lf = lk - li, side = li % 2 ? 1 : -1;
+    const lx = fx - 0.5 - Math.sin((li + 0.5) / 2 * Math.PI * 2) * 0.06 - side * 0.07;
+    const leaf = sstep(1, 0.7, Math.hypot(lx / 0.055, (lf - 0.5 + lx * side * 1.6) / 0.22));
+    const bx = fx - 0.5 + side * 0.11, by = ((k + 0.25) % 1) - 0.5;
+    const bud = sstep(1, 0.6, Math.hypot(bx / 0.03, by / 0.06)) * (li % 4 === 1 ? 1 : 0);
+    const brush = vnoise(u * 90, v * 30, 90, 154);
+    c = mixc(c, mixc(hex('#7c8f5e'), hex('#98a874'), brush), Math.max(stem, leaf) * 0.85);
+    c = mixc(c, hex('#d08a7c'), bud * 0.8);
+    // age: faint water marks and sun fade
+    c = mixc(c, hex('#d8c49c'), sstep(0.6, 0.85, fbm(u, v, 4, 4, 155)) * 0.35);
+    const g = 1 - paper;
+    return [c[0] * g, c[1] * g, c[2] * g, paper * 2 + Math.max(stem, leaf) * 0.25, 0.86];
+  }),
+  /** Hand-painted plaster: visible roller and brush strokes with soft colour drift. Neutral (tint it). */
+  painted: () => build(512, 1.0, (u, v) => {
+    const strokes = vnoise(u * 6, v * 48, 6, 161) * 0.5 + vnoise(u * 14, v * 96, 14, 162) * 0.3 + vnoise(u * 40, v * 8, 40, 163) * 0.2;
+    const blooms = fbm(u, v, 3, 4, 164);
+    const fine = vnoise(u * 200, v * 200, 200, 165);
+    const g = 0.86 + strokes * 0.08 + blooms * 0.06 + fine * 0.02;
+    return [g * 1.01, g, g * 0.97, strokes * 0.5 + fine * 0.15, 0.8 + fine * 0.12];
+  }),
+  /** Painted beadboard wainscot: narrow vertical boards with V grooves. Neutral (tint it). */
+  beadboard: () => build(256, 2.6, (u, v) => {
+    const n = 8, bx = u * n, f = bx - Math.floor(bx);
+    const groove = Math.min(sstep(0, 0.06, f), sstep(0, 0.06, 1 - f));
+    const bead = sstep(0.02, 0.0, Math.abs(f - 0.5)) * 0.4;
+    const grain = vnoise(u * 60, v * 4, 60, 171) * 0.04 + vnoise(u * 8, v * 30, 8, 172) * 0.03;
+    const g = 0.9 + grain - (1 - groove) * 0.3 - bead * 0.1;
+    return [g, g * 0.99, g * 0.96, groove * 0.8 - bead * 0.3, 0.45 + grain * 2];
+  }),
+  /** Worn black-and-cream checkerboard linoleum (kitchen). Own colours. */
+  checker: () => build(512, 1.8, (u, v) => {
+    const n = 8, cx = Math.floor(u * n), cy = Math.floor(v * n), fx = u * n - cx, fy = v * n - cy;
+    const dark = (cx + cy) % 2 === 1;
+    const seam = Math.min(sstep(0, 0.02, fx), sstep(0, 0.02, 1 - fx), sstep(0, 0.02, fy), sstep(0, 0.02, 1 - fy));
+    const scuff = sstep(0.55, 0.8, fbm(u, v, 6, 4, 181)) * 0.5 + vnoise(u * 160, v * 160, 160, 182) * 0.1;
+    let c = dark ? mixc(hex('#22242a'), hex('#3a3c40'), scuff) : mixc(hex('#ece4d0'), hex('#cfc4aa'), scuff);
+    c = mixc(hex('#8a8272'), c, seam);
+    return [c[0], c[1], c[2], seam * 0.5 + scuff * 0.1, 0.35 + scuff * 0.4];
+  }),
+  /** Flannel plaid (red, charcoal, cream) for blankets and shirts. Own colours. */
+  plaid: () => build(256, 2.2, (u, v) => {
+    const band = (t: number) => { const f = (t * 4) % 1; return f < 0.32 ? 2 : f < 0.4 ? 1 : f < 0.46 ? 0 : f < 0.54 ? 1 : 3; };
+    const a = band(u), b = band(v);
+    const pal = [hex('#ece0c4'), hex('#2a2a30'), hex('#b8342c'), hex('#8c2a26')];
+    const twill = ((Math.floor(u * 256) + Math.floor(v * 256)) % 4) < 2;
+    let c = twill ? pal[a] : pal[b];
+    c = mixc(c, mixc(pal[a], pal[b], 0.5), 0.35);
+    const fuzz = vnoise(u * 128, v * 128, 128, 191) * 0.08;
+    return [c[0] * (1 - fuzz), c[1] * (1 - fuzz), c[2] * (1 - fuzz), (twill ? 0.6 : 0.3) + fuzz, 0.95];
+  }),
+  /** Patchwork quilt: hand-sewn squares in faded prints, with stitch lines. Own colours. */
+  quilt: () => build(512, 3, (u, v) => {
+    const n = 6, cx = Math.floor(u * n), cy = Math.floor(v * n), fx = u * n - cx, fy = v * n - cy;
+    const pal = ['#d8a0a0', '#9cb8d0', '#e8d4a0', '#a8c49a', '#f0e8dc', '#c49ab8', '#e8b48a', '#8aa8b8'].map(hex);
+    const id = Math.abs(Math.sin(cx * 12.9898 + cy * 78.233) * 43758.5453) % 1;
+    let c = pal[Math.floor(id * pal.length)];
+    // each patch gets its own little print: dots, stripes or plain
+    const kind = Math.floor(((id * 7.31) % 1) * 3);
+    if (kind === 0) c = mixc(c, hex('#fff8ec'), sstep(0.18, 0.12, Math.hypot(((fx * 6) % 1) - 0.5, ((fy * 6) % 1) - 0.5)) * 0.6);
+    if (kind === 1) c = mixc(c, mixc(c, hex('#5a4a4a'), 0.3), sstep(0.5, 0.55, ((fx + fy) * 5) % 1));
+    const seam = Math.min(sstep(0, 0.05, fx), sstep(0, 0.05, 1 - fx), sstep(0, 0.05, fy), sstep(0, 0.05, 1 - fy));
+    const stitch = (Math.abs(fx - 0.5) < 0.38 && Math.abs(fy - 0.5) < 0.38 && (Math.abs(Math.abs(fx - 0.5) - 0.36) < 0.008 || Math.abs(Math.abs(fy - 0.5) - 0.36) < 0.008) && ((fx + fy) * 40) % 1 < 0.6) ? 1 : 0;
+    c = mixc(c, hex('#fff8ec'), stitch * 0.6);
+    const puff = Math.sin(fx * Math.PI) * Math.sin(fy * Math.PI);
+    const fuzz = vnoise(u * 200, v * 200, 200, 201) * 0.05;
+    return [c[0] - fuzz, c[1] - fuzz, c[2] - fuzz, puff * 0.6 * seam + fuzz, 0.95];
+  }),
   asphalt: () => build(512, 2.5, (u, v) => {
     const n = fbm(u, v, 8, 5, 131), g = vnoise(u * 220, v * 220, 220, 132);
     const crack = sstep(0.015, 0.0, Math.abs(fbm(u, v, 3, 4, 133) - 0.5));

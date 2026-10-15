@@ -95,7 +95,7 @@ export class Menu {
         rows: [
           ...(isTouch ? [
             info('Move', 'Left thumb'), info('Run', 'Push the stick to the edge'), info('Look', 'Right thumb drag'),
-            info('Zoom', 'Pinch'), info('Settings', '☰ button'),
+            info('Zoom', 'Pinch'),
           ] : [
             info('Move', 'W A S D · Arrows'), info('Run', 'Shift'), info('Look', 'Mouse drag · Q E'), info('Zoom', 'Wheel'),
             info('Mood', '1 2 3'), info('Camera', 'C'), info('Hide UI', 'H'),

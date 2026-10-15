@@ -30,7 +30,45 @@ jobs:
         env:
           BASE_PATH: /${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/
       - uses: rossjrw/pr-preview-action@v1
+        id: preview
         with:
           source-dir: dist
           preview-branch: gh-pages
           umbrella-dir: pr-preview
+          # The action's own sticky comment goes through GitHub's GraphQL API, which now and then
+          # answers "Something went wrong while executing your query" and fails the whole check even
+          # though the preview deployed fine. The next step posts the same comment over REST, with
+          # retries, and a comment that still can't be posted never fails the build.
+          comment: false
+      - name: Comment the preview link on the PR
+        if: steps.preview.outputs.deployment-action == 'deploy' || steps.preview.outputs.deployment-action == 'remove'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.number }}
+          ACTION: ${{ steps.preview.outputs.deployment-action }}
+          URL: ${{ steps.preview.outputs.preview-url }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # same marker the action used, so the existing comment on each PR is updated in place
+          MARK='<!-- Sticky Pull Request Commentpr-preview -->'
+          if [ "$ACTION" = deploy ]; then
+            BODY="<p><img src=\"https://qr.rossjrw.com/?color.dark=0d1117&url=$URL\" height=\"100\" align=\"right\" alt=\"QR code for preview link\"></p>
+
+          :rocket: **Preview:** $URL
+
+          <sub>Built from ${SHA:0:7} at $(date -u '+%Y-%m-%d %H:%M UTC'). Ready once the [GitHub Pages deployment](https://github.com/$REPO/deployments) finishes.</sub>
+          $MARK"
+          else
+            BODY=":wastebasket: Preview removed because the pull request was closed.
+          $MARK"
+          fi
+          for try in 1 2 3 4; do
+            ID=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.body | contains(\"$MARK\")) | .id" | head -n1) &&
+            if [ -n "$ID" ]; then gh api -X PATCH "repos/$REPO/issues/comments/$ID" -f body="$BODY" >/dev/null
+            else gh api "repos/$REPO/issues/$PR/comments" -f body="$BODY" >/dev/null; fi && exit 0
+            echo "Comment attempt $try failed; retrying"; sleep $((try * 5))
+          done
+          echo "::warning::Couldn't post the preview comment; the preview itself deployed to $URL"
+          exit 1
