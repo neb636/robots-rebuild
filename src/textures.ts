@@ -258,6 +258,19 @@ const GEN: Record<string, () => PBRSet> = {
     c = mixc(c, hex('#3a2616'), 1 - gap);
     return [c[0], c[1], c[2], gap * (0.6 + grain * 0.3), 0.55 + grain * 0.2];
   }),
+  /** Wide-plank engineered wood: long, low-contrast boards with a satin finish (modern interiors). */
+  plank: () => build(512, 1.6, (u, v) => {
+    const planks = 9, px = u * planks, pi = Math.floor(px), fx = px - pi;
+    const off = Math.abs(Math.sin(pi * 91.7)), pv = v + off, pj = Math.floor(pv), fy = pv - pj;
+    const gap = Math.min(sstep(0, 0.02, fx), sstep(0, 0.02, 1 - fx), sstep(0, 0.003, fy), sstep(0, 0.003, 1 - fy));
+    const id = pi * 7 + pj * 3;
+    const grain = vnoise(u * 24 + id * 5.1, v * 1.6, 24, 67) * 0.5 + vnoise(u * 160, v * 5, 160, 68) * 0.5;
+    const tone = Math.abs(Math.sin(id * 12.9898)) * 0.5;
+    let c = mixc(hex('#7a5a40'), hex('#9a7454'), grain * 0.55 + tone * 0.45);
+    c = mixc(c, hex('#5e4430'), sstep(0.65, 0.9, vnoise(u * 50 + id, v * 3, 50, 69)) * 0.3);
+    c = mixc(c, hex('#3a2a1e'), (1 - gap) * 0.45);
+    return [c[0], c[1], c[2], gap * (0.7 + grain * 0.2), 0.42 + grain * 0.14];
+  }),
   /** Painted plaster: a soft roller texture with faint trowel blooms. Neutral (tint with color). */
   plaster: () => build(256, 1.2, (u, v) => {
     const n = fbm(u, v, 8, 4, 91), f = vnoise(u * 120, v * 120, 120, 92);
