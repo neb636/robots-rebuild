@@ -19,6 +19,17 @@ function hash2(x: number, y: number, seed: number) {
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
+/** Value noise wrapping every `px` cells in x and `py` in y, for stretched patterns (wood grain)
+ *  that still tile: sample it at (u * px, v * py). */
+export function vnoise2(x: number, y: number, px: number, py: number, seed = 0) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const fx = smooth(x - xi), fy = smooth(y - yi);
+  const mx = (v: number) => ((v % px) + px) % px, my = (v: number) => ((v % py) + py) % py;
+  const x0 = mx(xi), x1 = mx(xi + 1), y0 = my(yi), y1 = my(yi + 1);
+  const a = hash2(x0, y0, seed), b = hash2(x1, y0, seed), c = hash2(x0, y1, seed), d = hash2(x1, y1, seed);
+  return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+
 /** Value noise on a lattice that wraps every `period` cells (so textures tile). */
 export function vnoise(x: number, y: number, period = 256, seed = 0) {
   const xi = Math.floor(x), yi = Math.floor(y);

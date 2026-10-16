@@ -1,7 +1,7 @@
 // Procedural PBR texture sets (albedo + normal + roughness), generated once at load.
 // Each generator returns per-texel color, height and roughness; normals are derived from height.
 import * as THREE from 'three';
-import { fbm, cellular, vnoise, rng, clamp01, lerp, sstep } from './noise';
+import { fbm, cellular, vnoise, vnoise2, rng, clamp01, lerp, sstep } from './noise';
 
 export interface PBRSet { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture; }
 type Texel = [number, number, number, number, number]; // r g b (sRGB 0..1), height 0..1, roughness 0..1
@@ -194,14 +194,17 @@ const GEN: Record<string, () => PBRSet> = {
     return [g, g * 0.98, g * 0.97, p, 0.55 + p * 0.1];
   }),
   /** Asphalt / packed earth for the far road. */
-  /** Clean furniture wood: long warm grain streaks and soft figure, no grime. Near-white (tint it). */
-  finewood: () => build(512, 1.6, (u, v) => {
-    const warp = fbm(u, v, 3, 3, 111) * 0.6;
-    const ring = Math.sin((u * 18 + warp * 6 + vnoise(u * 6, v * 1.5, 6, 112) * 1.5) * Math.PI * 2) * 0.5 + 0.5;
-    const streak = vnoise(u * 90, v * 3, 90, 113);
-    const g = 0.78 + ring * 0.12 + streak * 0.1;
-    const c = mixc([g * 0.96, g * 0.86, g * 0.72], [g, g * 0.95, g * 0.86], ring);
-    return [c[0], c[1], c[2], ring * 0.25 + streak * 0.2, 0.42 + streak * 0.18];
+  /** Clean furniture wood: fine, straight, low-contrast grain with a soft figure. Near-white (tint it).
+   *  Grain runs along v; everything is quiet so it reads as wood up close without striping. */
+  finewood: () => build(512, 0.6, (u, v) => {
+    const x = u + (vnoise2(u * 3, v * 2, 3, 2, 111) - 0.5) * 0.05;   // grain lines drift a little
+    const figure = vnoise2(x * 9, v * 1, 9, 1, 112);                 // broad soft bands
+    const lines = vnoise2(x * 150, v * 3, 150, 3, 113);              // long fine streaks
+    const fine = vnoise2(x * 380, v * 8, 380, 8, 114);
+    const patch = fbm(u, v, 2, 2, 115);                              // breaks up the tile repeat
+    const g = 0.86 + (figure - 0.5) * 0.08 + (lines - 0.5) * 0.06 + (fine - 0.5) * 0.03 + (patch - 0.5) * 0.06;
+    const c = mixc([g * 0.97, g * 0.9, g * 0.8], [g, g * 0.95, g * 0.87], figure * 0.6 + patch * 0.4);
+    return [c[0], c[1], c[2], lines * 0.12 + fine * 0.05, 0.48 + lines * 0.08];
   }),
   /** Soft upholstery / linen weave: bright and clean, a little slub. Neutral (tint it). */
   linen: () => build(256, 2.2, (u, v) => {
