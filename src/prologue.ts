@@ -29,10 +29,10 @@ type Phase = 'morning' | 'broadcast' | 'outro' | 'out';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-const MARCUS = (text: string): Line => ({ who: 'MARCUS  [ PHONE ]', text, style: 'phone' });
-const TV = (text: string): Line => ({ who: '📺  SUPERINTELLIGENCE INC — LIVE BROADCAST', text, style: 'tv' });
-const CLOCK = (text: string): Line => ({ who: 'ALARM CLOCK', text });
-const BROWSER = (text: string): Line => ({ who: 'BROWSER', text });
+const MARCUS = (text: string, sfx?: string): Line => ({ who: 'Marcus  ·  phone', text, style: 'phone', sfx });
+const TV = (text: string): Line => ({ who: 'Superintelligence Inc.  ·  live broadcast', text, style: 'tv' });
+const CLOCK = (text: string): Line => ({ who: 'Alarm clock', text });
+const BROWSER = (text: string): Line => ({ who: 'Browser', text });
 const ITEM = (text: string): Line => ({ who: '', text, style: 'item' });
 // Unlabelled lines, told apart only by who voices them (scripts/voice.mjs): plain strings are Theo's
 // inner voice, NARR is the narrator, ALOUD is Theo talking to himself.
@@ -76,7 +76,7 @@ export class Prologue {
     await dlg.fade(0, 2600);
     await this.say(['...', ALOUD('Okay. Okay, I\'m up.')]);
     void audio.play(CAT.chirp);
-    await this.say([{ who: 'BISCUIT', text: 'Mrrp.' }]);
+    await this.say([{ who: 'Biscuit', text: 'Mrrp.' }]);
     this.h.lock(false);
     dlg.objective('Start your day. Look around.');
   }
@@ -334,7 +334,7 @@ export class Prologue {
     audio.sfx('confirm', 0.6);
     await this.say([
       MARCUS('Go outside. You need to see this.'),
-      MARCUS('[ CALL DROPPED ]'),
+      MARCUS('[ CALL DROPPED ]', 'hangup'),
     ]);
     this.phase = 'outro';
     this.h.shot(null);

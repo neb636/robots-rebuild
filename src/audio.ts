@@ -238,7 +238,7 @@ class AudioEngine {
   }
 
   /** play a voice line, cutting off the one before; `room` adds a little reverb (the narrator) */
-  async speak(path: string, room = false) {
+  async speak(path: string, room = false, vol = 1) {
     if (!this.ready) return;
     this.stopVoice();
     const tok = ++this.voiceTok;
@@ -247,7 +247,7 @@ class AudioEngine {
     if (!buf || tok !== this.voiceTok) return;
     const c = this.ctx, t = c.currentTime;
     const src = c.createBufferSource(); src.buffer = buf;
-    const g = c.createGain(); g.gain.value = 1;
+    const g = c.createGain(); g.gain.value = vol;
     src.connect(g).connect(this.voiceBus);
     if (room) { const s = c.createGain(); s.gain.value = 0.25; g.connect(s).connect(this.reverbSend); }
     this.duck.gain.setTargetAtTime(0.55, t, 0.08);
@@ -590,6 +590,16 @@ class AudioEngine {
           const st = t + r * 0.45 + i * 0.04;
           o('square', 1300, st, 0.03).connect(env(0.03, 0.03, 0.002, st));
           o('square', 1700, st + 0.02, 0.03).connect(env(0.03, 0.03, 0.002, st + 0.02));
+        }
+        break;
+      }
+      case 'hangup': {
+        // the call-ended tone, through a phone-band filter
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1000; bp.Q.value = 0.7; bp.connect(g);
+        for (let i = 0; i < 3; i++) {
+          const st = t + 0.15 + i * 0.32;
+          const gg = c.createGain(); gg.connect(bp); e(gg, 0.01, 0.07, 0.16, st);
+          o('sine', 480, st, 0.18).connect(gg); o('sine', 620, st, 0.18).connect(gg);
         }
         break;
       }

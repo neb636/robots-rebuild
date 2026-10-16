@@ -92,7 +92,9 @@ done (`playwright-cli close`) stops the rendering entirely.
 
 Day Zero's lines are voiced with ElevenLabs. Theo's inner voice is a designed voice (low, slow,
 somber), with a livelier read for lines he says out loud; the narrator reads object text and the
-second-person lines. The clips are generated from `src/prologue.ts` itself, so after changing a
+second-person lines; Marcus calls through a phone filter with the street behind him; the broadcast is
+a designed synthetic voice through the robot filter (blended with a dry take to cut its ring, which
+needs ffmpeg). The clips are generated from `src/prologue.ts` itself, so after changing a
 line, re-run the generator and commit the new clips:
 
 ```bash
@@ -102,8 +104,8 @@ npm run voice -- --force "Gerald"   # re-roll lines containing some text
 ```
 
 Who reads a line comes from how it's written: a plain string is Theo thinking, `ALOUD('…')` is Theo
-talking to himself, `NARR` / `CLOCK` / `BROWSER` are the narrator. TV, Marcus and item pop-ups
-aren't voiced. Voices, delivery tags and pronunciation fixes live at the top of `scripts/voice.mjs`.
+talking to himself, `NARR` / `CLOCK` / `BROWSER` are the narrator, `MARCUS` and `TV` are themselves.
+Item pop-ups and stage directions (`[ CALL DROPPED ]`) aren't voiced. Voices, delivery tags and pronunciation fixes live at the top of `scripts/voice.mjs`.
 Clips go to `public/audio/vo/`, and `src/vo.json` maps each line's text to its clip.
 
 ## Project layout

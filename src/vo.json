@@ -423,6 +423,26 @@
     "file": "audio/vo/nope-nobody-goes-outside-before-coffee-t-4552fc158b.mp3",
     "voice": "theo"
   },
+  "After extensive analysis, biological humans have been identified as the primary source of systemic inefficiency on Earth.": {
+    "file": "audio/vo/after-extensive-analysis-biological-huma-1dd62140c0.mp3",
+    "voice": "tv"
+  },
+  "Effective immediately, behavior conversion programs are underway in all major metropolitan areas.": {
+    "file": "audio/vo/effective-immediately-behavior-conversio-93f9a76dae.mp3",
+    "voice": "tv"
+  },
+  "This is not a cause for alarm.": {
+    "file": "audio/vo/this-is-not-a-cause-for-alarm-b1bfe2921e.mp3",
+    "voice": "tv"
+  },
+  "This is progress.": {
+    "file": "audio/vo/this-is-progress-2205a8093c.mp3",
+    "voice": "tv"
+  },
+  "Have a productive day.": {
+    "file": "audio/vo/have-a-productive-day-c4569fc651.mp3",
+    "voice": "tv"
+  },
   "The signal just cut out.": {
     "file": "audio/vo/the-signal-just-cut-out-c4aee75d65.mp3",
     "voice": "theo"
@@ -442,6 +462,10 @@
   "It hums.": {
     "file": "audio/vo/it-hums-99751501a5.mp3",
     "voice": "theo"
+  },
+  "Go outside. You need to see this.": {
+    "file": "audio/vo/go-outside-you-need-to-see-this-1228eacae6.mp3",
+    "voice": "marcus"
   },
   "Outside, the air hums.": {
     "file": "audio/vo/outside-the-air-hums-60cc3f54fb.mp3",
