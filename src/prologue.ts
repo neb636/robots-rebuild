@@ -120,7 +120,7 @@ export class Prologue {
           await this.say(this.pick('cat', [
             ['Biscuit purrs like a tiny outboard motor.'],
             ['Biscuit allows exactly one more pet.', 'Then she bites me. Gently. As a treat.'],
-            ['Biscuit isn\'t looking at me. She\'s staring at the living room.'],
+            ['Biscuit isn\'t looking at me. She\'s staring out the window.'],
             ['Her ears are flat. She\'s listening to something I can\'t hear.'],
             ['Biscuit purrs like a tiny outboard motor.'],
           ], 4));
@@ -173,10 +173,6 @@ export class Prologue {
     add('dresser', 'Dresser', a.dresser, 1.25, () => this.say(this.pick('dresser', [
       ['Seven cat sweaters. All navy.', 'I contain multitudes, as long as the multitudes are navy.'],
       ['Biscuit has a sweater in here too.', 'She has never once agreed to wear it.'],
-    ])));
-    add('chair', 'The Chair', a.chair, 1.1, () => this.say(this.pick('chair', [
-      ['The Chair.', 'It stopped being a chair in March. Now it\'s a closet with legs.'],
-      ['My good hoodie is somewhere under there. It\'s been gone for weeks.', 'It\'s at peace now.'],
     ])));
     add('art', 'Sailboat print', a.art, 1.2, () => this.say(['A print of a sailboat.', 'I\'ve never been on a sailboat. I just liked the vibe.']));
     add('litter', 'Litter box', a.litter, 1.0, () => this.say(['Biscuit\'s litter box.', 'Scooped yesterday. Probably. Let\'s say yesterday.']));
@@ -250,10 +246,6 @@ export class Prologue {
     }, 'Switch');
     add('winL', 'Window', a.winL, 1.3, () => this.windowLiving());
     add('winL2', 'Window', a.winL2, 1.3, () => this.windowLiving());
-    add('coat', 'Coat hooks', a.coat, 1.1, () => this.say(this.pick('coat', [
-      ['My jacket, and Marcus\'s flashlight.', 'He left it here after fixing my outlet. "Keep it," he said. "You\'ll need it more than me."'],
-      ['It\'s a really good flashlight. He won\'t shut up about it.'],
-    ], 1)));
     // after Marcus's call the door is the way out
     const outro = () => this.phase === 'outro';
     this.items.push({
@@ -294,7 +286,7 @@ export class Prologue {
     apt.tv.set('static');
     if (apt.cat.state === 'loaf') {
       audio.sfx('meow', 1);
-      apt.cat.bolt([apt.at.cat.clone(), v(-7.3, 0, -0.5), v(-4.8, 0, -1.0), v(-2.6, 0, -0.7), v(-1.0, 0, -0.7), v(1.0, 0, -1.7), v(2.2, 0, -2.4)]);
+      apt.cat.bolt([apt.at.cat.clone(), v(6.2, 0, -4.7), v(4.6, 0, -3.3), v(3.4, 0, -3.15), v(2.2, 0, -2.4)]);
     }
     this.h.face(apt.at.tv);
     this.h.shot({ pos: v(2.6, 1.85, -0.9), look: v(2.5, 1.1, -5.8) });
