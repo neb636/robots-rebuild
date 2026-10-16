@@ -203,6 +203,8 @@ def build_material(body, img):
     bsdf.inputs["Roughness"].default_value = 0.85
     bsdf.inputs["Specular IOR Level"].default_value = 0.5
     bsdf.inputs["IOR"].default_value = 1.5
+    # Single-sided like the Tripo source (exports doubleSided: false); renders change by <=5 px.
+    mat.use_backface_culling = True
     body.data.materials.clear()
     body.data.materials.append(mat)
     return mat
@@ -310,5 +312,46 @@ def build(save_path=None):
     return dict(clips=clips, retarget=report)
 
 
+def export_glb(path, tex_size=4096, jpeg_quality=92):
+    """Export the "Theo" collection (armature + mesh + all clips) as a binary glTF.
+
+    At 4096 the packed original JPEG is written through as is; smaller sizes export a resized
+    copy, re-encoded as JPEG. Clips are exported one per NLA track, slid to start at t=0, so
+    Blender frame f is three.js time (f - 1) / 30.
+    """
+    scene = bpy.context.scene
+    vl = bpy.context.view_layer
+    vl.active_layer_collection = vl.layer_collection.children["Theo"]
+    mat = bpy.data.materials["Theo_Matte"]
+    tex = next(n for n in mat.node_tree.nodes if n.type == 'TEX_IMAGE')
+    orig = tex.image
+    tmp = None
+    if tex_size != orig.size[0]:
+        tmp = orig.copy()
+        tmp.name = f"Theo_BaseColor_{tex_size // 1024}k"
+        tmp.scale(tex_size, tex_size)
+        tex.image = tmp
+    rig = bpy.data.objects["Theo"]
+    active = rig.animation_data.action
+    rig.animation_data.action = None   # export the rest pose as the bind pose, clips from NLA
+    try:
+        bpy.ops.export_scene.gltf(
+            filepath=path, export_format='GLB', use_active_collection=True,
+            export_yup=True, export_apply=False, export_normals=True,
+            export_image_format='AUTO' if tmp is None else 'JPEG', export_jpeg_quality=jpeg_quality,
+            export_skins=True, export_influence_nb=4, export_all_influences=False,
+            export_animations=True, export_animation_mode='NLA_TRACKS', export_anim_slide_to_zero=True,
+            export_force_sampling=True, export_optimize_animation_size=True,
+            export_anim_single_armature=True, export_rest_position_armature=True,
+        )
+    finally:
+        rig.animation_data.action = active
+        tex.image = orig
+        if tmp is not None:
+            bpy.data.images.remove(tmp)
+    return path
+
+
 if __name__ == "__main__":
     build(os.path.join(REPO, "art", "theo.blend"))
+    export_glb(os.path.join(REPO, "public", "models", "theo.glb"))
