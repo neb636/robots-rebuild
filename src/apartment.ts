@@ -161,31 +161,97 @@ export class Cat {
   lookAt: THREE.Vector3 | null = null;
   private path: THREE.Vector3[] = [];
   private seg = 0; private segT = 0; private t = 0; private purr = 0;
+  /**
+   * Biscuit is drawn like the cat on Theo's sweatshirt: a chunky cartoon ginger tabby in flat matte
+   * colors (no fur texture), a wide face with a cream muzzle that peaks between big round dark eyes,
+   * a little brown nose over a "w" mouth, whisker strokes, cream-lined ears and an "M" of forehead
+   * stripes. The markings are vertex colors painted from each part's own unit-sphere coordinates.
+   */
   constructor() {
-    const fur = pbrMat('knit', '#e0924a', { normalScale: 0.3 });
-    const cream = paint('#f4e2c8', 0.9);
-    const m = (g: THREE.BufferGeometry, mat: THREE.Material, p: THREE.Object3D, x: number, y: number, z: number) => {
-      const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; p.add(o); return o;
+    const ORANGE = new THREE.Color('#ec8a46'), STRIPE = new THREE.Color('#b85a24'), CREAM = new THREE.Color('#f8e2c2');
+    const coat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
+    const dark = paint('#3a2216', 0.5), eyeM = paint('#1e1410', 0.12), shine = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+    /** GLSL-style smoothstep: e0 > e1 fades out instead of in */
+    const ss = (e0: number, e1: number, x: number) => { const t = THREE.MathUtils.clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+    /** a sphere scaled to (sx, sy, sz) whose vertices are colored by `paint` from the unit sphere point */
+    const painted = (sx: number, sy: number, sz: number, paintAt: (x: number, y: number, z: number, c: THREE.Color) => void, ws = 40, hs = 28) => {
+      const g = new THREE.SphereGeometry(1, ws, hs), p = g.attributes.position, col = new Float32Array(p.count * 3), c = new THREE.Color();
+      for (let i = 0; i < p.count; i++) { paintAt(p.getX(i), p.getY(i), p.getZ(i), c.copy(ORANGE)); c.toArray(col, i * 3); }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      return g.scale(sx, sy, sz);
+    };
+    const m = (g: THREE.BufferGeometry, mat: THREE.Material, p: THREE.Object3D, x: number, y: number, z: number, cast = true) => {
+      const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.castShadow = cast; o.receiveShadow = true; p.add(o); return o;
     };
     this.group.add(this.body);
-    m(new THREE.SphereGeometry(1, 20, 14).scale(0.12, 0.1, 0.2), fur, this.body, 0, 0.1, 0);
-    m(new THREE.SphereGeometry(1, 16, 12).scale(0.09, 0.06, 0.12), cream, this.body, 0, 0.065, 0.04);
-    // stripes
-    for (let i = 0; i < 4; i++) m(new THREE.TorusGeometry(0.105, 0.012, 6, 18, Math.PI).rotateY(Math.PI / 2), paint('#b8642a', 0.9), this.body, 0, 0.105, -0.12 + i * 0.07);
-    this.head.position.set(0, 0.17, 0.19); this.body.add(this.head);
-    m(new THREE.SphereGeometry(0.085, 18, 14), fur, this.head, 0, 0, 0);
-    m(new THREE.SphereGeometry(1, 12, 10).scale(0.045, 0.035, 0.03), cream, this.head, 0, -0.03, 0.065);
+    // the body: a round loaf, tabby bands across the back fading out down the flanks, a cream belly and bib
+    m(painted(0.125, 0.105, 0.19, (x, y, z, c) => {
+      const band = ss(0.35, 0.75, Math.sin(z * 9.5 + 0.6 + Math.abs(x) * 1.2)) * ss(-0.25, 0.35, y) * ss(-0.6, -0.2, z) * ss(0.95, 0.5, z);
+      c.lerp(STRIPE, band * 0.85);
+      c.lerp(CREAM, Math.max(ss(-0.3, -0.55, y), ss(0.55, 0.8, z) * ss(0.15, -0.15, y)));
+    }), coat, this.body, 0, 0.105, 0);
+    // the head: big and wide like the shirt print
+    const HX = 0.108, HY = 0.09, HZ = 0.092;
+    this.head.position.set(0, 0.19, 0.19); this.body.add(this.head);
+    m(painted(HX, HY, HZ, (x, y, z, c) => {
+      // forehead "M": three short stripes running back from above the eyes
+      const fore = ss(0.35, 0.55, y) * ss(-0.5, 0.0, z) * ss(0.75, 0.55, z) * ss(0.55, 0.4, Math.abs(x));
+      c.lerp(STRIPE, fore * ss(0.4, 0.85, Math.cos(x * 15)));
+      // cheek stripes, two a side
+      c.lerp(STRIPE, ss(0.7, 0.85, Math.abs(x)) * ss(0.3, 0.55, Math.cos(y * 14 - 0.6)) * ss(-0.4, 0.1, z) * ss(0.4, 0.0, Math.abs(y)) * 0.9);
+      // the cream muzzle: wide over the cheeks and chin, rising to a point between the eyes
+      const muzzle = ss(0.3, 0.5, z) * ss(0.03, -0.03, y + 0.6 * Math.abs(x) - 0.16);
+      c.lerp(CREAM, Math.max(muzzle, ss(-0.55, -0.8, y)));
+    }, 64, 48), coat, this.head, 0, 0, 0);
+    /** a point on the head's surface (and its outward direction) in the unit-sphere direction (x, y, z) */
+    const onHead = (x: number, y: number, z: number, lift = 0) => {
+      const d = new THREE.Vector3(x, y, z).normalize();
+      return new THREE.Vector3(d.x * HX, d.y * HY, d.z * HZ).addScaledVector(d, lift);
+    };
     for (const s of [-1, 1]) {
-      const ear = m(new THREE.ConeGeometry(0.03, 0.06, 4), fur, this.head, s * 0.045, 0.075, -0.005); ear.rotation.z = -s * 0.25;
-      m(new THREE.SphereGeometry(0.012, 8, 6), paint('#20302a', 0.2), this.head, s * 0.032, 0.012, 0.074);
+      // ears: soft rounded triangles with cream insides
+      const ear = new THREE.Group(); ear.position.copy(onHead(s * 0.55, 0.78, 0.0, -0.012)); ear.rotation.set(-0.1, 0, -s * 0.38); this.head.add(ear);
+      m(tint(new THREE.ConeGeometry(0.042, 0.075, 16).scale(1, 1, 0.55), '#ec8a46'), coat, ear, 0, 0.032, 0);
+      m(tint(new THREE.ConeGeometry(0.03, 0.058, 14).scale(1, 1, 0.3), '#fbeedd'), coat, ear, 0, 0.026, 0.012, false);
+      // big round eyes with a catchlight
+      const ep = onHead(s * 0.42, 0.14, 0.9, -0.004);
+      const eye = m(new THREE.SphereGeometry(0.02, 18, 14).scale(1, 1.05, 0.55), eyeM, this.head, ep.x, ep.y, ep.z, false);
+      eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), ep.clone().normalize());
+      const n = ep.clone().normalize(), hp = ep.clone().addScaledVector(n, 0.0075).add(new THREE.Vector3(n.z, 0, -n.x).normalize().multiplyScalar(-0.005)).add(new THREE.Vector3(0, 0.007, 0));
+      m(new THREE.SphereGeometry(0.006, 8, 6), shine, this.head, hp.x, hp.y, hp.z, false);
+      // whiskers: three dark strokes fanning out of each cheek
+      const cheek = onHead(s * 0.6, -0.32, 0.72, -0.004);
+      for (let k = 0; k < 3; k++) {
+        const dir = new THREE.Vector3(s, 0.16 - k * 0.16, 0.3).normalize();
+        const w = m(new THREE.CylinderGeometry(0.0013, 0.0007, 0.06, 4), dark, this.head, cheek.x + dir.x * 0.03, cheek.y + dir.y * 0.03, cheek.z + dir.z * 0.03, false);
+        w.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      }
     }
-    m(new THREE.SphereGeometry(0.009, 8, 6), paint('#c06070', 0.5), this.head, 0, -0.012, 0.087);
-    for (const [x, z] of [[-0.06, 0.12], [0.06, 0.12], [-0.06, -0.12], [0.06, -0.12]]) {
-      const l = m(new THREE.CapsuleGeometry(0.022, 0.05, 3, 8), fur, this.body, x, 0.03, z); this.legs.push(l);
+    // a small brown nose over a "w" mouth
+    const np = onHead(0, -0.12, 1, -0.002);
+    m(new THREE.SphereGeometry(1, 14, 10).scale(0.016, 0.011, 0.009), dark, this.head, np.x, np.y, np.z, false);
+    for (const s of [-1, 1]) {
+      const mo = m(new THREE.TorusGeometry(0.0095, 0.0022, 5, 10, Math.PI), dark, this.head, s * 0.0095, np.y - 0.018, np.z - 0.006, false);
+      mo.rotation.set(0.25, 0, Math.PI);
     }
-    this.tail.position.set(0, 0.12, -0.18); this.body.add(this.tail);
+    // legs with cream socks
+    for (const [x, z] of [[-0.065, 0.12], [0.065, 0.12], [-0.065, -0.11], [0.065, -0.11]]) {
+      const l = m(tint(new THREE.CapsuleGeometry(0.03, 0.05, 4, 12), '#ec8a46'), coat, this.body, x, 0.035, z); this.legs.push(l);
+      m(tint(new THREE.SphereGeometry(1, 14, 10).scale(0.033, 0.022, 0.038), '#f8e2c2'), coat, l, 0, -0.048, 0.006);
+    }
+    // a thick ringed tail with a dark tip
+    this.tail.position.set(0, 0.13, -0.17); this.body.add(this.tail);
     const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.04, -0.03, -0.1), new THREE.Vector3(0.12, -0.08, -0.12), new THREE.Vector3(0.2, -0.09, -0.04)]);
-    m(new THREE.TubeGeometry(curve, 16, 0.022, 8), fur, this.tail, 0, 0, 0);
+    const TS = 24, RS = 10, tube = new THREE.TubeGeometry(curve, TS, 0.026, RS);
+    const tc = new Float32Array(tube.attributes.position.count * 3), c = new THREE.Color();
+    for (let i = 0; i < tube.attributes.position.count; i++) {
+      const u = Math.floor(i / (RS + 1)) / TS;
+      c.copy(ORANGE).lerp(STRIPE, u > 0.85 ? 1 : ss(0.3, 0.7, Math.sin(u * 30)) * 0.9).toArray(tc, i * 3);
+    }
+    tube.setAttribute('color', new THREE.BufferAttribute(tc, 3));
+    m(tube, coat, this.tail, 0, 0, 0);
+    const tip = curve.getPoint(1);
+    m(tint(new THREE.SphereGeometry(0.026, 12, 8), '#b85a24'), coat, this.tail, tip.x, tip.y, tip.z);
   }
   /** run along a path of floor points (then hide) */
   bolt(path: THREE.Vector3[]) { this.path = path; this.seg = 0; this.segT = 0; this.state = 'bolting'; }
@@ -794,13 +860,75 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     solid(X0, z0 - 0.03, x + 0.22, z1 + 0.03);
     at.bookshelf = v3(x + 0.35, 1.2, -2.2);
   }
-  // ---- a big fiddle-leaf fig in the corner
-  {
-    vcyl(0.2, 0.16, 0.36, '#c8a878', vpaint, X0 + 0.45, 0, -5.4);
-    b.add(new THREE.CylinderGeometry(0.018, 0.024, 1.3), darkWood, X0 + 0.45, 1.0, -5.4);
-    for (let i = 0; i < 28; i++) { const y = 0.75 + R() * 1.25, a = R() * 6.28, r = 0.08 + R() * 0.25; leaves.push({ x: X0 + 0.45 + Math.cos(a) * r, y, z: -5.4 + Math.sin(a) * r, nx: Math.cos(a), ny: 0.5, nz: Math.sin(a), s: 0.2 + R() * 0.1 }); }
-    solid(X0, -5.65, X0 + 0.7, -5.15);
+  /** a straight tube between two points (bike frames, chair rails) */
+  const rod = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number, m: THREE.Material, bb = b) => {
+    const d = new THREE.Vector3(bx - ax, by - ay, bz - az);
+    const g = new THREE.CylinderGeometry(r, r, d.length(), 8).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    bb.add(g, m, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
+  };
+  /**
+   * A fiddle-leaf fig: a slender trunk forking into a few leaning stems, each spiraling with big
+   * glossy violin-shaped leaves (real cupped, drooping geometry, not cards) that shrink toward the
+   * growing tips, over a planter with a rolled rim and dark soil.
+   */
+  const figLeafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, side: THREE.DoubleSide });
+  const figBark = paint('#6e5a48', 0.85);
+  const figLeaf = (len: number, wid: number, seed: number, fresh: number) => {
+    // the outline: a narrow base, a soft waist, widest past two-thirds, a blunt rounded tip
+    const prof = [0.22, 0.5, 0.64, 0.68, 0.74, 0.88, 0.98, 1.0, 0.97, 0.84, 0.0];
+    const half = (u: number) => { const f = u * (prof.length - 1), i = Math.min(prof.length - 2, Math.floor(f)), k = f - i; const w = prof[i] + (prof[i + 1] - prof[i]) * k * k * (3 - 2 * k); return u > 0.9 ? w * Math.sqrt((1 - u) / 0.1) * 0.85 + w * 0.15 * ((1 - u) / 0.1) : w; };
+    const NU = 12, NV = 8, pos: number[] = [], col: number[] = [], idx: number[] = [];
+    const base = new THREE.Color('#2b5220').lerp(new THREE.Color('#4f8a2c'), fresh), rib = new THREE.Color('#9ab86a'), edge = new THREE.Color('#1e3d17'), c = new THREE.Color();
+    for (let i = 0; i <= NU; i++) for (let j = 0; j <= NV; j++) {
+      const u = i / NU, v = (j / NV) * 2 - 1, w = half(u) * wid * 0.5, x = u * len, zc = v * w;
+      // cupped up from the midrib, drooping toward the tip, a slight ripple at the margins
+      const y = Math.abs(v) * w * 0.32 - 0.55 * (x * x) / len + Math.sin(u * 9 + seed) * 0.006 * Math.abs(v);
+      pos.push(x, y, zc);
+      const veins = 0.5 + 0.5 * Math.cos((u * 7 - Math.abs(v) * 1.6) * Math.PI);
+      c.copy(base).lerp(edge, Math.abs(v) ** 3 * 0.6).lerp(rib, Math.max(0, 1 - Math.abs(v) * 9) * (1 - u * 0.5) * 0.9).lerp(rib, veins * (1 - Math.abs(v)) * 0.08);
+      col.push(c.r, c.g, c.b);
+    }
+    for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) { const a = i * (NV + 1) + j, d = a + NV + 1; idx.push(a, d, a + 1, a + 1, d, d + 1); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  };
+  function fiddleFig(x: number, z: number, height: number, potR: number, potH: number, potColor: string, seed: number) {
+    const F = rng(seed);
+    // the planter: a slightly tapered pot, a rolled rim, soil just below it
+    vcyl(potR, potR * 0.8, potH, potColor, vpaint, x, 0, z, 28);
+    b.add(tint(new THREE.TorusGeometry(potR - 0.008, 0.016, 8, 32).rotateX(Math.PI / 2), potColor), vpaint, x, potH, z);
+    b.add(new THREE.CircleGeometry(potR - 0.015, 28).rotateX(-Math.PI / 2), paint('#3a2a1e', 0.95), x, potH + 0.004, z);
+    // the trunk rises from the soil and forks into three stems that lean out and up
+    const fork = new THREE.Vector3(x + (F() - 0.5) * 0.04, potH + (height - potH) * 0.42, z + (F() - 0.5) * 0.04);
+    rod(x, potH - 0.03, z, fork.x, fork.y, fork.z, 0.022, figBark);
+    const nStems = 3, a0 = F() * 6.28;
+    for (let s = 0; s < nStems; s++) {
+      const az = a0 + (s / nStems) * 6.28 + (F() - 0.5) * 0.6, lean = 0.12 + F() * 0.14;
+      const top = fork.y + (height - fork.y) * (s === 0 ? 1 : 0.78 + F() * 0.16);
+      const len = top - fork.y;
+      const pt = (t: number) => new THREE.Vector3(fork.x + Math.cos(az) * lean * len * t * (0.6 + 0.4 * t), fork.y + len * t, fork.z + Math.sin(az) * lean * len * t * (0.6 + 0.4 * t));
+      for (let k = 0; k < 4; k++) { const p0 = pt(k / 4), p1 = pt((k + 1) / 4); rod(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, 0.016 - k * 0.003, figBark); }
+      // leaves spiral up the stem on short petioles: big and spreading below, small and upright at the tip
+      const nLeaves = 14 + Math.floor(F() * 4);
+      for (let i = 0; i < nLeaves; i++) {
+        const t = 0.08 + (i / (nLeaves - 1)) * 0.92, p = pt(t);
+        const la = az + i * 2.4 + (F() - 0.5) * 0.5;
+        const size = (1.15 - t * 0.55) * (0.88 + F() * 0.24);
+        const elev = 0.05 + t * 0.75 + (F() - 0.5) * 0.25;
+        const off = 0.03;
+        const px = p.x + Math.cos(la) * off, pz = p.z + Math.sin(la) * off;
+        rod(p.x, p.y, p.z, px, p.y + 0.02, pz, 0.004, figBark);
+        const g = figLeaf(0.3 * size, 0.27 * size, seed + i * 3.1 + s, t * 0.7 + F() * 0.2);
+        g.rotateX((F() - 0.5) * 0.5);
+        b.add(g, figLeafMat, px, p.y + 0.02, pz, 0, -la, elev);
+      }
+    }
   }
+  // ---- a big fiddle-leaf fig in the corner
+  fiddleFig(X0 + 0.45, -5.4, 1.75, 0.19, 0.36, '#c8a878', 31);
+  solid(X0, -5.65, X0 + 0.7, -5.15);
   // ---- floor clutter: jeans, a hoodie, sneakers, a stack of books, an empty mug
   heap(0.3, 0.06, 0.2, '#4a6a9a', vlinen, -5.3, 0, -3.25, 0.7);
   heap(0.26, 0.08, 0.24, '#3a3a40', vknit, -7.7, 0, -3.4, 2.1);
@@ -1037,20 +1165,12 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
       hang(r, 0.82, cx, 1.75, wz - 0.041, ry, 0, bb);
     });
   });
-  // ---- a big fiddle-leaf fig in a basket, beside the record crate
+  // ---- a big fiddle-leaf fig in a white planter, beside the record crate
   {
     const fx = 3.15, fz = ZL - 0.5;
-    vcyl(0.26, 0.2, 0.4, '#f0eeea', vpaint, fx, 0, fz);
-    b.add(new THREE.CylinderGeometry(0.02, 0.03, 1.6), darkWood, fx, 1.1, fz);
-    for (let i = 0; i < 36; i++) { const y = 0.9 + R() * 1.4, a = R() * 6.28, r = 0.1 + R() * 0.32; leaves.push({ x: fx + Math.cos(a) * r, y, z: fz + Math.sin(a) * r, nx: Math.cos(a), ny: 0.4, nz: Math.sin(a), s: 0.24 + R() * 0.1 }); }
+    fiddleFig(fx, fz, 2.05, 0.25, 0.4, '#f0eeea', 47);
     solid(fx - 0.3, fz - 0.3, fx + 0.3, ZL);
   }
-  /** a straight tube between two points (bike frames, chair rails) */
-  const rod = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number, m: THREE.Material, bb = b) => {
-    const d = new THREE.Vector3(bx - ax, by - ay, bz - az);
-    const g = new THREE.CylinderGeometry(r, r, d.length(), 8).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
-    bb.add(g, m, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
-  };
   // ---- a slim walnut console behind the couch: a ceramic lamp, a catchall tray, books underneath
   {
     const sx = 2.5, sz = -1.74, L = 1.6;
@@ -1089,8 +1209,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     solid(lx - 0.24, lz - 0.3, lx + 0.24, ZL);
     at.litter = v3(lx + 0.3, 0.4, lz);
   }
-  // ---- dining, by the kitchen: a long walnut table for four, chairs tucked in facing it, a linear pendant
-  const pendant = new THREE.PointLight('#ffd8a0', 0.9, 4.5, 2); pendant.position.set(6.0, 1.8, 0.3); root.add(pendant);
+  // ---- dining, by the kitchen: a long walnut table for four, chairs tucked in facing it
   {
     const tx = 6.0, tz = 0.3, TL = 1.9, TW = 0.95;
     b.add(new THREE.PlaneGeometry(3.0, 2.4).rotateX(-Math.PI / 2), pbrMat('knit', '#8c877c', { normalScale: 0.4 }), tx, 0.012, tz);
@@ -1117,10 +1236,6 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     for (const gx of [0.18, 0.28]) cyl(0.035, 0.025, 0.1, paint('#e0eef4', 0.05, { transparent: true, opacity: 0.35 }), tx + gx, 0.765, tz + 0.25);
     solid(tx - TL / 2 - 0.05, tz - 0.9, tx + TL / 2 + 0.05, tz + 0.9);
     at.table = v3(tx, 0.9, tz);
-    // the pendant: a slim black bar on two cables, warm light down onto the table
-    box(1.2, 0.045, 0.08, matteBlack, tx, H - 1.2, tz);
-    box(1.14, 0.008, 0.05, paint('#fff6e8', 0.4, { emissive: '#ffd8a0', emissiveIntensity: 1.6 }), tx, H - 1.208, tz, 0, b, false);
-    for (const dx of [-0.5, 0.5]) b.add(new THREE.CylinderGeometry(0.003, 0.003, 1.15), black, tx + dx, H - 0.6, tz);
   }
   // ---- a carpeted cat tree in the corner by the window, with a dangling toy
   {
@@ -1181,9 +1296,6 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     for (let i = 0; i < 7; i++) cyl(0.12 - (i % 3) * 0.015, 0.1, 0.02, paint('#f8f6f2', 0.3), 7.6 + (R() - 0.5) * 0.04, 0.96 + i * 0.024, Z0 + 0.38 + (R() - 0.5) * 0.04, 20);
     vcyl(0.04, 0.035, 0.1, '#2a2b2e', vpaint, 7.42, 0.96, Z0 + 0.52); vcyl(0.04, 0.035, 0.1, '#e8e6e2', vpaint, 7.75, 1.13, Z0 + 0.38);
     at.dishes = v3(7.7, 1.0, Z0 + 0.7);
-    // a slim dish rack
-    box(0.4, 0.015, 0.3, steel, 8.85, 0.96, Z0 + 0.38);
-    for (let i = 0; i < 5; i++) b.add(new THREE.CylinderGeometry(0.1, 0.1, 0.012, 18).rotateX(Math.PI / 2 - 0.2), paint('#f8f6f2', 0.3), 8.72 + i * 0.06, 1.07, Z0 + 0.38);
     // a black-glass induction range with a stainless oven front, a matte-black kettle
     box(0.6, 0.012, 0.58, paint('#141416', 0.12), 9.62, 0.96, -4.2);
     for (const [bx, bz] of [[-0.14, -0.13], [0.14, -0.13], [-0.14, 0.13], [0.14, 0.13]]) b.add(new THREE.RingGeometry(0.06, 0.068, 24).rotateX(-Math.PI / 2), paint('#5a5c60', 0.4), 9.62 + bx, 0.973, -4.2 + bz);
@@ -1200,12 +1312,10 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     cyl(0.072, 0.068, 0.07, paint('#2a1408', 0.2), 9.56, 0.965, -3.2);
     b.add(new THREE.SphereGeometry(0.012, 8, 6), new THREE.MeshStandardMaterial({ color: '#000', emissive: '#ff3020', emissiveIntensity: 4 }), 9.52, 1.235, -3.08);
     at.coffee = v3(9.4, 1.05, -3.2);
-    // stainless toaster, a utensil crock, canisters, a cutting board
+    // stainless toaster, a utensil crock
     rbox(0.26, 0.18, 0.16, 0.04, stainless, 9.65, 0.96, -2.85);
     vcyl(0.06, 0.06, 0.16, '#f0eeea', vgloss, 9.75, 0.96, -4.85);
     for (let i = 0; i < 4; i++) b.add(new THREE.CylinderGeometry(0.008, 0.012, 0.28, 6), darkWood, 9.75 + (i % 2 - 0.5) * 0.04, 1.18, -4.85 + (i > 1 ? 0.02 : -0.02), (i - 1.5) * 0.08, 0, (i % 2 - 0.5) * 0.15);
-    for (let i = 0; i < 3; i++) vcyl(0.06, 0.06, 0.16 - i * 0.03, '#f0eeea', vgloss, 9.0 + i * 0.16, 0.96, Z0 + 0.22);
-    rbox(0.4, 0.02, 0.26, 0.01, pbrMat('finewood', '#d8b890'), 9.3, 0.96, Z0 + 0.42, 0, 0.2, 0);
     solid(kx0, Z0, X1, Z0 + 0.72); solid(X1 - 0.72, Z0, X1, -2.68);
     // a counter-depth French-door fridge: flush stainless doors over a freezer drawer, slim bar
     // pulls, a black-glass water dispenser with a lit display; a few magnets and photos survive
