@@ -23,14 +23,24 @@ const X0 = -10, X1 = 10, Z0 = -6, Z1 = 4.6;
 const ZL = 2.5; // the living room's front wall: shallower than the bedroom wing (bath, closet)
 
 const sunDir: [number, number, number] = [0.45, 0.62, -1];
-export const MORNING: Mood = {
-  name: 'Morning', blurb: 'Day Zero. A sunny Tuesday on Beacon Hill.',
-  sky: { zenith: '#4f86c8', horizon: '#d8e4ec', glow: '#ffdca8', glowDir: [0.35, 0.3, -1], glowAmt: 0.4, cloud: '#e6eaee', cloudLit: '#fff6e4', cloudAmt: 0.55, moon: 0, moonDir: [0, 1, 0], stars: 0 },
-  fog: { color: '#d8d4cc', sun: '#ffe8c4', sunDir, density: 0.0015, falloff: 0.04, base: 0, noise: 0.3, halo: 0.25, skyDist: 120 },
-  grade: { exposure: 1.02, tone: 'neutral', lift: [0.012, 0.008, 0.004], gamma: [1.0, 1.0, 1.02], gain: [1.02, 1.0, 0.98], sat: 1.04, contrast: 1.05, shadowTint: '#5a6680', highlightTint: '#fff0dc', split: 0.22, bloom: 0.62, bloomThreshold: 0.95, vignette: 0.34, grain: 0.04 },
-  moon: { color: '#ffeccc', intensity: 4.6, dir: sunDir },
-  hemi: { sky: '#eef2f8', ground: '#cdb8a4', intensity: 1.75 },
-  env: 0.6, lamps: 1, fill: 0.35, rim: { color: '#ffe8c8', strength: 0.04 }, ash: 0, rain: false, wet: false, fogBank: '#ffffff',
+/** Day Zero's light: honey-warm sun, milky lavender shadows, a glow on everything. The last easy
+ *  morning, meant to sit as far from Ashfall, Curfew and Grey Pall as the game ever gets. */
+export const HONEYLIGHT: Mood = {
+  name: 'Honeylight', blurb: 'Day Zero. Warm sun pouring into a Tuesday on Beacon Hill, the air full of glittering dust.',
+  sky: { zenith: '#5a96dc', horizon: '#ffe6cc', glow: '#ffcf8a', glowDir: [0.35, 0.3, -1], glowAmt: 0.75, cloud: '#fff0e2', cloudLit: '#fff8e8', cloudAmt: 0.5, moon: 0, moonDir: [0, 1, 0], stars: 0 },
+  fog: { color: '#f2dcc0', sun: '#ffd49a', sunDir, density: 0.0028, falloff: 0.04, base: 0, noise: 0.45, halo: 0.45, skyDist: 120 },
+  grade: { exposure: 1.0, tone: 'neutral', lift: [0.02, 0.012, 0.01], gamma: [0.99, 1.0, 1.02], gain: [1.03, 1.0, 0.96], sat: 1.1, contrast: 1.06, shadowTint: '#7a6aa8', highlightTint: '#ffe0b0', split: 0.3, bloom: 0.9, bloomThreshold: 0.88, vignette: 0.26, grain: 0.03 },
+  moon: { color: '#ffd8a4', intensity: 5.0, dir: sunDir },
+  hemi: { sky: '#fff4ea', ground: '#d4b498', intensity: 1.65 },
+  env: 0.65, lamps: 1.1, fill: 0.4, rim: { color: '#ffd89a', strength: 0.07 }, ash: 0, rain: false, wet: false, fogBank: '#ffffff',
+};
+/** the sunbeams and what floats in them */
+const AIR = {
+  shaft: { color: '#ffd49a', strength: 0.13 },
+  /** fine dust: faint in the shade, glittering where it drifts through a sunbeam */
+  dust: { color: '#ffe4b4', shade: 0.5, lit: 2.2, sparkle: 2.2, size: 2.0 },
+  /** a few slow, soft flecks of pollen and fluff, out of focus like bokeh */
+  fluff: { colors: ['#ffe2a8', '#ffc8a0', '#fff0e4', '#ffd0d8'], shade: 0.26, lit: 0.55, size: 9 },
 };
 
 export type TvMode = 'off' | 'static' | 'broadcast' | 'lost';
@@ -1483,7 +1493,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   const sunTravel = new THREE.Vector3(...sunDir).normalize().negate();
   const shaftMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-    uniforms: { k: { value: 0.075 }, col: { value: new THREE.Color('#ffe2b4') } },
+    uniforms: { k: { value: AIR.shaft.strength }, col: { value: new THREE.Color(AIR.shaft.color) } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `varying vec2 vUv; uniform float k; uniform vec3 col;
       void main(){ float a = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.4) * smoothstep(0.0, 0.25, vUv.x) * (1.0 - smoothstep(0.75, 1.0, vUv.x)); gl_FragColor = vec4(col * a * k, 1.0); }`,
@@ -1503,24 +1513,73 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     const m = new THREE.Mesh(g, shaftMat); m.renderOrder = 5; root.add(m); normalHidden.push(m);
   }
-  const dust = (() => {
-    const N = quality === 'high' ? 700 : 320;
-    const p = new Float32Array(N * 3), r = new Float32Array(N);
-    for (let i = 0; i < N; i++) { p[i * 3] = X0 + 0.5 + R() * (X1 - X0 - 1); p[i * 3 + 1] = 0.3 + R() * 2.5; p[i * 3 + 2] = Z0 + 0.2 + R() * 5; r[i] = R(); }
+  // Motes wander lazily around a home point. Each one traces back toward the sun to the window wall:
+  // if it lands inside a window it's in a sunbeam and lights up. Some start in the beams, so they glitter.
+  const sunWins = [winBed, winL1, winL2, winK].map((o) => new THREE.Vector4(o.a0 + 0.05, o.a1 - 0.05, o.y0, o.y1));
+  const pxScale = () => innerHeight * Math.min(devicePixelRatio, quality === 'high' ? 1.5 : 1) / 1000;
+  const motes = (n: number, o: { colors: string[]; shade: number; lit: number; sparkle: number; size: number; drift: number; bokeh: number; inBeams: number }) => {
+    const y0 = 0.1, y1 = H - 0.15;
+    const p = new Float32Array(n * 3), r = new Float32Array(n * 4), c = new Float32Array(n * 3), col = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      if (R() < o.inBeams) {
+        // somewhere along a beam, from the window down to the floor
+        const w = sunWins[Math.floor(R() * sunWins.length)];
+        const q = v3(w.x + R() * (w.y - w.x), w.z + R() * (w.w - w.z), Z0 + 0.08);
+        q.addScaledVector(sunTravel, R() * Math.min((q.y - y0) / -sunTravel.y, 7));
+        q.toArray(p, i * 3);
+      } else {
+        // thickest on the window side
+        p[i * 3] = X0 + 0.4 + R() * (X1 - X0 - 0.8); p[i * 3 + 1] = y0 + R() * (y1 - y0); p[i * 3 + 2] = Z0 + 0.15 + Math.pow(R(), 1.5) * (ZL - Z0 - 0.3);
+      }
+      for (let k = 0; k < 4; k++) r[i * 4 + k] = R();
+      col.set(o.colors[i % o.colors.length]).toArray(c, i * 3);
+    }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(p, 3)); g.setAttribute('rnd', new THREE.BufferAttribute(r, 1));
+    g.setAttribute('position', new THREE.BufferAttribute(p, 3)); g.setAttribute('rnd', new THREE.BufferAttribute(r, 4)); g.setAttribute('tint', new THREE.BufferAttribute(c, 3));
     const m = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { t: { value: 0 } },
-      vertexShader: `attribute float rnd; uniform float t; varying float vA;
-        void main(){ vec3 q = position; q.x += sin(t * 0.15 + rnd * 40.0) * 0.3; q.y += sin(t * 0.11 + rnd * 17.0) * 0.25; q.z += cos(t * 0.13 + rnd * 23.0) * 0.2;
+      uniforms: {
+        t: { value: 0 }, px: { value: pxScale() }, sun: { value: new THREE.Vector3(...sunDir).normalize() }, wallZ: { value: Z0 + 0.08 }, win: { value: sunWins },
+        shade: { value: o.shade }, lit: { value: o.lit }, sparkle: { value: o.sparkle }, size: { value: o.size }, drift: { value: o.drift }, bokeh: { value: o.bokeh },
+      },
+      vertexShader: /* glsl */`
+        attribute vec4 rnd; attribute vec3 tint;
+        uniform float t, px, wallZ, shade, lit, sparkle, size, drift; uniform vec3 sun; uniform vec4 win[4];
+        varying vec3 vCol;
+        void main(){
+          vec3 q = position;
+          q.x += sin(t * (0.07 + rnd.y * 0.09) * drift + rnd.x * 40.0) * 0.4 * drift;
+          q.z += cos(t * (0.06 + rnd.w * 0.08) * drift + rnd.z * 23.0) * 0.3 * drift;
+          q.y += sin(t * (0.09 + rnd.z * 0.1) * drift + rnd.y * 17.0) * 0.3 + sin(t * 0.031 + rnd.w * 30.0) * 0.15;
+          // in a sunbeam?
+          vec2 w = q.xy + sun.xy * ((wallZ - q.z) / sun.z);
+          float inBeam = 0.0;
+          for (int i = 0; i < 4; i++) { vec2 e = min(w - win[i].xz, win[i].yw - w); inBeam = max(inBeam, smoothstep(0.0, 0.15, min(e.x, e.y))); }
+          // tumbling flecks catch the light now and then
+          float glint = pow(0.5 + 0.5 * sin(t * (0.8 + rnd.w * 2.2) + rnd.x * 60.0), 10.0);
+          float edge = smoothstep(${y0.toFixed(2)}, ${(y0 + 0.35).toFixed(2)}, q.y) * smoothstep(${y1.toFixed(2)}, ${(y1 - 0.45).toFixed(2)}, q.y);
+          vCol = tint * edge * (shade * (0.7 + 0.3 * sin(t * 0.7 + rnd.z * 9.0)) + inBeam * lit * (1.0 + glint * sparkle));
           vec4 mv = modelViewMatrix * vec4(q, 1.0); gl_Position = projectionMatrix * mv;
-          gl_PointSize = min(3.0, (1.0 + rnd * 1.5) * (6.0 / -mv.z)); vA = 0.35 + 0.65 * sin(t * (0.5 + rnd) + rnd * 9.0) * 0.5 + 0.3; }`,
-      fragmentShader: `varying float vA; void main(){ vec2 d = gl_PointCoord - 0.5; float a = 1.0 - smoothstep(0.0, 0.5, length(d)); gl_FragColor = vec4(vec3(1.0, 0.92, 0.78) * a * vA * 0.3, 1.0); }`,
+          gl_PointSize = min(size * 8.0 * px, size * px * (0.8 + rnd.z * 1.4) * (1.0 + inBeam * 0.3) * (7.0 / -mv.z));
+        }`,
+      fragmentShader: /* glsl */`
+        uniform float bokeh; varying vec3 vCol;
+        void main(){
+          float d = length(gl_PointCoord - 0.5) * 2.0;
+          if (d > 1.0) discard;
+          // a soft dot, or an out-of-focus disc with a faint brighter rim
+          float spot = pow(1.0 - d, 2.0);
+          float disc = (0.55 + 0.45 * smoothstep(0.55, 0.9, d)) * (1.0 - smoothstep(0.85, 1.0, d));
+          gl_FragColor = vec4(vCol * mix(spot, disc, bokeh), 1.0);
+        }`,
     });
     const pts = new THREE.Points(g, m); pts.frustumCulled = false; root.add(pts); normalHidden.push(pts);
     return m;
-  })();
+  };
+  const air = [
+    motes(quality === 'high' ? 1600 : 700, { colors: [AIR.dust.color], shade: AIR.dust.shade, lit: AIR.dust.lit, sparkle: AIR.dust.sparkle, size: AIR.dust.size, drift: 1, bokeh: 0, inBeams: 0.5 }),
+    motes(quality === 'high' ? 80 : 45, { colors: AIR.fluff.colors, shade: AIR.fluff.shade, lit: AIR.fluff.lit, sparkle: 0.6, size: AIR.fluff.size, drift: 0.6, bokeh: 1, inBeams: 0.25 }),
+  ];
 
   // ------------------------------------------------------------------ the drones' first migration
   const flock = new THREE.Group(); root.add(flock);
@@ -1695,7 +1754,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     heightAt, spawn: { x: -5.0, z: -2.7, heading: -Math.PI * 0.85 },
     card: ['MT. VERNON STREET', 'Beacon Hill · day zero'],
     music: 'apartment', ambience: 'city',
-    mood: MORNING, normalHidden,
+    mood: HONEYLIGHT, normalHidden,
     at, inLiving, tv, clock, phone, cat, lamps,
     setFollow(on: boolean) { follow = on; ceiling.visible = on; },
     cameraBlock(from, to) {
@@ -1737,7 +1796,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
       phoneG.rotation.y = -0.4 + (phone.ringing ? Math.sin(t * 70) * 0.03 : 0);
       floorLamp.intensity += ((floorOn ? 2.4 : 0) - floorLamp.intensity) * Math.min(1, dt * 12);
       floorShade.emissiveIntensity = floorLamp.intensity * 0.5;
-      dust.uniforms.t.value = t;
+      for (const m of air) { m.uniforms.t.value = t; m.uniforms.px.value = pxScale(); }
       if (flockOn) for (const f of flockItems) {
         f.x += f.sp * dt;
         if (f.x > 40) f.x = -40 - R() * 20;
