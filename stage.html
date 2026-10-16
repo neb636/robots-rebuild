@@ -37,6 +37,7 @@
       #name { font-weight: 600; min-width: 120px; }
       #help { position: fixed; top: 12px; right: 12px; padding: 6px 10px; color: var(--dim); font-size: 11px; background: var(--panel); border-radius: 8px; }
       #loading { position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); pointer-events: none; }
+      #help a { color: var(--accent); text-decoration: none; }
       #loading[hidden] { display: none; }
 
       @media (max-width: 700px) {
@@ -66,7 +67,7 @@
       <label><input id="bones" type="checkbox" /> skeleton</label>
       <label><input id="follow" type="checkbox" checked /> follow</label>
     </div>
-    <div id="help">↑↓ clip · space play · ←→ frame · drag orbit · wheel zoom</div>
+    <div id="help"><a href="./">← Title</a> · ↑↓ clip · space play · ←→ frame · drag orbit · wheel zoom</div>
     <div id="loading">Loading…</div>
     <script type="module" src="/src/stage.ts"></script>
   </body>
