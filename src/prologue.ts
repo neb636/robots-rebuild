@@ -3,6 +3,7 @@
 // broadcast starts. Signal lost, Marcus's call, the walk out the door, the fade, two years.
 import * as THREE from 'three';
 import type { Apartment } from './apartment';
+import type { Theo } from './theo';
 import { Dialogue, Interactable, Line } from './dialogue';
 import { audio } from './audio';
 
@@ -15,9 +16,15 @@ export interface PrologueHost {
   shot(s: { pos: THREE.Vector3; look: THREE.Vector3 } | null): void;
   /** turn the hero to face a point */
   face(p: THREE.Vector3): void;
+  /** swing the follow camera round to look at the hero from the side a point is on */
+  viewFrom(p: THREE.Vector3): void;
   /** true while another interaction or dialogue is running */
   busy(): boolean;
   hero(): THREE.Vector3;
+  /** Theo himself, for his animation layers (reaching, dancing) */
+  player: Theo;
+  /** walk the hero to a spot, then turn him to face a point (resolves when he's facing it) */
+  walkTo(p: THREE.Vector3, face: THREE.Vector3): Promise<void>;
   /** build Acorn Lane and swap to it (called while the screen is black) */
   toStreet(): Promise<void>;
   /** the street's opening cutscene: cinematic shots, then hand the camera back */
@@ -38,6 +45,19 @@ const ITEM = (text: string): Line => ({ who: '', text, style: 'item' });
 // inner voice, NARR is the narrator, ALOUD is Theo talking to himself.
 const NARR = (text: string): Line => ({ who: '', text });
 const ALOUD = (text: string): Line => ({ who: '', text });
+/** The records by the turntable. Each is a song in audio.ts; `dance` is what it gets out of Theo
+ *  (a key of DANCES in theo.ts), and `label` the color of the record's label as it spins. */
+const RECORDS = {
+  apartment: { title: 'Slow Tuesday', artist: 'The Quiet Hours', label: '#d84a3a', dance: null },
+  rumba: { title: 'Rumba del Martes', artist: 'Orquesta Mt. Vernon', label: '#e8a030', dance: 'rumba' },
+  silly: { title: 'Wiggle Your Business', artist: 'The Kazoo Kings', label: '#e870b0', dance: 'silly' },
+  monster: { title: 'Graveyard Shift', artist: 'Dr. Bones & the Shufflers', label: '#6a3a9a', dance: 'thriller' },
+} as const;
+type RecordId = keyof typeof RECORDS;
+/** what each press of the turntable puts on, in order: the morning's record is already playing */
+const ROTATION: (RecordId | null)[] = ['apartment', 'rumba', 'silly', 'monster', null];
+const ease = (k: number) => k * k * (3 - 2 * k);
+
 // Biscuit, recorded (ElevenLabs sound effects, level-matched to the voice-over)
 const CAT = { chirp: 'audio/sfx/cat-chirp.mp3', purr: 'audio/sfx/cat-purr.mp3', startle: 'audio/sfx/cat-startle.mp3', hiding: 'audio/sfx/cat-hiding.mp3' };
 
@@ -48,7 +68,18 @@ export class Prologue {
   private ringT = 0;
   private alarmT = 2;
   private coffee = false;
-  private musicOn = true;
+  /** what's on the turntable and playing (null: the needle's up), and what's on the platter */
+  private record: RecordId | null = 'apartment';
+  private platter: RecordId = 'apartment';
+  /** Theo is working the turntable (no dancing until the needle's down) */
+  private cueing = false;
+  /** where Theo's hand is headed: from a fixed point toward a (moving) target, `k` of the way */
+  private hand = new THREE.Vector3();
+  private handFrom = new THREE.Vector3();
+  private handTo: (() => THREE.Vector3) | null = null;
+  private handK = 1;
+  private handS = 0;
+  private handDone: (() => void) | null = null;
   /** walked into the living room (and heard the TV through the wall): the couch is unlocked */
   private couchOn = false;
   private couchUsed = false;
@@ -60,7 +91,9 @@ export class Prologue {
 
   get pre() { return this.phase === 'morning'; }
   /** what should be playing right now (for when audio unlocks late) */
-  get music(): string | null { return this.pre && this.musicOn ? 'apartment' : null; }
+  get music(): string | null { return this.pre ? this.record : null; }
+
+  private get nextRecord() { return ROTATION[(ROTATION.indexOf(this.record) + 1) % ROTATION.length]; }
 
   /** next entry of a list each time; after the end, loop from `from` */
   private pick<T>(id: string, list: T[], from = 0): T {
@@ -93,6 +126,24 @@ export class Prologue {
       if (apt.inLiving(p.x, p.z) && !this.h.busy()) void this.enterLiving();
     }
     if (apt.phone.ringing && (this.ringT -= dt) <= 0) { this.ringT = 1.7; audio.sfx('phone', 0.9); }
+    // with a dance record on, Theo dances whenever he's standing around in the living room
+    const dance = this.pre && this.record && !this.cueing ? RECORDS[this.record].dance : null;
+    this.h.player.groove(dance && apt.inLiving(p.x, p.z) ? dance : null, () => audio.songTime());
+    // his hand, on its way to whatever he's reaching for
+    if (this.handTo) {
+      this.handK = this.handS > 0 ? Math.min(1, this.handK + dt / this.handS) : 1;
+      this.hand.lerpVectors(this.handFrom, this.handTo(), ease(this.handK));
+      if (this.handK === 1 && this.handDone) { const r = this.handDone; this.handDone = null; r(); }
+    }
+  }
+
+  /** move Theo's reaching hand to a target (followed if it moves) over `s` seconds */
+  private handGo(to: () => THREE.Vector3, s: number) {
+    this.handDone?.();
+    this.handFrom.copy(this.handTo ? this.hand : to());
+    this.handTo = to; this.handK = 0; this.handS = s;
+    this.hand.copy(this.handFrom);
+    return new Promise<void>((r) => { this.handDone = r; });
   }
 
   /** first step into the living room: a TV is on somewhere, and the channel is wrong */
@@ -227,12 +278,14 @@ export class Prologue {
       ['Me and Marcus at Fenway.', 'He caught a foul ball with his face. He still says he meant to.'],
       ['He keeps the ball on his dashboard.', 'He calls it "the one that got me."'],
     ])));
-    add('records', 'Turntable', a.records, 1.2, async () => {
-      if (!this.pre) { await this.say('Not really in a music mood anymore.'); return; }
-      this.musicOn = !this.musicOn;
-      audio.playMusic(this.musicOn ? 'apartment' : null, 0.4);
-      await this.say(this.musicOn ? [ALOUD('Needle down. Better.')] : ['I lift the needle.', '...', 'Too quiet. It\'s weird when it\'s this quiet.']);
-    }, 'Play');
+    // the prompt names the record that goes on next
+    const self = this;
+    this.items.push({
+      id: 'records', pos: a.records, radius: 1.2,
+      get name() { const n = self.nextRecord; return self.pre && n ? `"${RECORDS[n].title}"` : 'Turntable'; },
+      get verb() { return !self.pre ? 'Look' : self.nextRecord ? 'Play' : 'Stop'; },
+      use: () => this.turntable(),
+    });
     add('fridge', 'Fridge', a.fridge, 1.2, () => this.say(this.pick('fridge', [
       ['Half a lemon, oat milk, and a takeout box I\'m not emotionally ready to open.'],
       ['A magnet from Marcus: WORLD\'S OKAYEST ELECTRICIAN.', 'He bought it for himself, then gave it to me so I\'d ask about it.'],
@@ -263,6 +316,80 @@ export class Prologue {
     });
   }
 
+  /** Walk up to the turntable and change the record: lift the needle off what's playing, swap the
+   *  record, cue the next one and drop the needle; then, if it's a dance record, turn to the room and
+   *  dance. The last press lifts the needle and leaves it off. */
+  private async turntable() {
+    if (!this.pre) { await this.say('Not really in a music mood anymore.'); return; }
+    const { apt, player } = this.h, tt = apt.turntable;
+    const next = this.nextRecord;
+    const cue = () => tt.cue, center = () => tt.center;
+    this.h.lock(true);
+    this.cueing = true;
+    // from over his left shoulder, the side of the tonearm (the follow camera would end up in the fig)
+    this.h.shot({ pos: v(3.1, 1.55, 0.2), look: v(0.8, 1.0, 1.75) });
+    await this.h.walkTo(apt.at.recordStand, apt.at.records);
+    // a hand to the tonearm
+    void this.handGo(cue, 0);
+    player.reach(this.hand);
+    await wait(520);
+    if (this.record) {
+      // needle up: the song cuts, the motor's off, the arm goes home with his hand on it
+      audio.sfx('needleUp');
+      audio.playMusic(null, 0.12);
+      this.record = null;
+      tt.spin(false);
+      await tt.arm(false);
+      await wait(120);
+    }
+    if (next && this.platter !== next) {
+      // the old record off, the new one on (his hand over the platter while it slows)
+      await this.handGo(center, 0.45);
+      await wait(260);
+      tt.label(RECORDS[next].label);
+      this.platter = next;
+      await wait(260);
+      await this.handGo(cue, 0.4);
+    }
+    if (next) {
+      // motor on, cue the arm over, needle down, and a beat of crackle before the song comes in
+      tt.spin(true);
+      await wait(250);
+      await tt.arm(true);
+      audio.sfx('needle', 0.8);
+      await wait(380);
+      player.reach(null);
+      await wait(320);
+      this.record = next;
+      audio.playMusic(next, 0.08);
+    } else {
+      player.reach(null);
+      await wait(400);
+    }
+    this.cueing = false;
+    const rec = next ? RECORDS[next] : null;
+    if (rec?.dance) {
+      void this.h.dlg.notify(`♪  "${rec.title}"  —  ${rec.artist}`, 2800);
+      // he catches the first bar, then turns around to the room and lets it take him
+      await wait(450);
+      const room = apt.at.recordStand.clone().add(v(0, 0, -3));
+      this.h.face(room);
+      player.groove(rec.dance, () => audio.songTime());
+      player.startDance();
+      // and the camera comes round to the front to watch
+      this.h.shot(null);
+      this.h.viewFrom(room);
+      await wait(500);
+      this.h.lock(false);
+      return;
+    }
+    this.h.shot(null);
+    this.h.viewFrom(apt.at.recordStand.clone().add(v(0.6, 0, -3)));
+    this.h.lock(false);
+    if (next) await this.say([ALOUD('Needle down. Better.')]);
+    else await this.say(['I lift the needle.', '...', 'Too quiet. It\'s weird when it\'s this quiet.']);
+  }
+
   private windowLiving() {
     if (this.pre) return this.say(this.pick('winL', [
       ['The 9 bus goes by. Somebody\'s dog is losing its mind at a pigeon.'],
@@ -289,6 +416,7 @@ export class Prologue {
     this.h.lock(true);
     dlg.objective(null);
     audio.playMusic(null, 0.5);
+    apt.turntable.spin(false);
     // the screen flashes, then the channel takes over
     audio.sfx('static');
     apt.tv.set('static');

@@ -64,6 +64,7 @@ async function boot() {
   const theo = await loadTheo(state.quality);
   setLoad(0.9, street ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
   const app3 = new App(gl, built, theo);
+  if (params.has('debug')) (window as any).__app = app3;
   setLoad(1, ''); await nextFrame();
   // compile shaders up front so the first frames don't hitch
   gl.compile(built.scene, app3.camera);
@@ -112,6 +113,10 @@ class App {
   locked = false;
   /** an interaction is running */
   busyN = 0;
+  /** a scripted stretch with no lock (the street's opening shots): no fidgeting or dancing */
+  cutscene = false;
+  /** a scripted walk: to a spot, then turn to face a point */
+  auto: { to: THREE.Vector3; face: THREE.Vector3; t: number; arrived: boolean; done: () => void } | null = null;
   /** fixed camera shot during a cutscene */
   shot: { pos: THREE.Vector3; look: THREE.Vector3 } | null = null;
   focus: Interactable | null = null;
@@ -158,8 +163,15 @@ class App {
         lock: (on) => { this.locked = on; },
         shot: (sh) => { this.shot = sh; },
         face: (p) => this.faceTo(p),
+        viewFrom: (p) => {
+          this.yaw = Math.atan2(p.x - this.pos.x, p.z - this.pos.z); this.lastLook = this.t;
+          // far enough back to see him head to toe
+          if (this.indoorFollow) { this.dist = Math.max(this.dist, 3.9); this.pitch = 0.24; }
+        },
         busy: () => this.busyN > 0 || this.dlg.open || this.locked,
         hero: () => this.pos,
+        player: this.player,
+        walkTo: (p, face) => this.walkTo(p, face),
         toStreet: () => this.toStreet(),
         streetIntro: () => this.streetIntro(),
       });
@@ -188,9 +200,11 @@ class App {
   /** Acorn Lane's opening: 30 s of the cinematic shots, then a quick fade into the follow camera. */
   async streetIntro() {
     const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    this.cutscene = true;
     await wait(30000);
     await this.dlg.fade(1, 700);
     this.setCam('follow', false);
+    this.cutscene = false;
     await wait(200);
     await this.dlg.fade(0, 1000);
   }
@@ -305,6 +319,7 @@ class App {
   bindInput() {
     addEventListener('keydown', (e) => {
       this.keys.add(e.code);
+      this.player.poke();
       this.enableAudio();
       // Space interacts when there's something to interact with, and jumps otherwise
       if (e.code === 'Space' && !this.dlg.open && !this.focus) { e.preventDefault(); if (!e.repeat) this.jump(); return; }
@@ -318,7 +333,7 @@ class App {
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
-    canvas.addEventListener('wheel', (e) => { this.zoom(e.deltaY * 0.004); e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('wheel', (e) => { this.zoom(e.deltaY * 0.004); this.player.poke(); e.preventDefault(); }, { passive: false });
     this.bindTouch();
   }
 
@@ -346,6 +361,7 @@ class App {
 
     canvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      this.player.poke();
       const touch = e.pointerType !== 'mouse';
       const stick = touch && stickId === null && e.clientX < innerWidth * 0.45;
       active.set(e.pointerId, { x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY, stick });
@@ -361,6 +377,7 @@ class App {
     canvas.addEventListener('pointermove', (e) => {
       const a = active.get(e.pointerId); if (!a) return;
       e.preventDefault();
+      this.player.poke();
       if (a.stick) {
         let dx = e.clientX - a.ox, dy = e.clientY - a.oy;
         const l = Math.hypot(dx, dy);
@@ -433,6 +450,7 @@ class App {
     for (const p of navigator.getGamepads?.() ?? []) {
       if (!p) continue;
       padA ||= !!p.buttons[0]?.pressed;
+      if (p.buttons.some((b) => b.pressed) || p.axes.some((x) => Math.abs(x) > 0.18)) this.player.poke();
       const ax = p.axes[0] ?? 0, ay = p.axes[1] ?? 0;
       if (Math.hypot(ax, ay) > 0.18) { v.x += ax; v.y -= ay; }
       const cx = p.axes[2] ?? 0, cy = p.axes[3] ?? 0;
@@ -452,12 +470,44 @@ class App {
     const f = this.focus;
     if (!f || this.frozen) return;
     this.busyN++;
+    this.player.settle();
     this.faceTo(f.pos);
     this.dlg.setPrompt(null);
     try { await f.use(); } finally { this.busyN--; }
   }
 
   faceTo(p: THREE.Vector3) { this.turnTo = Math.atan2(p.x - this.pos.x, p.z - this.pos.z); }
+
+  /** Walk the hero to a spot at an unhurried pace, then turn to face a point; resolves once he's
+   *  facing it. For cutscene beats (the turntable), with the hero locked. */
+  walkTo(to: THREE.Vector3, face: THREE.Vector3): Promise<void> {
+    this.auto?.done();
+    return new Promise((done) => { this.auto = { to: to.clone(), face: face.clone(), t: 0, arrived: false, done }; });
+  }
+
+  /** one frame of a scripted walk; returns the ground speed */
+  private autoWalk(dt: number): number {
+    const a = this.auto!;
+    a.t += dt;
+    if (a.arrived) {
+      if (this.turnTo === null || a.t > 2) { this.auto = null; a.done(); }
+      return 0;
+    }
+    const dx = a.to.x - this.pos.x, dz = a.to.z - this.pos.z, d = Math.hypot(dx, dz);
+    // there, or stuck on something for too long
+    if (d < 0.03 || a.t > 5) { a.arrived = true; a.t = 0; this.faceTo(a.face); return 0; }
+    // a walk that settles into the spot rather than braking on it
+    const step = Math.min(d, Math.min(1.25, 0.25 + d * 3) * dt);
+    const ox = this.pos.x, oz = this.pos.z, cur = this.built.heightAt(ox, oz) || 0;
+    const nx = ox + (dx / d) * step, nz = oz + (dz / d) * step;
+    if (this.canStand(nx, oz, cur)) this.pos.x = nx;
+    if (this.canStand(this.pos.x, nz, cur)) this.pos.z = nz;
+    // head where he's going; on the last few centimetres, start turning toward what he came for
+    const look = d > 0.18 ? Math.atan2(dx, dz) : Math.atan2(a.face.x - this.pos.x, a.face.z - this.pos.z);
+    let dh = look - this.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    this.heading += dh * Math.min(1, dt * 8);
+    return Math.hypot(this.pos.x - ox, this.pos.z - oz) / dt;
+  }
 
   /** the closest usable thing in reach, favouring what the hero is facing */
   updateFocus() {
@@ -519,6 +569,7 @@ class App {
       let d = target - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.heading += d * Math.min(1, dt * 10);
     }
+    if (this.auto) speed = this.autoWalk(dt);
     if (this.turnTo !== null) {
       let d = this.turnTo - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.heading += d * Math.min(1, dt * 8);
@@ -535,7 +586,7 @@ class App {
     this.player.group.position.copy(this.pos);
     this.player.group.position.y += this.jumpY;
     this.player.group.rotation.y = this.heading;
-    this.player.update(dt, speed);
+    this.player.update(dt, speed, !this.frozen && !this.cutscene);
     this.pShadow.position.set(this.pos.x, this.pos.y + 0.02, this.pos.z);
     this.pShadow.scale.setScalar(1 - Math.min(0.4, this.jumpY * 0.6));
 
