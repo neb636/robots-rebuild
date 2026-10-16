@@ -38,9 +38,9 @@ export const HONEYLIGHT: Mood = {
 const AIR = {
   shaft: { color: '#ffd49a', strength: 0.13 },
   /** fine dust: faint in the shade, glittering where it drifts through a sunbeam */
-  dust: { color: '#ffe4b4', shade: 0.5, lit: 2.2, sparkle: 2.2, size: 2.0 },
+  dust: { color: '#ffe4b4', shade: 0.18, lit: 1.0, sparkle: 1.4, size: 1.0 },
   /** a few slow, soft flecks of pollen and fluff, out of focus like bokeh */
-  fluff: { colors: ['#ffe2a8', '#ffc8a0', '#fff0e4', '#ffd0d8'], shade: 0.26, lit: 0.55, size: 9 },
+  fluff: { colors: ['#ffe2a8', '#ffc8a0', '#fff0e4', '#ffd0d8'], shade: 0.08, lit: 0.2, size: 4.5 },
 };
 
 export type TvMode = 'off' | 'static' | 'broadcast' | 'lost';
@@ -1558,9 +1558,10 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
           // tumbling flecks catch the light now and then
           float glint = pow(0.5 + 0.5 * sin(t * (0.8 + rnd.w * 2.2) + rnd.x * 60.0), 10.0);
           float edge = smoothstep(${y0.toFixed(2)}, ${(y0 + 0.35).toFixed(2)}, q.y) * smoothstep(${y1.toFixed(2)}, ${(y1 - 0.45).toFixed(2)}, q.y);
-          vCol = tint * edge * (shade * (0.7 + 0.3 * sin(t * 0.7 + rnd.z * 9.0)) + inBeam * lit * (1.0 + glint * sparkle));
           vec4 mv = modelViewMatrix * vec4(q, 1.0); gl_Position = projectionMatrix * mv;
-          gl_PointSize = min(size * 8.0 * px, size * px * (0.8 + rnd.z * 1.4) * (1.0 + inBeam * 0.3) * (7.0 / -mv.z));
+          // and fade out right in front of the lens instead of ballooning
+          vCol = tint * edge * smoothstep(0.8, 2.2, -mv.z) * (shade * (0.7 + 0.3 * sin(t * 0.7 + rnd.z * 9.0)) + inBeam * lit * (1.0 + glint * sparkle));
+          gl_PointSize = min(size * 4.0 * px, size * px * (0.8 + rnd.z * 1.4) * (1.0 + inBeam * 0.3) * (7.0 / -mv.z));
         }`,
       fragmentShader: /* glsl */`
         uniform float bokeh; varying vec3 vCol;
@@ -1569,7 +1570,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
           if (d > 1.0) discard;
           // a soft dot, or an out-of-focus disc with a faint brighter rim
           float spot = pow(1.0 - d, 2.0);
-          float disc = (0.55 + 0.45 * smoothstep(0.55, 0.9, d)) * (1.0 - smoothstep(0.85, 1.0, d));
+          float disc = (0.75 + 0.25 * smoothstep(0.55, 0.9, d)) * (1.0 - smoothstep(0.85, 1.0, d));
           gl_FragColor = vec4(vCol * mix(spot, disc, bokeh), 1.0);
         }`,
     });
@@ -1578,7 +1579,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   };
   const air = [
     motes(quality === 'high' ? 1600 : 700, { colors: [AIR.dust.color], shade: AIR.dust.shade, lit: AIR.dust.lit, sparkle: AIR.dust.sparkle, size: AIR.dust.size, drift: 1, bokeh: 0, inBeams: 0.5 }),
-    motes(quality === 'high' ? 80 : 45, { colors: AIR.fluff.colors, shade: AIR.fluff.shade, lit: AIR.fluff.lit, sparkle: 0.6, size: AIR.fluff.size, drift: 0.6, bokeh: 1, inBeams: 0.25 }),
+    motes(quality === 'high' ? 50 : 30, { colors: AIR.fluff.colors, shade: AIR.fluff.shade, lit: AIR.fluff.lit, sparkle: 0.6, size: AIR.fluff.size, drift: 0.6, bokeh: 1, inBeams: 0.25 }),
   ];
 
   // ------------------------------------------------------------------ the drones' first migration
