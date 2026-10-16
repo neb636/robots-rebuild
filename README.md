@@ -52,11 +52,12 @@ a shoulder-height **Follow** camera (the default) and an **Overhead** dollhouse 
   `src/main.ts`).
 - **Quality:** High, or Low (no SSAO or depth of field, 1x pixel ratio, no MSAA). Touch devices
   default to Low.
-- **Audio:** Web (the default: browser speech and synthesized sounds) or Generated (the recorded
-  ElevenLabs voice-over and effects, where a scene has them). See Voice-over below.
+- **Audio:** Generated (the default: the recorded ElevenLabs voice-over and effects where a scene
+  has them, the browser voice for anything not recorded yet) or Web (browser speech and synthesized
+  sounds only). See Voice-over below.
 
 URL params override the saved settings without changing them, for sharing a specific setup:
-`?mood=curfew&cam=jrpg&q=low&audio=generated&ui=0&card=0`. `?menu=0` skips the title screen and goes
+`?mood=curfew&cam=jrpg&q=low&audio=web&ui=0&card=0`. `?menu=0` skips the title screen and goes
 straight into the game. `?start=street` skips Day Zero and starts on Acorn Lane. `?debug` exposes `window.__THREE` (and `window.__title` on the title screen).
 
 ## Frame rate and browser testing
@@ -97,8 +98,8 @@ voice picked per speaker (`SPEECH` in `src/speech.ts`: preferred system voices, 
 Theo is low and slow and the broadcast is a robot where the OS has one), with synthesized talk blips
 (`TALK` in `src/audio.ts`) where there's no speech engine. Once a scene's script is final it can be
 converted to recorded audio with ElevenLabs (the `elevenlabs-audio` skill in `.claude/skills/` has
-the cast and the process). Players choose in **Options → Audio**: Web (the default) or Generated
-(`?audio=generated`); with Generated, lines that haven't been recorded yet still use the browser voice.
+the cast and the process). Players choose in **Options → Audio**: Generated (the default; lines that haven't been recorded yet
+use the browser voice) or Web (`?audio=web`, browser audio only).
 
 Day Zero's lines are voiced with ElevenLabs. Theo's inner voice is a designed voice (low, slow,
 somber), with a livelier read for lines he says out loud; the narrator reads object text and the

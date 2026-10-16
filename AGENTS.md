@@ -15,5 +15,7 @@ for a new scene until the user explicitly asks to convert that scene, which they
 is final. When they do, follow the `elevenlabs-audio` skill (`.claude/skills/elevenlabs-audio/SKILL.md`),
 which has the cast's voices, models and settings.
 
-Web is the game's default (title menu Options → Audio). Recorded audio only plays when the player
-picks Generated, so anything recorded must keep a working browser fallback.
+Generated is the game's default (title menu Options → Audio): recorded clips play where they exist,
+and any line without one is read by the browser voice, so a new scene is heard as soon as it's
+written. Players can pick Web to hear only browser audio, so anything recorded must keep a working
+browser fallback.

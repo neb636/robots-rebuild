@@ -8,9 +8,10 @@ description: Convert a finished scene's Web Audio placeholders into ElevenLabs v
 Scenes are written and iterated with **browser audio**: the browser's text-to-speech speaks the lines
 (`src/speech.ts`, with talk blips in `src/audio.ts` as the fallback) and SFX are procedural Web Audio.
 Only when the user says a scene's script is final do we convert it. Everything recorded is **optional at
-runtime**: the title menu's **Options → Audio** switches between `Web` (default) and `Generated`
-(`?audio=generated` in the URL), so every recorded clip must keep a working browser fallback. With
-Generated, lines that have no clip yet still fall back to the browser voice.
+runtime**: the title menu's **Options → Audio** switches between `Generated` (the default) and `Web`
+(`?audio=web` in the URL), so every recorded clip must keep a working browser fallback. With
+Generated, lines that have no clip yet fall back to the browser voice, so an unconverted scene still
+speaks.
 
 Needs `ELEVENLABS_API_KEY` in `.env.local` (gitignored) and `ffmpeg` (blends, loudness). The key has no
 `user_read` permission, so the credit balance isn't readable: tell the user the estimated cost instead.
@@ -57,7 +58,7 @@ with synth fallbacks (`meow`, `meowLow`, `purr` in `audio.sfx`).
    level-match with ffmpeg into `public/audio/sfx/` (`volume=<target - measured>dB,alimiter=limit=0.89`;
    targets used: meows -21/-22, a quiet meow -25, a purr -28 LUFS). Wire them so the synth version
    still plays with Audio set to Web Audio.
-7. Test with `?audio=generated` and with the default, update the README's Voice-over section if
+7. Test with the default (Generated) and with `?audio=web`, update the README's Voice-over section if
    anything changed, then commit and open/update the PR (see AGENTS.md).
 
 ## Casting a new character

@@ -27,10 +27,10 @@ export const state = {
   mood: pick<keyof typeof MOODS>(params.get('mood') ?? saved.mood, Object.keys(MOODS), 'curfew'),
   cam: pick<CamMode>(params.get('cam') ?? saved.cam, CAMS, 'follow'),
   quality: pick<'high' | 'low'>(params.get('q') ?? saved.quality, ['high', 'low'], isTouch ? 'low' : 'high'),
-  /** web: the browser speaks the lines (speech.ts) and synthesizes the sounds (the default, and how new
-   *  scenes are written);
-   *  generated: the ElevenLabs voice-over and recorded effects, where a scene has them */
-  audio: pick<AudioMode>(params.get('audio') ?? saved.audio, ['web', 'generated'], 'web'),
+  /** generated (the default): the ElevenLabs voice-over and recorded effects where a scene has them, and
+   *  the browser's voice (speech.ts) for any line not recorded yet;
+   *  web: only the browser speaks the lines and synthesizes the sounds */
+  audio: pick<AudioMode>(params.get('audio') ?? saved.audio, ['web', 'generated'], 'generated'),
   ui: params.get('ui') !== '0',
   sound: false,
 };
