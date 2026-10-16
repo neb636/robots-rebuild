@@ -113,9 +113,9 @@ export class Prologue {
     ]));
 
     const cat: Interactable = {
-      id: 'cat', name: 'Biscuit', pos: a.bed.clone().set(-6.0, 0.8, -4.1), radius: 1.5, verb: 'Pet',
+      id: 'cat', name: 'Biscuit', pos: a.cat.clone().setY(a.cat.y + 0.15), radius: 1.5, verb: 'Pet',
       use: async () => {
-        if (apt.cat.state === 'bed') {
+        if (apt.cat.state === 'loaf') {
           apt.cat.pet(); audio.sfx('meow', 0.7);
           await this.say(this.pick('cat', [
             ['Biscuit purrs like a tiny outboard motor.'],
@@ -179,6 +179,9 @@ export class Prologue {
       ['My good hoodie is somewhere under there. It\'s been gone for weeks.', 'It\'s at peace now.'],
     ])));
     add('art', 'Sailboat print', a.art, 1.2, () => this.say(['A print of a sailboat.', 'I\'ve never been on a sailboat. I just liked the vibe.']));
+    add('litter', 'Litter box', a.litter, 1.0, () => this.say(['Biscuit\'s litter box.', 'Scooped yesterday. Probably. Let\'s say yesterday.']));
+    add('bar', 'Bar cart', a.bar, 1.2, () => this.say(['The bar cart.', 'Two bourbons, a gin I was gifted, and a shaker I\'ve used exactly once.']));
+    add('table', 'Dining table', a.table, 1.4, () => this.say(['The dining table.', 'Seats four. Mostly seats my laptop.']));
     add('bath', 'Bathroom', a.bath, 1.0, () => this.say(this.pick('bath', [
       ['The bathroom. I already brushed my teeth.', '...Probably. I\'ll take the win.'],
       ['Occupied. By nobody. I just like the door closed.'],
@@ -289,9 +292,9 @@ export class Prologue {
     // the screen flashes, then the channel takes over
     audio.sfx('static');
     apt.tv.set('static');
-    if (apt.cat.state === 'bed') {
+    if (apt.cat.state === 'loaf') {
       audio.sfx('meow', 1);
-      apt.cat.bolt([v(-6.0, 0.66, -4.1), v(-5.2, 0, -3.2), v(-3.8, 0, -1.4), v(-2.6, 0, -0.7), v(-1.0, 0, -0.7), v(1.0, 0, -1.7), v(2.2, 0, -2.4)]);
+      apt.cat.bolt([apt.at.cat.clone(), v(-7.3, 0, -0.5), v(-4.8, 0, -1.0), v(-2.6, 0, -0.7), v(-1.0, 0, -0.7), v(1.0, 0, -1.7), v(2.2, 0, -2.4)]);
     }
     this.h.face(apt.at.tv);
     this.h.shot({ pos: v(2.6, 1.85, -0.9), look: v(2.5, 1.1, -5.8) });
