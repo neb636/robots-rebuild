@@ -34,6 +34,12 @@ const TV = (text: string): Line => ({ who: '📺  SUPERINTELLIGENCE INC — LIVE
 const CLOCK = (text: string): Line => ({ who: 'ALARM CLOCK', text });
 const BROWSER = (text: string): Line => ({ who: 'BROWSER', text });
 const ITEM = (text: string): Line => ({ who: '', text, style: 'item' });
+// Unlabelled lines, told apart only by who voices them (scripts/voice.mjs): plain strings are Theo's
+// inner voice, NARR is the narrator, ALOUD is Theo talking to himself.
+const NARR = (text: string): Line => ({ who: '', text });
+const ALOUD = (text: string): Line => ({ who: '', text });
+// Biscuit, recorded (ElevenLabs sound effects, level-matched to the voice-over)
+const CAT = { chirp: 'audio/sfx/cat-chirp.mp3', purr: 'audio/sfx/cat-purr.mp3', startle: 'audio/sfx/cat-startle.mp3', hiding: 'audio/sfx/cat-hiding.mp3' };
 
 export class Prologue {
   phase: Phase = 'morning';
@@ -49,6 +55,7 @@ export class Prologue {
 
   constructor(private h: PrologueHost) {
     this.build();
+    for (const f of Object.values(CAT)) void audio.load(f);
   }
 
   get pre() { return this.phase === 'morning'; }
@@ -67,8 +74,8 @@ export class Prologue {
     this.h.lock(true);
     audio.sfx('alarm', 0.5);
     await dlg.fade(0, 2600);
-    await this.say(['...', 'Okay. Okay, I\'m up.']);
-    audio.sfx('meow', 0.8);
+    await this.say(['...', ALOUD('Okay. Okay, I\'m up.')]);
+    void audio.play(CAT.chirp);
     await this.say([{ who: 'BISCUIT', text: 'Mrrp.' }]);
     this.h.lock(false);
     dlg.objective('Start your day. Look around.');
@@ -93,7 +100,7 @@ export class Prologue {
     this.couchOn = true;
     audio.ambience('tvhum');
     await this.say([
-      'Next door. Your neighbor left their TV on again.',
+      NARR('Next door. Your neighbor left their TV on again.'),
       '...',
       'Wait. That\'s not a normal channel.',
     ]);
@@ -116,7 +123,7 @@ export class Prologue {
       id: 'cat', name: 'Biscuit', pos: a.cat.clone().setY(a.cat.y + 0.15), radius: 1.5, verb: 'Pet',
       use: async () => {
         if (apt.cat.state === 'loaf') {
-          apt.cat.pet(); audio.sfx('meow', 0.7);
+          apt.cat.pet(); void audio.play(CAT.purr, 1, 2.5);
           await this.say(this.pick('cat', [
             ['Biscuit purrs like a tiny outboard motor.'],
             ['Biscuit allows exactly one more pet.', 'Then she bites me. Gently. As a treat.'],
@@ -125,6 +132,7 @@ export class Prologue {
             ['Biscuit purrs like a tiny outboard motor.'],
           ], 4));
         } else {
+          void audio.play(CAT.hiding);
           await this.say(this.pick('catHide', [
             ['Biscuit is under the couch. Only her tail is sticking out.', 'Animals know first.'],
             ['She\'s not coming out. Honestly? Smart.'],
@@ -146,14 +154,14 @@ export class Prologue {
       BROWSER('The last email subject: "Re: Have you considered the efficiency gains?"'),
     ]));
     add('bookshelf', 'Bookshelf', a.bookshelf, 1.4, () => this.say([
-      '"The Alignment Problem" is face-out on the shelf.',
-      'You never finished it. Something always came up.',
-      'Chapter 7 is bookmarked: "When Instrumental Goals Become Terminal."',
-      '...You\'ll get to it eventually.',
+      NARR('"The Alignment Problem" is face-out on the shelf.'),
+      NARR('You never finished it. Something always came up.'),
+      NARR('Chapter 7 is bookmarked: "When Instrumental Goals Become Terminal."'),
+      NARR('...You\'ll get to it eventually.'),
     ]));
     add('poster', 'Poster', a.poster, 1.3, () => this.say([
-      'A state parks poster. Acadia, 2024.',
-      'You kept meaning to go.',
+      NARR('A state parks poster. Acadia, 2024.'),
+      NARR('You kept meaning to go.'),
     ]));
     add('water', 'Nightstand', a.water, 1.15, async () => {
       await this.say(this.pick('water', [
@@ -188,8 +196,8 @@ export class Prologue {
     add('tv', 'TV', a.tv, 1.6, () => this.say(this.pre
       ? (this.couchOn ? ['It\'s off. The sound is coming through the wall.'] : ['It\'s off. The remote is somewhere in the couch.'])
       : this.pick('tvAfter', [
-        ['— SIGNAL LOST —', 'Just a gray screen and a hum.'],
-        ['The remote doesn\'t do anything. Neither does the power button.', 'You pull the plug out of the wall.', 'It stays on.'],
+        [NARR('— SIGNAL LOST —'), 'Just a gray screen and a hum.'],
+        ['The remote doesn\'t do anything. Neither does the power button.', NARR('You pull the plug out of the wall.'), NARR('It stays on.')],
       ], 1)), 'Look');
     // the couch starts the broadcast; it has no lines of its own, and once used it does nothing
     add('couch', 'Couch', a.couch, 1.4, () => {
@@ -200,7 +208,7 @@ export class Prologue {
     add('coffee', 'Coffee maker', a.coffee, 1.3, async () => {
       if (this.pre && !this.coffee) {
         this.coffee = true;
-        await this.say('Coffee. Sweet, beautiful coffee.');
+        await this.say(ALOUD('Coffee. Sweet, beautiful coffee.'));
         audio.sfx('item');
         await this.say(ITEM('Got COFFEE (BLACK).  Courage +1'));
         return;
@@ -211,10 +219,10 @@ export class Prologue {
     }, 'Brew');
     add('crossword', 'Crossword', a.crossword, 1.1, () => this.say(this.pre
       ? this.pick('cross', [
-        ['Sunday crossword. 14 Across: "Thinking machine." Two letters.', 'A.I. Easy. I\'m a genius.'],
+        ['Sunday crossword. 14 Across: "Thinking machine." Two letters.', ALOUD('A.I. Easy. I\'m a genius.')],
         ['23 Down: "Wasteful; not optimal." Eleven letters.', '...I\'ll come back to it.'],
       ], 1)
-      : ['23 Down. "Wasteful; not optimal." Eleven letters.', 'I-N-E-F-F-I-C-I-E-N-T.', '...Huh.']), 'Read');
+      : ['23 Down. "Wasteful; not optimal." Eleven letters.', ALOUD('I-N-E-F-F-I-C-I-E-N-T.'), '...Huh.']), 'Read');
     add('photo', 'Photo', a.photo, 1.2, () => this.say(this.pick('photo', [
       ['Me and Marcus at Fenway.', 'He caught a foul ball with his face. He still says he meant to.'],
       ['He keeps the ball on his dashboard.', 'He calls it "the one that got me."'],
@@ -223,7 +231,7 @@ export class Prologue {
       if (!this.pre) { await this.say('Not really in a music mood anymore.'); return; }
       this.musicOn = !this.musicOn;
       audio.playMusic(this.musicOn ? 'apartment' : null, 0.4);
-      await this.say(this.musicOn ? ['Needle down. Better.'] : ['I lift the needle.', '...', 'Too quiet. It\'s weird when it\'s this quiet.']);
+      await this.say(this.musicOn ? [ALOUD('Needle down. Better.')] : ['I lift the needle.', '...', 'Too quiet. It\'s weird when it\'s this quiet.']);
     }, 'Play');
     add('fridge', 'Fridge', a.fridge, 1.2, () => this.say(this.pick('fridge', [
       ['Half a lemon, oat milk, and a takeout box I\'m not emotionally ready to open.'],
@@ -242,7 +250,7 @@ export class Prologue {
     add('lamp', 'Floor lamp', a.lamp, 1.1, async () => {
       const on = apt.lamps.floor();
       audio.sfx('cursor');
-      await this.say(on ? ['Click. A lamp. In broad daylight.', 'Bold choice, Theo.'] : ['Click. Fine. Natural light it is.']);
+      await this.say(on ? ['Click. A lamp. In broad daylight.', ALOUD('Bold choice, Theo.')] : ['Click. Fine. Natural light it is.']);
     }, 'Switch');
     add('winL', 'Window', a.winL, 1.3, () => this.windowLiving());
     add('winL2', 'Window', a.winL2, 1.3, () => this.windowLiving());
@@ -269,8 +277,8 @@ export class Prologue {
   private async door() {
     if (this.phase === 'outro') return this.leave();
     return this.say(this.coffee
-      ? ['It\'s your day off. Outside can wait.']
-      : ['Shoes. Keys. Wallet...', 'Nope. Nobody goes outside before coffee. That\'s how mistakes happen.']);
+      ? [NARR('It\'s your day off. Outside can wait.')]
+      : ['Shoes. Keys. Wallet...', ALOUD('Nope. Nobody goes outside before coffee. That\'s how mistakes happen.')]);
   }
 
   // ------------------------------------------------------------------ the broadcast
@@ -285,7 +293,7 @@ export class Prologue {
     audio.sfx('static');
     apt.tv.set('static');
     if (apt.cat.state === 'loaf') {
-      audio.sfx('meow', 1);
+      void audio.play(CAT.startle);
       apt.cat.bolt([apt.at.cat.clone(), v(6.2, 0, -4.7), v(4.6, 0, -3.3), v(3.4, 0, -3.15), v(2.2, 0, -2.4)]);
     }
     this.h.face(apt.at.tv);
@@ -343,11 +351,11 @@ export class Prologue {
     audio.sfx('door');
     audio.ambience(null);
     await this.say([
-      'Outside, the air hums.',
-      'It\'s not traffic. It\'s not birds.',
-      'You don\'t have a word for it yet.',
-      'Down the block, a man in a gray sweater turns the same corner for the third time.',
-      'Precise. Methodical. Wrong.',
+      NARR('Outside, the air hums.'),
+      NARR('It\'s not traffic. It\'s not birds.'),
+      NARR('You don\'t have a word for it yet.'),
+      NARR('Down the block, a man in a gray sweater turns the same corner for the third time.'),
+      NARR('Precise. Methodical. Wrong.'),
     ]);
     await dlg.fade(1, 1600);
     audio.playMusic('swell', 1.5);
