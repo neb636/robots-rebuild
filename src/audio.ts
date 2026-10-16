@@ -1,5 +1,6 @@
-// Procedural audio: a tiny WebAudio synth, step sequencer, ambience beds and SFX.
-// Everything is generated at runtime, so there are no audio files to ship.
+// Procedural audio: a tiny WebAudio synth, step sequencer, ambience beds and SFX, all generated at
+// runtime. The exceptions are recorded clips under public/audio: voice-over (vo/, see scripts/voice.mjs)
+// on its own bus with the music ducked underneath, and a few effects (sfx/) such as Biscuit.
 
 type InstName =
   | 'pad' | 'strings' | 'pluck' | 'bell' | 'piano' | 'bass' | 'lead' | 'sub'
@@ -154,12 +155,14 @@ class AudioEngine {
   musicBus!: GainNode;
   sfxBus!: GainNode;
   ambBus!: GainNode;
+  voiceBus!: GainNode;
   reverbSend!: GainNode;
   noiseBuf!: AudioBuffer;
   ready = false;
 
   volMusic = 0.9;
   volSfx = 0.8;
+  volVoice = 1;
 
   private currentSong: string | null = null;
   private songGain: GainNode | null = null;
@@ -169,6 +172,10 @@ class AudioEngine {
   private songOnce = false;
   private ambNodes: { stop: () => void } | null = null;
   private ambName: string | null = null;
+  private clips = new Map<string, Promise<AudioBuffer | null>>();
+  private voiceSrc: { src: AudioBufferSourceNode; g: GainNode } | null = null;
+  private voiceTok = 0;
+  private duck!: GainNode;
 
   init() {
     if (this.ready) { this.ctx.resume(); return; }
@@ -182,7 +189,11 @@ class AudioEngine {
     this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = this.volMusic;
     this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = this.volSfx;
     this.ambBus = this.ctx.createGain(); this.ambBus.gain.value = this.volSfx * 0.8;
-    this.musicBus.connect(this.master); this.sfxBus.connect(this.master); this.ambBus.connect(this.master);
+    this.voiceBus = this.ctx.createGain(); this.voiceBus.gain.value = this.volVoice;
+    // music dips under a voice line
+    this.duck = this.ctx.createGain();
+    this.musicBus.connect(this.duck).connect(this.master); this.sfxBus.connect(this.master); this.ambBus.connect(this.master);
+    this.voiceBus.connect(this.master);
 
     // Reverb from generated impulse
     const conv = this.ctx.createConvolver();
@@ -202,12 +213,76 @@ class AudioEngine {
     this.ready = true;
   }
 
-  setVolumes(music: number, sfx: number) {
-    this.volMusic = music; this.volSfx = sfx;
+  setVolumes(music: number, sfx: number, voice = this.volVoice) {
+    this.volMusic = music; this.volSfx = sfx; this.volVoice = voice;
     if (!this.ready) return;
     this.musicBus.gain.value = music;
     this.sfxBus.gain.value = sfx;
     this.ambBus.gain.value = sfx * 0.8;
+    this.voiceBus.gain.value = voice;
+  }
+
+  // ------------------------------------------------ voice-over
+  /** fetch and decode a clip (path under public/); cached, and null if it can't be loaded */
+  load(path: string): Promise<AudioBuffer | null> {
+    if (!this.ready) return Promise.resolve(null);
+    let p = this.clips.get(path);
+    if (!p) {
+      p = fetch(`${import.meta.env.BASE_URL}${path}`)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status} ${path}`))))
+        .then((b) => this.ctx.decodeAudioData(b))
+        .catch((e) => { console.warn('audio clip', e); return null; });
+      this.clips.set(path, p);
+    }
+    return p;
+  }
+
+  /** play a voice line, cutting off the one before; `room` adds a little reverb (the narrator) */
+  async speak(path: string, room = false, vol = 1) {
+    if (!this.ready) return;
+    this.stopVoice();
+    const tok = ++this.voiceTok;
+    const buf = await this.load(path);
+    // the player may have moved on while it loaded
+    if (!buf || tok !== this.voiceTok) return;
+    const c = this.ctx, t = c.currentTime;
+    const src = c.createBufferSource(); src.buffer = buf;
+    const g = c.createGain(); g.gain.value = vol;
+    src.connect(g).connect(this.voiceBus);
+    if (room) { const s = c.createGain(); s.gain.value = 0.25; g.connect(s).connect(this.reverbSend); }
+    this.duck.gain.setTargetAtTime(0.55, t, 0.08);
+    src.onended = () => { if (this.voiceSrc?.src === src) { this.voiceSrc = null; this.duck.gain.setTargetAtTime(1, c.currentTime, 0.4); } };
+    src.start(t);
+    this.voiceSrc = { src, g };
+  }
+
+  /** play a recorded effect on the SFX bus; `hold` loops it for that many seconds, then fades it out */
+  async play(path: string, vol = 1, hold = 0) {
+    const buf = await this.load(path);
+    if (!buf) return;
+    const c = this.ctx, t = c.currentTime;
+    const src = c.createBufferSource(); src.buffer = buf;
+    const g = c.createGain(); g.gain.value = vol;
+    src.connect(g).connect(this.sfxBus);
+    src.loop = hold > 0;
+    src.start(t);
+    if (hold > 0) {
+      g.gain.setValueAtTime(vol, t + hold);
+      g.gain.linearRampToValueAtTime(0.0001, t + hold + 0.6);
+      src.stop(t + hold + 0.7);
+    }
+  }
+
+  /** fade out the voice line that's playing, if any */
+  stopVoice() {
+    this.voiceTok++;
+    const v = this.voiceSrc;
+    if (!v) return;
+    this.voiceSrc = null;
+    const t = this.ctx.currentTime;
+    v.g.gain.setTargetAtTime(0, t, 0.03);
+    v.src.stop(t + 0.15);
+    this.duck.gain.setTargetAtTime(1, t, 0.4);
   }
 
   // ------------------------------------------------ instruments
@@ -518,6 +593,16 @@ class AudioEngine {
         }
         break;
       }
+      case 'hangup': {
+        // the call-ended tone, through a phone-band filter
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1000; bp.Q.value = 0.7; bp.connect(g);
+        for (let i = 0; i < 3; i++) {
+          const st = t + 0.15 + i * 0.32;
+          const gg = c.createGain(); gg.connect(bp); e(gg, 0.01, 0.07, 0.16, st);
+          o('sine', 480, st, 0.18).connect(gg); o('sine', 620, st, 0.18).connect(gg);
+        }
+        break;
+      }
       case 'static': { const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 0.4; n(0.9).connect(bp).connect(env(0.25, 0.8, 0.02)); break; }
       case 'alarm': { for (let i = 0; i < 4; i++) { const st = t + i * 0.3; const x = o('square', 880, st, 0.15); x.frequency.linearRampToValueAtTime(660, st + 0.15); x.connect(env(0.06, 0.15, 0.003, st)); } break; }
       case 'encounter': {
@@ -533,7 +618,6 @@ class AudioEngine {
       case 'drip': { const x = o('sine', 1800 + Math.random() * 600, t, 0.12); x.frequency.exponentialRampToValueAtTime(600, t + 0.1); const gg = env(0.04, 0.12); x.connect(gg); gg.connect(this.reverbSend); break; }
       case 'bird': { const st = t; const x = o('sine', 2800, st, 0.25); x.frequency.setValueAtTime(2800, st); x.frequency.linearRampToValueAtTime(3600, st + 0.08); x.frequency.linearRampToValueAtTime(2600, st + 0.18); x.connect(env(0.015, 0.2, 0.01)); break; }
       case 'foghorn': { const x = o('sawtooth', 73, t, 2.5); const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260; const gg = env(0.12, 2.4, 0.4); x.connect(lp).connect(gg); gg.connect(this.reverbSend); break; }
-      case 'meow': { const x = o('triangle', 700, t, 0.45); x.frequency.linearRampToValueAtTime(1000, t + 0.12); x.frequency.linearRampToValueAtTime(600, t + 0.4); const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1100; x.connect(bp).connect(env(0.12, 0.42, 0.04)); break; }
       case 'glass': { for (let i = 0; i < 6; i++) { const st = t + Math.random() * 0.2; o('sine', 2500 + Math.random() * 3000, st, 0.2).connect(env(0.04, 0.2, 0.002, st)); } n(0.15).connect(env(0.25, 0.15)); break; }
     }
   }

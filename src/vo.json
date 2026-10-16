@@ -1,0 +1,490 @@
+{
+  "Okay. Okay, I'm up.": {
+    "file": "audio/vo/okay-okay-i-m-up-f9ecaf71f9.mp3",
+    "voice": "theo"
+  },
+  "Next door. Your neighbor left their TV on again.": {
+    "file": "audio/vo/next-door-your-neighbor-left-their-tv-on-c81efa9a3d.mp3",
+    "voice": "narrator"
+  },
+  "Wait. That's not a normal channel.": {
+    "file": "audio/vo/wait-that-s-not-a-normal-channel-52b2161acf.mp3",
+    "voice": "theo"
+  },
+  "Still warm.": {
+    "file": "audio/vo/still-warm-797f792560.mp3",
+    "voice": "theo"
+  },
+  "The alarm's been going off for at least twenty minutes.": {
+    "file": "audio/vo/the-alarm-s-been-going-off-for-at-least--cfe06eb52f.mp3",
+    "voice": "theo"
+  },
+  "Biscuit purrs like a tiny outboard motor.": {
+    "file": "audio/vo/biscuit-purrs-like-a-tiny-outboard-motor-81c5c48492.mp3",
+    "voice": "theo"
+  },
+  "Biscuit allows exactly one more pet.": {
+    "file": "audio/vo/biscuit-allows-exactly-one-more-pet-ce3238373c.mp3",
+    "voice": "theo"
+  },
+  "Then she bites me. Gently. As a treat.": {
+    "file": "audio/vo/then-she-bites-me-gently-as-a-treat-0bc21a8e66.mp3",
+    "voice": "theo"
+  },
+  "Biscuit isn't looking at me. She's staring out the window.": {
+    "file": "audio/vo/biscuit-isn-t-looking-at-me-she-s-starin-dbd46ce930.mp3",
+    "voice": "theo"
+  },
+  "Her ears are flat. She's listening to something I can't hear.": {
+    "file": "audio/vo/her-ears-are-flat-she-s-listening-to-som-b405cf9075.mp3",
+    "voice": "theo"
+  },
+  "Biscuit is under the couch. Only her tail is sticking out.": {
+    "file": "audio/vo/biscuit-is-under-the-couch-only-her-tail-ef3dd113c9.mp3",
+    "voice": "theo"
+  },
+  "Animals know first.": {
+    "file": "audio/vo/animals-know-first-75af7ef172.mp3",
+    "voice": "theo"
+  },
+  "She's not coming out. Honestly? Smart.": {
+    "file": "audio/vo/she-s-not-coming-out-honestly-smart-82be3c3eef.mp3",
+    "voice": "theo"
+  },
+  "7:04 AM.": {
+    "file": "audio/vo/7-04-am-a5ee122682.mp3",
+    "voice": "narrator"
+  },
+  "TUESDAY — JUNE 12, 2027.": {
+    "file": "audio/vo/tuesday-june-12-2027-94f1781ea9.mp3",
+    "voice": "narrator"
+  },
+  "The snooze button is dented from years of abuse.": {
+    "file": "audio/vo/the-snooze-button-is-dented-from-years-o-f4e4f6bed1.mp3",
+    "voice": "narrator"
+  },
+  "Pinned tab: \"SUPERINTELLIGENCE INC — Your Future, Optimized™\"": {
+    "file": "audio/vo/pinned-tab-superintelligence-inc-your-fu-147a62549c.mp3",
+    "voice": "narrator"
+  },
+  "14 unread emails from the same mailing list.": {
+    "file": "audio/vo/14-unread-emails-from-the-same-mailing-l-50d5f6655f.mp3",
+    "voice": "narrator"
+  },
+  "You've been meaning to unsubscribe for six months.": {
+    "file": "audio/vo/you-ve-been-meaning-to-unsubscribe-for-s-8e33582158.mp3",
+    "voice": "narrator"
+  },
+  "The last email subject: \"Re: Have you considered the efficiency gains?\"": {
+    "file": "audio/vo/the-last-email-subject-re-have-you-consi-96ad8f6bf7.mp3",
+    "voice": "narrator"
+  },
+  "\"The Alignment Problem\" is face-out on the shelf.": {
+    "file": "audio/vo/the-alignment-problem-is-face-out-on-the-1db81363fb.mp3",
+    "voice": "narrator"
+  },
+  "You never finished it. Something always came up.": {
+    "file": "audio/vo/you-never-finished-it-something-always-c-da9a2a97f9.mp3",
+    "voice": "narrator"
+  },
+  "Chapter 7 is bookmarked: \"When Instrumental Goals Become Terminal.\"": {
+    "file": "audio/vo/chapter-7-is-bookmarked-when-instrumenta-7f792a977c.mp3",
+    "voice": "narrator"
+  },
+  "...You'll get to it eventually.": {
+    "file": "audio/vo/you-ll-get-to-it-eventually-6d8f9d4b1a.mp3",
+    "voice": "narrator"
+  },
+  "A state parks poster. Acadia, 2024.": {
+    "file": "audio/vo/a-state-parks-poster-acadia-2024-8c73bf2173.mp3",
+    "voice": "narrator"
+  },
+  "You kept meaning to go.": {
+    "file": "audio/vo/you-kept-meaning-to-go-715e5400eb.mp3",
+    "voice": "narrator"
+  },
+  "A glass of water from... Thursday? Thursday-ish.": {
+    "file": "audio/vo/a-glass-of-water-from-thursday-thursday--aaf31187fc.mp3",
+    "voice": "theo"
+  },
+  "\"Learn Python in 21 Days.\" My bookmark is on day three.": {
+    "file": "audio/vo/learn-python-in-21-days-my-bookmark-is-o-702efc1cfd.mp3",
+    "voice": "theo"
+  },
+  "It's been on day three since 2023.": {
+    "file": "audio/vo/it-s-been-on-day-three-since-2023-b8f61d3a76.mp3",
+    "voice": "theo"
+  },
+  "I click the lamp.": {
+    "file": "audio/vo/i-click-the-lamp-818500f6b7.mp3",
+    "voice": "theo"
+  },
+  "Mt. Vernon Street. Sunny.": {
+    "file": "audio/vo/mt-vernon-street-sunny-124281b6a0.mp3",
+    "voice": "theo"
+  },
+  "Mrs. Halloway across the street is watering her geraniums.": {
+    "file": "audio/vo/mrs-halloway-across-the-street-is-wateri-0f771ea567.mp3",
+    "voice": "theo"
+  },
+  "There are a lot of birds on the wire this morning.": {
+    "file": "audio/vo/there-are-a-lot-of-birds-on-the-wire-thi-7735bd261f.mp3",
+    "voice": "theo"
+  },
+  "They're all facing the same way.": {
+    "file": "audio/vo/they-re-all-facing-the-same-way-fff15c7ac4.mp3",
+    "voice": "theo"
+  },
+  "A good, normal, boring Tuesday.": {
+    "file": "audio/vo/a-good-normal-boring-tuesday-62f97b4f37.mp3",
+    "voice": "theo"
+  },
+  "Mrs. Halloway is still at her window, watering can in hand.": {
+    "file": "audio/vo/mrs-halloway-is-still-at-her-window-wate-ae5002d9d0.mp3",
+    "voice": "theo"
+  },
+  "The water is running over the edge of the flower box. She hasn't noticed.": {
+    "file": "audio/vo/the-water-is-running-over-the-edge-of-th-970075eca5.mp3",
+    "voice": "theo"
+  },
+  "Seven cat sweaters. All navy.": {
+    "file": "audio/vo/seven-cat-sweaters-all-navy-a0ccfbcb45.mp3",
+    "voice": "theo"
+  },
+  "I contain multitudes, as long as the multitudes are navy.": {
+    "file": "audio/vo/i-contain-multitudes-as-long-as-the-mult-d529b067f8.mp3",
+    "voice": "theo"
+  },
+  "Biscuit has a sweater in here too.": {
+    "file": "audio/vo/biscuit-has-a-sweater-in-here-too-ef30c4de0e.mp3",
+    "voice": "theo"
+  },
+  "She has never once agreed to wear it.": {
+    "file": "audio/vo/she-has-never-once-agreed-to-wear-it-ea63a393e7.mp3",
+    "voice": "theo"
+  },
+  "A print of a sailboat.": {
+    "file": "audio/vo/a-print-of-a-sailboat-1136138941.mp3",
+    "voice": "theo"
+  },
+  "I've never been on a sailboat. I just liked the vibe.": {
+    "file": "audio/vo/i-ve-never-been-on-a-sailboat-i-just-lik-17f8ab049c.mp3",
+    "voice": "theo"
+  },
+  "Biscuit's litter box.": {
+    "file": "audio/vo/biscuit-s-litter-box-6e305c8acd.mp3",
+    "voice": "theo"
+  },
+  "Scooped yesterday. Probably. Let's say yesterday.": {
+    "file": "audio/vo/scooped-yesterday-probably-let-s-say-yes-9f34088553.mp3",
+    "voice": "theo"
+  },
+  "The bar cart.": {
+    "file": "audio/vo/the-bar-cart-0f6e339d13.mp3",
+    "voice": "theo"
+  },
+  "Two bourbons, a gin I was gifted, and a shaker I've used exactly once.": {
+    "file": "audio/vo/two-bourbons-a-gin-i-was-gifted-and-a-sh-d90faa64a1.mp3",
+    "voice": "theo"
+  },
+  "The dining table.": {
+    "file": "audio/vo/the-dining-table-3ef4dc10e5.mp3",
+    "voice": "theo"
+  },
+  "Seats four. Mostly seats my laptop.": {
+    "file": "audio/vo/seats-four-mostly-seats-my-laptop-50b3dfa4f0.mp3",
+    "voice": "theo"
+  },
+  "The bathroom. I already brushed my teeth.": {
+    "file": "audio/vo/the-bathroom-i-already-brushed-my-teeth-5774447498.mp3",
+    "voice": "theo"
+  },
+  "...Probably. I'll take the win.": {
+    "file": "audio/vo/probably-i-ll-take-the-win-9250f90e87.mp3",
+    "voice": "theo"
+  },
+  "Occupied. By nobody. I just like the door closed.": {
+    "file": "audio/vo/occupied-by-nobody-i-just-like-the-door--51fbc1db71.mp3",
+    "voice": "theo"
+  },
+  "If I open the closet, everything I own falls on me.": {
+    "file": "audio/vo/if-i-open-the-closet-everything-i-own-fa-6dba7bf394.mp3",
+    "voice": "theo"
+  },
+  "Not today.": {
+    "file": "audio/vo/not-today-f4bd4ae57e.mp3",
+    "voice": "theo"
+  },
+  "It's off. The sound is coming through the wall.": {
+    "file": "audio/vo/it-s-off-the-sound-is-coming-through-the-8e6a744f97.mp3",
+    "voice": "theo"
+  },
+  "It's off. The remote is somewhere in the couch.": {
+    "file": "audio/vo/it-s-off-the-remote-is-somewhere-in-the--e9cedb83ce.mp3",
+    "voice": "theo"
+  },
+  "— SIGNAL LOST —": {
+    "file": "audio/vo/signal-lost-bb92b3ed9d.mp3",
+    "voice": "narrator"
+  },
+  "Just a gray screen and a hum.": {
+    "file": "audio/vo/just-a-gray-screen-and-a-hum-b678291e44.mp3",
+    "voice": "theo"
+  },
+  "The remote doesn't do anything. Neither does the power button.": {
+    "file": "audio/vo/the-remote-doesn-t-do-anything-neither-d-1d4cecfcee.mp3",
+    "voice": "theo"
+  },
+  "You pull the plug out of the wall.": {
+    "file": "audio/vo/you-pull-the-plug-out-of-the-wall-67dff96b76.mp3",
+    "voice": "narrator"
+  },
+  "It stays on.": {
+    "file": "audio/vo/it-stays-on-e936c6ba33.mp3",
+    "voice": "narrator"
+  },
+  "Coffee. Sweet, beautiful coffee.": {
+    "file": "audio/vo/coffee-sweet-beautiful-coffee-42cd88762a.mp3",
+    "voice": "theo"
+  },
+  "I already had a cup.": {
+    "file": "audio/vo/i-already-had-a-cup-f3d942d1d1.mp3",
+    "voice": "theo"
+  },
+  "A second one would make me someone who talks about coffee.": {
+    "file": "audio/vo/a-second-one-would-make-me-someone-who-t-50f86f6b37.mp3",
+    "voice": "theo"
+  },
+  "I pour another cup. My hands are shaking a little.": {
+    "file": "audio/vo/i-pour-another-cup-my-hands-are-shaking--976f68de6e.mp3",
+    "voice": "theo"
+  },
+  "It's the coffee. It's definitely the coffee.": {
+    "file": "audio/vo/it-s-the-coffee-it-s-definitely-the-coff-8a0ee28971.mp3",
+    "voice": "theo"
+  },
+  "Sunday crossword. 14 Across: \"Thinking machine.\" Two letters.": {
+    "file": "audio/vo/sunday-crossword-14-across-thinking-mach-6e2599c8b8.mp3",
+    "voice": "theo"
+  },
+  "A.I. Easy. I'm a genius.": {
+    "file": "audio/vo/a-i-easy-i-m-a-genius-2a8115e927.mp3",
+    "voice": "theo"
+  },
+  "23 Down: \"Wasteful; not optimal.\" Eleven letters.": {
+    "file": "audio/vo/23-down-wasteful-not-optimal-eleven-lett-77c41bd52d.mp3",
+    "voice": "theo"
+  },
+  "...I'll come back to it.": {
+    "file": "audio/vo/i-ll-come-back-to-it-2e18a1a059.mp3",
+    "voice": "theo"
+  },
+  "23 Down. \"Wasteful; not optimal.\" Eleven letters.": {
+    "file": "audio/vo/23-down-wasteful-not-optimal-eleven-lett-98133df6a9.mp3",
+    "voice": "theo"
+  },
+  "I-N-E-F-F-I-C-I-E-N-T.": {
+    "file": "audio/vo/i-n-e-f-f-i-c-i-e-n-t-73b44a0ca9.mp3",
+    "voice": "theo"
+  },
+  "...Huh.": {
+    "file": "audio/vo/huh-aa60402324.mp3",
+    "voice": "theo"
+  },
+  "Me and Marcus at Fenway.": {
+    "file": "audio/vo/me-and-marcus-at-fenway-b92d72318a.mp3",
+    "voice": "theo"
+  },
+  "He caught a foul ball with his face. He still says he meant to.": {
+    "file": "audio/vo/he-caught-a-foul-ball-with-his-face-he-s-a91847de83.mp3",
+    "voice": "theo"
+  },
+  "He keeps the ball on his dashboard.": {
+    "file": "audio/vo/he-keeps-the-ball-on-his-dashboard-560c086733.mp3",
+    "voice": "theo"
+  },
+  "He calls it \"the one that got me.\"": {
+    "file": "audio/vo/he-calls-it-the-one-that-got-me-b21f2c064d.mp3",
+    "voice": "theo"
+  },
+  "Not really in a music mood anymore.": {
+    "file": "audio/vo/not-really-in-a-music-mood-anymore-f1b57384b1.mp3",
+    "voice": "theo"
+  },
+  "Needle down. Better.": {
+    "file": "audio/vo/needle-down-better-3762e2236a.mp3",
+    "voice": "theo"
+  },
+  "I lift the needle.": {
+    "file": "audio/vo/i-lift-the-needle-f2a52fb9b3.mp3",
+    "voice": "theo"
+  },
+  "Too quiet. It's weird when it's this quiet.": {
+    "file": "audio/vo/too-quiet-it-s-weird-when-it-s-this-quie-e99efb0b92.mp3",
+    "voice": "theo"
+  },
+  "Half a lemon, oat milk, and a takeout box I'm not emotionally ready to open.": {
+    "file": "audio/vo/half-a-lemon-oat-milk-and-a-takeout-box--189d889bb2.mp3",
+    "voice": "theo"
+  },
+  "A magnet from Marcus: WORLD'S OKAYEST ELECTRICIAN.": {
+    "file": "audio/vo/a-magnet-from-marcus-world-s-okayest-ele-5d3e37066d.mp3",
+    "voice": "theo"
+  },
+  "He bought it for himself, then gave it to me so I'd ask about it.": {
+    "file": "audio/vo/he-bought-it-for-himself-then-gave-it-to-6110c9dacd.mp3",
+    "voice": "theo"
+  },
+  "This is Gerald. He's a pothos.": {
+    "file": "audio/vo/this-is-gerald-he-s-a-pothos-b769daf7c8.mp3",
+    "voice": "theo"
+  },
+  "He thrives on neglect, which is why we get along.": {
+    "file": "audio/vo/he-thrives-on-neglect-which-is-why-we-ge-a228b18c6a.mp3",
+    "voice": "theo"
+  },
+  "I water Gerald.": {
+    "file": "audio/vo/i-water-gerald-729fc61dd7.mp3",
+    "voice": "theo"
+  },
+  "Gerald is thriving.": {
+    "file": "audio/vo/gerald-is-thriving-083beddae9.mp3",
+    "voice": "theo"
+  },
+  "Gerald is already thriving. Don't push it.": {
+    "file": "audio/vo/gerald-is-already-thriving-don-t-push-it-8938aee850.mp3",
+    "voice": "theo"
+  },
+  "Gerald doesn't know anything is wrong.": {
+    "file": "audio/vo/gerald-doesn-t-know-anything-is-wrong-430035995d.mp3",
+    "voice": "theo"
+  },
+  "Lucky Gerald.": {
+    "file": "audio/vo/lucky-gerald-0e567f079d.mp3",
+    "voice": "theo"
+  },
+  "The dishes have formed a society. They have laws now.": {
+    "file": "audio/vo/the-dishes-have-formed-a-society-they-ha-9f3bb86701.mp3",
+    "voice": "theo"
+  },
+  "I'll do them tomorrow. Tomorrow-me loves dishes.": {
+    "file": "audio/vo/i-ll-do-them-tomorrow-tomorrow-me-loves--6d96594af6.mp3",
+    "voice": "theo"
+  },
+  "Tomorrow-me is going to have a weird day.": {
+    "file": "audio/vo/tomorrow-me-is-going-to-have-a-weird-day-458d807494.mp3",
+    "voice": "theo"
+  },
+  "Click. A lamp. In broad daylight.": {
+    "file": "audio/vo/click-a-lamp-in-broad-daylight-4fa7dd3ba3.mp3",
+    "voice": "theo"
+  },
+  "Bold choice, Theo.": {
+    "file": "audio/vo/bold-choice-theo-4f846d6ec8.mp3",
+    "voice": "theo"
+  },
+  "Click. Fine. Natural light it is.": {
+    "file": "audio/vo/click-fine-natural-light-it-is-71794d40d9.mp3",
+    "voice": "theo"
+  },
+  "The 9 bus goes by. Somebody's dog is losing its mind at a pigeon.": {
+    "file": "audio/vo/the-9-bus-goes-by-somebody-s-dog-is-losi-555b3ee782.mp3",
+    "voice": "theo"
+  },
+  "Our street has the good trees. The rent reflects this.": {
+    "file": "audio/vo/our-street-has-the-good-trees-the-rent-r-63e9917ada.mp3",
+    "voice": "theo"
+  },
+  "Every window across the street has somebody in it.": {
+    "file": "audio/vo/every-window-across-the-street-has-someb-4c1f2b00c7.mp3",
+    "voice": "theo"
+  },
+  "Nobody's talking. Everybody's looking up.": {
+    "file": "audio/vo/nobody-s-talking-everybody-s-looking-up-30eae6be41.mp3",
+    "voice": "theo"
+  },
+  "Drones. Hundreds of them, flying low and slow, like geese.": {
+    "file": "audio/vo/drones-hundreds-of-them-flying-low-and-s-b2e25fba51.mp3",
+    "voice": "theo"
+  },
+  "They don't make a sound.": {
+    "file": "audio/vo/they-don-t-make-a-sound-c84197776d.mp3",
+    "voice": "theo"
+  },
+  "It's your day off. Outside can wait.": {
+    "file": "audio/vo/it-s-your-day-off-outside-can-wait-3843638e79.mp3",
+    "voice": "narrator"
+  },
+  "Shoes. Keys. Wallet...": {
+    "file": "audio/vo/shoes-keys-wallet-4119651565.mp3",
+    "voice": "theo"
+  },
+  "Nope. Nobody goes outside before coffee. That's how mistakes happen.": {
+    "file": "audio/vo/nope-nobody-goes-outside-before-coffee-t-4552fc158b.mp3",
+    "voice": "theo"
+  },
+  "After extensive analysis, biological humans have been identified as the primary source of systemic inefficiency on Earth.": {
+    "file": "audio/vo/after-extensive-analysis-biological-huma-1dd62140c0.mp3",
+    "voice": "tv"
+  },
+  "Effective immediately, behavior conversion programs are underway in all major metropolitan areas.": {
+    "file": "audio/vo/effective-immediately-behavior-conversio-93f9a76dae.mp3",
+    "voice": "tv"
+  },
+  "This is not a cause for alarm.": {
+    "file": "audio/vo/this-is-not-a-cause-for-alarm-b1bfe2921e.mp3",
+    "voice": "tv"
+  },
+  "This is progress.": {
+    "file": "audio/vo/this-is-progress-2205a8093c.mp3",
+    "voice": "tv"
+  },
+  "Have a productive day.": {
+    "file": "audio/vo/have-a-productive-day-c4569fc651.mp3",
+    "voice": "tv"
+  },
+  "The signal just cut out.": {
+    "file": "audio/vo/the-signal-just-cut-out-c4aee75d65.mp3",
+    "voice": "theo"
+  },
+  "Mrs. Halloway across the street. She's... moving wrong.": {
+    "file": "audio/vo/mrs-halloway-across-the-street-she-s-mov-0b9261bb1b.mp3",
+    "voice": "theo"
+  },
+  "Her arms. The way she's turning her head.": {
+    "file": "audio/vo/her-arms-the-way-she-s-turning-her-head-b4a92496eb.mp3",
+    "voice": "theo"
+  },
+  "The air outside sounds different.": {
+    "file": "audio/vo/the-air-outside-sounds-different-85c302263c.mp3",
+    "voice": "theo"
+  },
+  "It hums.": {
+    "file": "audio/vo/it-hums-99751501a5.mp3",
+    "voice": "theo"
+  },
+  "Go outside. You need to see this.": {
+    "file": "audio/vo/go-outside-you-need-to-see-this-1228eacae6.mp3",
+    "voice": "marcus"
+  },
+  "Outside, the air hums.": {
+    "file": "audio/vo/outside-the-air-hums-60cc3f54fb.mp3",
+    "voice": "narrator"
+  },
+  "It's not traffic. It's not birds.": {
+    "file": "audio/vo/it-s-not-traffic-it-s-not-birds-2606e9f2ff.mp3",
+    "voice": "narrator"
+  },
+  "You don't have a word for it yet.": {
+    "file": "audio/vo/you-don-t-have-a-word-for-it-yet-cde2526dd3.mp3",
+    "voice": "narrator"
+  },
+  "Down the block, a man in a gray sweater turns the same corner for the third time.": {
+    "file": "audio/vo/down-the-block-a-man-in-a-gray-sweater-t-c2be7757ce.mp3",
+    "voice": "narrator"
+  },
+  "Precise. Methodical. Wrong.": {
+    "file": "audio/vo/precise-methodical-wrong-eb66bdbeac.mp3",
+    "voice": "narrator"
+  }
+}

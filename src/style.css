@@ -76,22 +76,23 @@ html, body {
 .notify.show { opacity: 1; transform: translate(-50%, 0); animation: notify-buzz 0.5s ease-in-out 0.35s 3; }
 @keyframes notify-buzz { 0%, 100% { margin-left: 0; } 25% { margin-left: -3px; } 75% { margin-left: 3px; } }
 
-.dlg { position: absolute; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 22; width: min(760px, calc(100% - 32px)); transform: translate(-50%, 12px); opacity: 0; pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease;
-  padding: 18px 24px 20px; min-height: 96px; border-radius: 10px; background: linear-gradient(180deg, rgba(28, 40, 92, 0.94), rgba(12, 18, 48, 0.96));
-  border: 2px solid #e8e4f4; box-shadow: 0 0 0 3px #1a2250, 0 0 0 4px rgba(232, 228, 244, 0.35), 0 14px 40px rgba(0, 0, 0, 0.5); font: 500 clamp(16px, 1.6vw, 19px)/1.5 var(--sans); color: #f4f2fa; cursor: pointer; }
+.dlg { position: absolute; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom)); z-index: 22; width: min(880px, calc(100% - 32px)); transform: translate(-50%, 8px); opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease;
+  padding: 20px clamp(36px, 7vw, 92px) 22px; min-height: 84px; display: flex; align-items: center; border-radius: 999px; background: rgba(8, 10, 14, 0.6);
+  font: 500 clamp(16px, 1.65vw, 20px)/1.45 var(--sans); color: #f6f5f0; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55); cursor: pointer; }
 .dlg.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
-.dlg .who { position: absolute; top: -15px; left: 18px; padding: 3px 12px; border-radius: 5px; background: #e8e4f4; color: #1a2250; font: 700 12px var(--sans); letter-spacing: 0.14em; text-transform: uppercase; }
+.dlg .who { position: absolute; bottom: calc(100% - 6px); left: clamp(28px, 6vw, 80px); color: #f6f5f0; font: italic 500 clamp(14px, 1.4vw, 17px) var(--sans); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75); white-space: nowrap; }
 .dlg .who:empty { display: none; }
-.dlg.inner .txt { font-style: italic; color: #dcdcf0; }
-.dlg .more { position: absolute; right: 16px; bottom: 8px; font-size: 11px; color: var(--gold-hi); opacity: 0; }
+.dlg .txt { font-style: italic; }
+.dlg.inner .txt { color: #e4e3ea; }
+.dlg .more { position: absolute; right: clamp(34px, 5vw, 56px); bottom: 12px; width: 0; height: 0; border: 5px solid transparent; border-top: 7px solid rgba(246, 245, 240, 0.85); border-bottom: 0; opacity: 0; font-size: 0; }
 .dlg.done .more { opacity: 1; animation: dlg-more 0.8s ease-in-out infinite; }
 @keyframes dlg-more { 50% { transform: translateY(3px); } }
-.dlg.tv { background: linear-gradient(180deg, rgba(10, 22, 44, 0.96), rgba(4, 8, 18, 0.97)); border-color: #b8d0f0; box-shadow: 0 0 0 3px #0a1426, 0 0 24px rgba(140, 180, 255, 0.35), 0 14px 40px rgba(0, 0, 0, 0.5); }
-.dlg.tv .who { background: #b8d0f0; color: #0a1426; }
-.dlg.tv .txt { font-family: ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.02em; color: #e0ecff; text-shadow: 0 0 8px rgba(140, 180, 255, 0.6); }
-.dlg.phone .who { background: #8ad89a; color: #0e2a16; }
+.dlg.tv { background: rgba(6, 14, 30, 0.6); }
+.dlg.tv .who { color: #c4d8f4; }
+.dlg.tv .txt { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-style: normal; font-size: 0.92em; letter-spacing: 0.02em; color: #e0ecff; text-shadow: 0 0 8px rgba(140, 180, 255, 0.45); }
+.dlg.phone .who { color: #a8e4b4; }
 .dlg.item { text-align: center; }
-.dlg.item .txt { color: var(--gold-hi); font-weight: 700; letter-spacing: 0.06em; }
+.dlg.item .txt { font-style: normal; color: var(--gold-hi); font-weight: 700; letter-spacing: 0.06em; }
 
 .iprompt { position: absolute; left: 0; top: 0; z-index: 19; display: flex; align-items: center; gap: 8px; padding: 5px 11px 5px 6px; border-radius: 99px; pointer-events: none; opacity: 0; transition: opacity 0.15s ease;
   background: rgba(16, 22, 52, 0.85); border: 1px solid rgba(232, 228, 244, 0.6); color: #f4f2fa; font: 600 13px var(--sans); white-space: nowrap; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
@@ -106,5 +107,5 @@ html, body {
 
 @media (max-width: 700px) {
   .objective { top: 52px; left: 14px; font-size: 13px; }
-  .dlg { padding: 16px 16px 18px; }
+  .dlg { padding: 16px 34px 18px; border-radius: 36px; }
 }
