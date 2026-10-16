@@ -13,6 +13,7 @@ import { blobShadow, rim } from './character';
 import { Theo, loadTheo, TheoAsset } from './theo';
 import { buildApartment, Apartment } from './apartment';
 import { Dialogue, Interactable } from './dialogue';
+import { ActionMenu } from './actions';
 import { Prologue } from './prologue';
 import { wind } from './foliage';
 import { ash, embers, rain, fogBanks } from './fx';
@@ -108,6 +109,8 @@ class App {
   fps = 60; scan = 0;
   // story / interaction
   dlg = new Dialogue(app);
+  /** the floating actions on the right (the dance controls) */
+  actions = new ActionMenu(app);
   prologue: Prologue | null = null;
   /** cutscene: the hero can't move */
   locked = false;
@@ -120,7 +123,7 @@ class App {
   /** fixed camera shot during a cutscene */
   shot: { pos: THREE.Vector3; look: THREE.Vector3 } | null = null;
   focus: Interactable | null = null;
-  padA = false;
+  padA = false; padUp = false; padDown = false;
   built!: Built;
 
   constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset) {
@@ -171,6 +174,7 @@ class App {
         busy: () => this.busyN > 0 || this.dlg.open || this.locked,
         hero: () => this.pos,
         player: this.player,
+        actions: this.actions,
         walkTo: (p, face) => this.walkTo(p, face),
         toStreet: () => this.toStreet(),
         streetIntro: () => this.streetIntro(),
@@ -186,7 +190,7 @@ class App {
     await nextFrame();
     const old = this.built;
     this.player.group.removeFromParent();
-    this.focus = null; this.dlg.setPrompt(null); this.dlg.objective(null);
+    this.focus = null; this.dlg.setPrompt(null); this.dlg.objective(null); this.actions.set(null);
     this.shot = null; this.locked = false;
     this.attach(next);
     this.gl.compile(next.scene, this.camera);
@@ -318,9 +322,15 @@ class App {
   // ---------------------------------------------------------------- input
   bindInput() {
     addEventListener('keydown', (e) => {
-      this.keys.add(e.code);
       this.player.poke();
       this.enableAudio();
+      // while the action menu is up, Up / Down / Enter drive it (W / S still walk)
+      if (!this.dlg.open && ['ArrowUp', 'ArrowDown', 'Enter', 'NumpadEnter'].includes(e.code) && this.actions.open) {
+        e.preventDefault();
+        if (!e.repeat) this.actions.key(e.code);
+        return;
+      }
+      this.keys.add(e.code);
       // Space interacts when there's something to interact with, and jumps otherwise
       if (e.code === 'Space' && !this.dlg.open && !this.focus) { e.preventDefault(); if (!e.repeat) this.jump(); return; }
       if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyF') { e.preventDefault(); if (!e.repeat) this.dlg.press(); return; }
@@ -446,10 +456,12 @@ class App {
     if (k.has('KeyA') || k.has('ArrowLeft')) v.x -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) v.x += 1;
     v.x += this.stick.x; v.y -= this.stick.y;
-    let padA = false;
+    let padA = false, padUp = false, padDown = false;
     for (const p of navigator.getGamepads?.() ?? []) {
       if (!p) continue;
       padA ||= !!p.buttons[0]?.pressed;
+      padUp ||= !!p.buttons[12]?.pressed;
+      padDown ||= !!p.buttons[13]?.pressed;
       if (p.buttons.some((b) => b.pressed) || p.axes.some((x) => Math.abs(x) > 0.18)) this.player.poke();
       const ax = p.axes[0] ?? 0, ay = p.axes[1] ?? 0;
       if (Math.hypot(ax, ay) > 0.18) { v.x += ax; v.y -= ay; }
@@ -457,8 +469,14 @@ class App {
       if (Math.abs(cx) > 0.15) { this.look.dx += cx * 14; this.lastLook = this.t; }
       if (Math.abs(cy) > 0.15) this.look.dy += cy * 10;
     }
-    if (padA && !this.padA) this.dlg.press();
-    this.padA = padA;
+    // A answers the dialogue first, then the action menu, then whatever's in reach
+    if (padA && !this.padA) {
+      if (this.actions.open && !this.dlg.open && !this.focus) this.actions.activate();
+      else this.dlg.press();
+    }
+    if (padUp && !this.padUp) this.actions.move(-1);
+    if (padDown && !this.padDown) this.actions.move(1);
+    this.padA = padA; this.padUp = padUp; this.padDown = padDown;
     if (v.lengthSq() > 1) v.normalize();
     return v;
   }
@@ -788,6 +806,7 @@ class UI {
   }
   sync() {
     this.root.classList.toggle('hidden', !state.ui);
+    this.a.actions.root.classList.toggle('off', !state.ui);
     this.root.querySelector('.b2')!.textContent = this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static';
     this.bars.classList.toggle('on', state.cam === 'cinematic' && !this.a.interior);
   }

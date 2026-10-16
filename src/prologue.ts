@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { Apartment } from './apartment';
 import type { Theo } from './theo';
+import type { Action, ActionMenu } from './actions';
 import { Dialogue, Interactable, Line } from './dialogue';
 import { audio } from './audio';
 
@@ -23,6 +24,8 @@ export interface PrologueHost {
   hero(): THREE.Vector3;
   /** Theo himself, for his animation layers (reaching, dancing) */
   player: Theo;
+  /** the floating action menu on the right */
+  actions: ActionMenu;
   /** walk the hero to a spot, then turn him to face a point (resolves when he's facing it) */
   walkTo(p: THREE.Vector3, face: THREE.Vector3): Promise<void>;
   /** build Acorn Lane and swap to it (called while the screen is black) */
@@ -73,6 +76,13 @@ export class Prologue {
   private platter: RecordId = 'apartment';
   /** Theo is working the turntable (no dancing until the needle's down) */
   private cueing = false;
+  /** he stopped dancing to this record (from the action menu): no picking it back up */
+  private sitOut = false;
+  /** the floating dance controls */
+  private danceActions: Action[] = [
+    { id: 'next', icon: '🎵', label: 'Next song', run: () => this.nextSong() },
+    { id: 'stop', icon: '🛑', label: 'Stop dancing', run: () => this.stopDancing() },
+  ];
   /** where Theo's hand is headed: from a fixed point toward a (moving) target, `k` of the way */
   private hand = new THREE.Vector3();
   private handFrom = new THREE.Vector3();
@@ -127,8 +137,10 @@ export class Prologue {
     }
     if (apt.phone.ringing && (this.ringT -= dt) <= 0) { this.ringT = 1.7; audio.sfx('phone', 0.9); }
     // with a dance record on, Theo dances whenever he's standing around in the living room
-    const dance = this.pre && this.record && !this.cueing ? RECORDS[this.record].dance : null;
+    const dance = this.pre && this.record && !this.cueing && !this.sitOut ? RECORDS[this.record].dance : null;
     this.h.player.groove(dance && apt.inLiving(p.x, p.z) ? dance : null, () => audio.songTime());
+    // and while he's dancing, the controls for it
+    this.h.actions.set(this.pre && this.h.player.isDancing && !this.cueing && !this.h.busy() ? this.danceActions : null);
     // his hand, on its way to whatever he's reaching for
     if (this.handTo) {
       this.handK = this.handS > 0 ? Math.min(1, this.handK + dt / this.handS) : 1;
@@ -316,13 +328,15 @@ export class Prologue {
     });
   }
 
-  /** Walk up to the turntable and change the record: lift the needle off what's playing, swap the
-   *  record, cue the next one and drop the needle; then, if it's a dance record, turn to the room and
-   *  dance. The last press lifts the needle and leaves it off. */
-  private async turntable() {
+  /** Walk up to the turntable and change the record (to `next`, or the next one in the rotation):
+   *  lift the needle off what's playing, swap the record, cue the next one and drop the needle; then,
+   *  if it's a dance record, step out into the room and dance. The last press of the rotation lifts
+   *  the needle and leaves it off. */
+  private async turntable(next = this.nextRecord) {
     if (!this.pre) { await this.say('Not really in a music mood anymore.'); return; }
     const { apt, player } = this.h, tt = apt.turntable;
-    const next = this.nextRecord;
+    player.settle();
+    this.sitOut = false;
     const cue = () => tt.cue, center = () => tt.center;
     this.h.lock(true);
     this.cueing = true;
@@ -366,28 +380,41 @@ export class Prologue {
       player.reach(null);
       await wait(400);
     }
-    this.cueing = false;
     const rec = next ? RECORDS[next] : null;
     if (rec?.dance) {
       void this.h.dlg.notify(`♪  "${rec.title}"  —  ${rec.artist}`, 2800);
-      // he catches the first bar, then turns around to the room and lets it take him
-      await wait(450);
-      const room = apt.at.recordStand.clone().add(v(0, 0, -3));
-      this.h.face(room);
-      player.groove(rec.dance, () => audio.songTime());
-      player.startDance();
-      // and the camera comes round to the front to watch
+      // he catches the first bar, then steps out into the room (the camera comes round to the front
+      // to watch) and lets it take him
+      await wait(350);
+      const spot = apt.at.recordStand.clone().add(v(0, 0, -1.35)), room = spot.clone().add(v(0, 0, -3));
       this.h.shot(null);
       this.h.viewFrom(room);
-      await wait(500);
+      await this.h.walkTo(spot, room);
+      this.cueing = false;
+      player.groove(rec.dance, () => audio.songTime());
+      player.startDance();
+      await wait(400);
       this.h.lock(false);
       return;
     }
+    this.cueing = false;
     this.h.shot(null);
     this.h.viewFrom(apt.at.recordStand.clone().add(v(0.6, 0, -3)));
     this.h.lock(false);
     if (next) await this.say([ALOUD('Needle down. Better.')]);
-    else await this.say(['I lift the needle.', '...', 'Too quiet. It\'s weird when it\'s this quiet.']);
+  }
+
+  /** the action menu's "Next song": back to the turntable for the next dance record */
+  private nextSong() {
+    const dances = ROTATION.filter((r): r is RecordId => !!r && !!RECORDS[r].dance);
+    const i = this.record ? dances.indexOf(this.record) : -1;
+    void this.turntable(dances[(i + 1) % dances.length]);
+  }
+
+  /** the action menu's "Stop dancing": he stops, and sits this record out (the song plays on) */
+  private stopDancing() {
+    this.sitOut = true;
+    this.h.player.settle();
   }
 
   private windowLiving() {

@@ -83,7 +83,7 @@ export function dressTheo(asset: TheoAsset, fill: Theo['fill'], anisotropy = 8):
 
 /** Left alone (no input, nothing going on), he fidgets: Happy Idle, once or twice through, the
  *  first time after `first` seconds and then again after a random gap, so it never reads as a loop. */
-export const FIDGET = { first: 25, gap: [9, 24] as [number, number], twice: 0.3, fade: 0.45 };
+export const FIDGET = { first: 15, gap: [9, 24] as [number, number], twice: 0.3, fade: 0.45 };
 
 /** Dances, by the name the music uses. `loop` is the stretch of the clip to repeat for a clip that
  *  doesn't loop on its own: it plays from the top once, then crossfades end -> start. */
@@ -210,6 +210,9 @@ export class Theo {
     this.nextFidget = FIDGET.first;
     this.fidget.on = false;
   }
+
+  /** dancing, or about to be (fading in) */
+  get isDancing() { return this.dancing; }
 
   /** Stop dancing and fidgeting (he's about to do something). */
   settle() {
