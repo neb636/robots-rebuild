@@ -6,6 +6,10 @@
 // authored: nothing here touches a bone. Walking and Running are phase-locked (their left-foot
 // contacts sit at 32% and 30% of the cycle) and played at the rate that matches the ground speed,
 // so the planted foot doesn't slide.
+//
+// Jumps play the Jumping clip's flight, scrubbed by the game's vertical speed so its takeoff and
+// landing line up with the game's arc, then its landing recovery in real time. The game supplies
+// the height, so the clip's own lift (how high it raises the feet) is taken back off the model.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
@@ -31,6 +35,8 @@ export const LOCO = {
 };
 /** below this ground speed (m/s, game units) he's standing */
 const IDLE_BELOW = 0.08, MOVE_ABOVE = 0.6;
+/** Jumping clip: feet count as off the ground above this (m, game units); blend rates (1/s) */
+const LIFT_EPS = 0.01, JUMP_IN = 25, JUMP_OUT = 8;
 /** Theo's own fill: irradiance per unit of the mood's `fill` (the existing hero fill strength) */
 export const THEO_FILL = 0.6;
 
@@ -80,7 +86,7 @@ export class Theo {
   group = new THREE.Group();
   /** world-space point to look at (head look-at is not wired up yet) */
   lookAt: THREE.Vector3 | null = null;
-  /** airborne 0..1 and vertical speed, set by the game each frame (no jump clip yet) */
+  /** airborne 0..1 and vertical speed, set by the game each frame */
   air = 0;
   vy = 0;
   /** A soft fill on Theo alone, from just above the camera, so he doesn't go flat in unlit
@@ -91,12 +97,22 @@ export class Theo {
   private idle: THREE.AnimationAction;
   private walk: THREE.AnimationAction;
   private run: THREE.AnimationAction;
+  private jump: THREE.AnimationAction;
+  private model: THREE.Object3D;
+  /** the Jumping clip's foot lift per frame (game units), and its takeoff / landing times (s) */
+  private lift: Float32Array;
+  private takeoff = 0;
+  private touchdown = 0;
+  /** in the air, or playing the landing recovery; vertical speed at takeoff */
+  private airborne = false;
+  private landing = false;
+  private v0 = 1;
   private speed = 0;
   private phase = 0;
   private readonly scale = THEO_HEIGHT / AUTHORED_HEIGHT;
 
   constructor(asset: TheoAsset, anisotropy = 8) {
-    const model = dressTheo(asset, this.fill, anisotropy);
+    const model = this.model = dressTheo(asset, this.fill, anisotropy);
     model.scale.setScalar(this.scale);
     this.group.add(model);
 
@@ -109,9 +125,14 @@ export class Theo {
     this.idle = clip('Idle');
     this.walk = clip('Walking');
     this.run = clip('Running');
-    // walk and run are driven by a shared phase; idle runs on its own clock
-    for (const a of [this.walk, this.run]) a.timeScale = 0;
-    for (const a of [this.idle, this.walk, this.run]) { a.setEffectiveWeight(0); a.play(); }
+    this.jump = clip('Jumping');
+    this.lift = this.measureLift(this.jump.getClip());
+    const off = Array.from(this.lift, (h) => h > LIFT_EPS);
+    this.takeoff = (off.indexOf(true) - 0.5) / 30;
+    this.touchdown = (off.lastIndexOf(true) + 0.5) / 30;
+    // walk and run are driven by a shared phase, jump by the game's arc; idle runs on its own clock
+    for (const a of [this.walk, this.run, this.jump]) a.timeScale = 0;
+    for (const a of [this.idle, this.walk, this.run, this.jump]) { a.setEffectiveWeight(0); a.play(); }
     this.idle.setEffectiveWeight(1);
     this.idle.time = Math.random() * this.idle.getClip().duration;
   }
@@ -119,8 +140,36 @@ export class Theo {
   /** fill strength in units of the mood's hero `fill` value (0 turns it off) */
   setFill(moodFill: number) { this.fill.strength.value = THEO_FILL * moodFill; }
 
-  /** a landing (no landing clip yet) */
-  land(_strength = 1) {}
+  /** How far a clip raises the lower foot off the ground, sampled at 30 fps (game units). */
+  private measureLift(clip: THREE.AnimationClip): Float32Array {
+    const toes: THREE.Object3D[] = [];
+    this.model.traverse((o) => { if (/(Left|Right)ToeBase$/.test(o.name)) toes.push(o); });
+    const mixer = new THREE.AnimationMixer(this.model);
+    mixer.clipAction(clip).play();
+    const p = new THREE.Vector3();
+    const out = new Float32Array(Math.round(clip.duration * 30) + 1);
+    for (let i = 0; i < out.length; i++) {
+      mixer.setTime(i / 30);
+      this.model.updateMatrixWorld(true);
+      out[i] = Math.min(...toes.map((t) => t.getWorldPosition(p).y));
+    }
+    mixer.stopAllAction();
+    mixer.uncacheRoot(this.model);
+    const ground = out[0];
+    return out.map((y) => Math.max(0, y - ground));
+  }
+
+  private liftAt(t: number) {
+    const f = THREE.MathUtils.clamp(t * 30, 0, this.lift.length - 1), i = Math.floor(f);
+    return THREE.MathUtils.lerp(this.lift[i], this.lift[Math.min(i + 1, this.lift.length - 1)], f - i);
+  }
+
+  /** touchdown: play the clip's landing recovery from here */
+  land(_strength = 1) {
+    this.airborne = false;
+    this.landing = true;
+    this.jump.time = this.touchdown;
+  }
 
   /** speed in world units/sec */
   update(dt: number, speed: number) {
@@ -137,9 +186,33 @@ export class Theo {
     this.run.time = this.phase * rDur;
 
     const move = THREE.MathUtils.smoothstep(this.speed, IDLE_BELOW, MOVE_ABOVE);
-    this.idle.setEffectiveWeight(1 - move);
-    this.walk.setEffectiveWeight(move * (1 - b));
-    this.run.setEffectiveWeight(move * b);
+
+    // jump: from takeoff to touchdown the clip follows the arc (vy runs v0 .. -v0), then the
+    // landing recovery plays out, cut short when he moves off
+    if (this.air > 0 && !this.airborne) {
+      this.airborne = true;
+      this.landing = false;
+      this.v0 = Math.max(this.vy, 1e-3);
+    }
+    let jw = this.jump.getEffectiveWeight(), target = 0;
+    if (this.airborne) {
+      const k = THREE.MathUtils.clamp((this.v0 - this.vy) / (2 * this.v0), 0, 1);
+      this.jump.time = THREE.MathUtils.lerp(this.takeoff, this.touchdown, k);
+      target = 1;
+    } else if (this.landing) {
+      const dur = this.jump.getClip().duration;
+      this.jump.time = Math.min(dur, this.jump.time + dt);
+      if (this.jump.time < dur - 1 / JUMP_OUT && move < 0.5) target = 1;
+      else if (jw < 0.01) this.landing = false;
+    }
+    jw += (target - jw) * Math.min(1, dt * (target > jw ? JUMP_IN : JUMP_OUT));
+    if (!this.airborne && !this.landing) jw = 0;
+    this.jump.setEffectiveWeight(jw);
+    this.model.position.y = -this.liftAt(this.jump.time) * jw;
+
+    this.idle.setEffectiveWeight((1 - move) * (1 - jw));
+    this.walk.setEffectiveWeight(move * (1 - b) * (1 - jw));
+    this.run.setEffectiveWeight(move * b * (1 - jw));
     this.mixer.update(dt);
   }
 }

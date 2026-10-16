@@ -146,7 +146,8 @@ src/
   post.ts        post stack: SSAO, volumetric height fog + light halos + spot beam, DOF, bloom,
                  AgX tone map, film grade, vignette, grain
   theo.ts        the hero: loads theo.glb (4k texture on High, 2k on Low), blends idle/walk/run by
-                 speed with the feet locked to the ground, and a soft fill on him alone
+                 speed with the feet locked to the ground, plays the Jumping clip along the
+                 game's jump arc, and a soft fill on him alone
   character.ts   parametric 3D characters (the Converted) with a procedural walk/idle rig
   viewer.ts      dev-only viewer (viewer.html): theo.glb under the Blender review stage, or ?loco
                  for the game's locomotion blend
