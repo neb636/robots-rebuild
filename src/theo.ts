@@ -20,7 +20,7 @@ export async function loadTheo(quality: 'high' | 'low'): Promise<TheoAsset> {
 }
 
 /** model height as exported (metres) and as the game wants him (matches the procedural hero) */
-const AUTHORED_HEIGHT = 1.0;
+export const AUTHORED_HEIGHT = 1.0;
 export const THEO_HEIGHT = 1.56;
 /** Locomotion tuning. Clip ground speeds are at the authored height (m/s), calibrated in the
  *  viewer's ?loco mode so the planted foot doesn't slide (residual slip ~0.04 m/s). Rates bound
@@ -33,6 +33,48 @@ export const LOCO = {
 const IDLE_BELOW = 0.08, MOVE_ABOVE = 0.6;
 /** Theo's own fill: irradiance per unit of the mood's `fill` (the existing hero fill strength) */
 export const THEO_FILL = 0.6;
+
+/** A styled copy of Theo at his authored height (1 m): shadows, the skin-tone correction and the
+ *  fill term wired to `fill`'s uniforms. Shared by the game's Theo and the character stage. */
+export function dressTheo(asset: TheoAsset, fill: Theo['fill'], anisotropy = 8): THREE.Object3D {
+  const model = cloneSkinned(asset.scene);
+  model.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (!m.isMesh) return;
+    m.castShadow = m.receiveShadow = true;
+    m.frustumCulled = false;   // bind-pose bounds don't cover every clip
+    const mat = m.material as THREE.MeshStandardMaterial;
+    // three draws a single-sided material's back faces into the shadow map; the hair tufts are
+    // open shells, so that leaks light through them as pale slivers
+    mat.shadowSide = THREE.DoubleSide;
+    if (mat.map) mat.map.anisotropy = anisotropy;
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uFillColor = fill.color;
+      sh.uniforms.uFill = fill.strength;
+      sh.fragmentShader = 'uniform vec3 uFillColor;\nuniform float uFill;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        // the baked texture paints his skin a saturated orange: pull orange, mid-to-bright texels
+        // (not the dark brown hair, blue clothes or white shoes) toward a natural skin tone
+        {
+          vec3 c = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(1.0 / 2.2));   // judge it as painted (sRGB)
+          float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
+          float sat = (mx - mn) / max(mx, 1e-4);
+          float hue = (c.g - c.b) / max(mx - mn, 1e-4);   // 0 red .. 1 yellow, when r is the max
+          float orange = step(c.b, c.g) * step(c.g, c.r) * smoothstep(0.12, 0.25, hue) * (1.0 - smoothstep(0.6, 0.8, hue));
+          float skinMask = orange * smoothstep(0.5, 0.7, mx) * smoothstep(0.3, 0.5, sat);
+          // ...except the orange cat on his sweater, which has its own island in the atlas
+          vec2 cat = step(vec2(0.29, 0.9), vMapUv) * step(vMapUv, vec2(0.4, 0.975));
+          skinMask *= 1.0 - cat.x * cat.y;
+          vec3 natural = mx * vec3(0.95, 0.75, 0.62);    // keeps the painted shading, warm-neutral hue
+          diffuseColor.rgb = pow(mix(c, natural, skinMask * 0.9), vec3(2.2));
+        }`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        // view space: up and to the right of the camera, toward the subject
+        float fillNL = max(dot(normal, normalize(vec3(0.35, 0.55, 1.0))), 0.0);
+        reflectedLight.directDiffuse += uFillColor * uFill * fillNL * BRDF_Lambert(material.diffuseColor);`);
+    };
+    mat.customProgramCacheKey = () => 'theo-fill-skin';
+  });
+  return model;
+}
 
 export class Theo {
   group = new THREE.Group();
@@ -54,43 +96,8 @@ export class Theo {
   private readonly scale = THEO_HEIGHT / AUTHORED_HEIGHT;
 
   constructor(asset: TheoAsset, anisotropy = 8) {
-    const model = cloneSkinned(asset.scene);
+    const model = dressTheo(asset, this.fill, anisotropy);
     model.scale.setScalar(this.scale);
-    model.traverse((o) => {
-      const m = o as THREE.SkinnedMesh;
-      if (!m.isMesh) return;
-      m.castShadow = m.receiveShadow = true;
-      m.frustumCulled = false;   // bind-pose bounds don't cover every clip
-      const mat = m.material as THREE.MeshStandardMaterial;
-      // three draws a single-sided material's back faces into the shadow map; the hair tufts are
-      // open shells, so that leaks light through them as pale slivers
-      mat.shadowSide = THREE.DoubleSide;
-      if (mat.map) mat.map.anisotropy = anisotropy;
-      mat.onBeforeCompile = (sh) => {
-        sh.uniforms.uFillColor = this.fill.color;
-        sh.uniforms.uFill = this.fill.strength;
-        sh.fragmentShader = 'uniform vec3 uFillColor;\nuniform float uFill;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
-          // the baked texture paints his skin a saturated orange: pull orange, mid-to-bright texels
-          // (not the dark brown hair, blue clothes or white shoes) toward a natural skin tone
-          {
-            vec3 c = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(1.0 / 2.2));   // judge it as painted (sRGB)
-            float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
-            float sat = (mx - mn) / max(mx, 1e-4);
-            float hue = (c.g - c.b) / max(mx - mn, 1e-4);   // 0 red .. 1 yellow, when r is the max
-            float orange = step(c.b, c.g) * step(c.g, c.r) * smoothstep(0.12, 0.25, hue) * (1.0 - smoothstep(0.6, 0.8, hue));
-            float skinMask = orange * smoothstep(0.5, 0.7, mx) * smoothstep(0.3, 0.5, sat);
-            // ...except the orange cat on his sweater, which has its own island in the atlas
-            vec2 cat = step(vec2(0.29, 0.9), vMapUv) * step(vMapUv, vec2(0.4, 0.975));
-            skinMask *= 1.0 - cat.x * cat.y;
-            vec3 natural = mx * vec3(0.95, 0.75, 0.62);    // keeps the painted shading, warm-neutral hue
-            diffuseColor.rgb = pow(mix(c, natural, skinMask * 0.9), vec3(2.2));
-          }`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-          // view space: up and to the right of the camera, toward the subject
-          float fillNL = max(dot(normal, normalize(vec3(0.35, 0.55, 1.0))), 0.0);
-          reflectedLight.directDiffuse += uFillColor * uFill * fillNL * BRDF_Lambert(material.diffuseColor);`);
-      };
-      mat.customProgramCacheKey = () => 'theo-fill-skin';
-    });
     this.group.add(model);
 
     this.mixer = new THREE.AnimationMixer(model);

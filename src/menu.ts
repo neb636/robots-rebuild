@@ -76,6 +76,7 @@ export class Menu {
           { label: 'New Game', desc: () => 'Begin the prologue. Boston, two years after the broadcast.', act: () => this.start() },
           { label: 'Options', desc: () => 'Mood, camera, render style and quality. Saved on this device.', act: () => this.go('options') },
           { label: 'Controls', desc: () => isTouch ? 'How to move, look and zoom with touch.' : 'Keyboard, mouse and gamepad controls.', act: () => this.go('controls') },
+          { label: 'Characters', desc: () => 'The character stage: every animation, on a bare floor.', act: () => location.assign(`${import.meta.env.BASE_URL}stage.html`) },
           { label: 'Credits', desc: () => 'Who and what made this.', act: () => this.go('credits') },
         ],
       },
