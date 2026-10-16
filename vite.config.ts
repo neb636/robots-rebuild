@@ -10,5 +10,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 2000,
+    // stage.html is the character stage (src/stage.ts), shipped so previews can show it too
+    rollupOptions: { input: { main: 'index.html', stage: 'stage.html' } },
   },
 });

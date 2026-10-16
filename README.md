@@ -75,6 +75,15 @@ fade), `?menu=0&card=0&start=street` straight to the street, `?q=low` is
 lighter still if the screenshot doesn't need the high-quality look, and closing the browser when
 done (`playwright-cli close`) stops the rendering entirely.
 
+## Character stage
+
+`/stage.html` (http://localhost:5173/stage.html) lists the characters (Theo for now) and plays any of
+their animation clips on a lit floor: scrub, speed, loop / one-shot, crossfade, skeleton overlay,
+and "in place" to pin root-motion clips (marked ↦). Up/down steps through clips, space plays,
+left/right steps a frame. The state lives in the URL (`?char=theo&clip=Walking&speed=0.5&inplace=1`).
+Theo's clips are the Mixamo FBXs in `art/source/mixamo/animations`, baked onto his rig by
+`art/blender/build_theo.py` into `public/models/theo.glb`; re-run that after adding an FBX.
+
 ## Why this tech stack
 
 **Three.js + TypeScript + Vite, rendered in the browser.**
