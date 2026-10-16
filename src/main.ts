@@ -9,7 +9,8 @@ import * as THREE from 'three';
 import { PBR_NAMES, pbr, setAnisotropy } from './textures';
 import { buildScene, heightAt, MOODS, Mood, Built } from './scene';
 import { Post, MAX_LIGHTS } from './post';
-import { Character, HERO, blobShadow, rim } from './character';
+import { blobShadow, rim } from './character';
+import { Theo, loadTheo, TheoAsset } from './theo';
 import { buildApartment, Apartment } from './apartment';
 import { Dialogue, Interactable } from './dialogue';
 import { Prologue } from './prologue';
@@ -59,8 +60,10 @@ async function boot() {
   for (let i = 0; i < PBR_NAMES.length; i++) { setLoad((i / PBR_NAMES.length) * 0.7, msgs[i % msgs.length]); await nextFrame(); pbr(PBR_NAMES[i]); }
   setLoad(0.75, street ? 'Building the street…' : 'Making the bed (badly)…'); await nextFrame();
   const built = street ? buildScene(state.quality) : buildApartment(state.quality);
+  setLoad(0.85, 'Waking Theo…');
+  const theo = await loadTheo(state.quality);
   setLoad(0.9, street ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
-  const app3 = new App(gl, built);
+  const app3 = new App(gl, built, theo);
   setLoad(1, ''); await nextFrame();
   // compile shaders up front so the first frames don't hitch
   gl.compile(built.scene, app3.camera);
@@ -77,7 +80,7 @@ async function boot() {
 class App {
   camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 1500);
   post: Post;
-  player: Character;
+  player: Theo;
   pShadow = blobShadow(0.42);
   pos = new THREE.Vector3();
   heading = Math.PI;
@@ -115,8 +118,8 @@ class App {
   padA = false;
   built!: Built;
 
-  constructor(public gl: THREE.WebGLRenderer, built: Built) {
-    this.player = new Character(built.hero ?? HERO);
+  constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset) {
+    this.player = new Theo(theo, Math.min(8, gl.capabilities.getMaxAnisotropy()));
     this.post = new Post(gl, built.scene, this.camera, state.quality === 'high' ? 4 : 0);
     this.pmrem = new THREE.PMREMGenerator(gl);
     this.dlg.onInteract = () => void this.interact();
@@ -170,9 +173,7 @@ class App {
     const next = buildScene(state.quality);
     await nextFrame();
     const old = this.built;
-    // two years later Theo carries everything he owns
     this.player.group.removeFromParent();
-    this.player = new Character(HERO);
     this.focus = null; this.dlg.setPrompt(null); this.dlg.objective(null);
     this.shot = null; this.locked = false;
     this.attach(next);
@@ -250,6 +251,7 @@ class App {
     b.scene.environment = this.envRT.texture;
     b.scene.environmentIntensity = m.env;
     rim.color.value.set(m.rim.color); rim.strength.value = m.rim.strength;
+    this.player.setFill(m.fill);
   }
 
   applyQuality() {

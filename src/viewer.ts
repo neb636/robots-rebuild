@@ -9,9 +9,14 @@
 // Output is sRGB with no tone mapping, which is Blender's "Standard" view transform. Clips play
 // exactly as exported; nothing touches the bones. Blender frame f is clip time (f - 1) / 30.
 //
+// ?loco instead drives the game's own Theo class (src/theo.ts) at game scale over a grid, through a
+// scripted speed ramp (stand, walk 2.3 m/s, run 4.6 m/s, stop), to check the idle/walk/run blend
+// for foot sliding. __viewer.step(n) advances it by exact 1/30 s frames.
+//
 // Drag to orbit, wheel to zoom. window.__viewer exposes set() and a ready promise for scripts.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { Theo, THEO_HEIGHT, LOCO } from './theo';
 
 const FPS = 30;
 const MODELS = ['theo', ...(import.meta.env.DEV ? ['theo-2k'] : [])];
@@ -56,6 +61,7 @@ scene.background = grey;
   scene.environment = pmrem.fromScene(env).texture;
   pmrem.dispose();
 }
+const suns: THREE.DirectionalLight[] = [];
 for (const s of SUNS) {
   const light = new THREE.DirectionalLight(0xffffff, s.strength);
   // Blender's XYZ euler applies X, then Y, then Z (three's 'ZYX'); a sun shines down its -Z
@@ -71,6 +77,7 @@ for (const s of SUNS) {
   light.shadow.bias = -0.0004;
   light.shadow.normalBias = 0.004;
   scene.add(light, light.target);
+  suns.push(light);
 }
 
 const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 100);
@@ -96,6 +103,11 @@ let mixer: THREE.AnimationMixer | null = null;
 let clips: THREE.AnimationClip[] = [];
 let action: THREE.AnimationAction | null = null;
 let playing = true;
+const loco = params.has('loco');
+let theo: Theo | null = null;
+let locoT = 0;
+/** the speed ramp the game would feed Theo (m/s): stand, walk, run, stop */
+const locoSpeed = (t: number) => (t < 1 ? 0 : t < 4.5 ? 2.3 : t < 8 ? 4.6 : t < 10 ? 0 : -1);
 const state = {
   model: params.get('model') ?? 'theo',
   clip: params.get('clip') ?? 'Idle',
@@ -106,6 +118,14 @@ const state = {
 async function loadModel(name: string) {
   const gltf = await loader.loadAsync(`${base}models/${name}.glb`);
   if (model) scene.remove(model);
+  if (loco) {
+    theo = new Theo({ scene: gltf.scene, clips: gltf.animations }, gl.capabilities.getMaxAnisotropy());
+    theo.group.rotation.y = Math.PI / 2;   // walk along +X, seen side-on
+    scene.add(theo.group);
+    model = theo.group;
+    info.texture = 'loco';
+    return;
+  }
   model = gltf.scene;
   model.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
@@ -185,11 +205,32 @@ addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('wheel', (e) => { orbit.sph.radius = THREE.MathUtils.clamp(orbit.sph.radius * (1 + e.deltaY * 0.001), 0.2, 20); });
 
+function step(dt: number) {
+  if (!theo) return;
+  locoT += dt;
+  let v = locoSpeed(locoT);
+  if (v < 0) { locoT = 0; v = 0; theo.group.position.x = 0; }
+  theo.group.position.x += v * dt;
+  theo.update(dt, v);
+  const p = theo.group.position;
+  orbit.target.set(p.x, 0.5 * THEO_HEIGHT, 0);
+  for (const l of suns) { const d = l.position.clone().sub(l.target.position); l.target.position.set(p.x, 0.5 * THEO_HEIGHT, 0); l.position.copy(l.target.position).add(d); }
+}
+if (loco) {
+  const grid = new THREE.GridHelper(200, 400, 0x3a3a3a, 0x6a6a6a);
+  grid.position.x = 90;
+  scene.add(grid);
+  for (const l of suns) { const c = l.shadow.camera; c.left = c.bottom = -1.4; c.right = c.top = 1.4; }
+  VIEWS.loco = { pos: bl(0, -6.5, 1.0), target: bl(0, 0, 0.78) };
+  state.view = 'loco';
+}
+
 const info = { texture: '' };
 const clock = new THREE.Clock();
 function frame() {
   const dt = Math.min(0.05, clock.getDelta());
-  if (playing && mixer) { mixer.update(dt); syncUi(); }
+  if (playing && theo) step(dt);
+  else if (playing && mixer) { mixer.update(dt); syncUi(); }
   const w = innerWidth, h = innerHeight;
   const pr = gl.getPixelRatio();
   if (canvas.width !== Math.floor(w * pr) || canvas.height !== Math.floor(h * pr)) gl.setSize(w, h, false);
@@ -205,8 +246,15 @@ const ready = loadModel(state.model).then(() => { requestAnimationFrame(frame); 
 (window as any).__viewer = {
   ready,
   info,
-  THREE, scene, gl,
+  THREE, scene, gl, LOCO,
   get model() { return model; },
+  /** loco mode: stop the clock and advance n exact frames */
+  async step(n = 1, dt = 1 / FPS) {
+    playing = false;
+    for (let i = 0; i < n; i++) step(dt);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  },
+  get locoT() { return locoT; },
   /** set any of { model, clip, frame, view }; resolves after the next rendered frame */
   async set(p: { model?: string; clip?: string; frame?: number; view?: string }) {
     if (p.model && p.model !== state.model) { state.model = p.model; ui.model.value = p.model; await loadModel(p.model); }
