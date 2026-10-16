@@ -525,24 +525,46 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     w.group.add(glass); normalHidden.push(glass);
     wb.flush(w.group);
   };
-  /** a closed flat-slab door in an opening, with a black lever on the given side */
+  /** a closed two-panel shaker door in an opening, with a black lever on the given side */
   const doorIn = (w: Wall, o: Opening, color: string, knobSide = 1, front = false) => {
     const d = w.def, wb = new Batch();
     const ac = (o.a0 + o.a1) / 2, la = o.a1 - o.a0, h = o.y1;
     const [x, z] = place(d, ac);
     const dm = paint(color, 0.5);
-    wb.add(wbox(d.axis === 'x' ? la - 0.04 : 0.05, h - 0.02, d.axis === 'x' ? 0.05 : la - 0.04, 1), dm, x, h / 2, z);
+    const dw = la - 0.04, dt = 0.05;
+    wb.add(wbox(d.axis === 'x' ? dw : dt, h - 0.02, d.axis === 'x' ? dt : dw, 1), dm, x, h / 2, z);
+    // stiles and rails stand proud of the slab on both faces, with a shadow line around each panel
+    const shade = paint(new THREE.Color(color).multiplyScalar(0.55).getStyle(), 0.6);
+    const strip = (a: number, y: number, wa: number, hy: number, s: number, m: THREE.Material, depth: number) => {
+      const [sx, sz] = place(d, a, s * (dt + depth) / 2);
+      wb.add(new THREE.BoxGeometry(d.axis === 'x' ? wa : depth, hy, d.axis === 'x' ? depth : wa), m, sx, y, sz);
+    };
+    const sw = 0.11, tr = 0.11, br = 0.22, lr = 0.16, ly = 1.0, top = h - 0.01, pw = dw - 2 * sw;
+    const panels = [[0.01 + br, ly - lr / 2], [ly + lr / 2, top - tr]];
+    for (const s of [-1, 1]) {
+      for (const e of [-1, 1]) strip(ac + e * (dw - sw) / 2, h / 2, sw, h - 0.02, s, dm, 0.016);
+      for (const [y, hy] of [[top - tr / 2, tr], [ly, lr], [0.01 + br / 2, br]]) strip(ac, y, pw, hy, s, dm, 0.016);
+      for (const [y0, y1] of panels) {
+        for (const e of [-1, 1]) strip(ac + e * (pw / 2 - 0.006), (y0 + y1) / 2, 0.012, y1 - y0, s, shade, 0.006);
+        for (const y of [y0 + 0.006, y1 - 0.006]) strip(ac, y, pw, 0.012, s, shade, 0.006);
+      }
+    }
+    // butt hinges on the hinge edge
+    for (const y of [0.25, h / 2 + 0.1, h - 0.3]) {
+      const [hx, hz] = place(d, ac - knobSide * (dw / 2 + 0.008));
+      wb.add(new THREE.BoxGeometry(d.axis === 'x' ? 0.016 : dt + 0.012, 0.1, d.axis === 'x' ? dt + 0.012 : 0.016), matteBlack, hx, y, hz);
+    }
     // casing
     for (const a of [o.a0 - 0.03, o.a1 + 0.03]) { const [cx, cz] = place(d, a); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? 0.06 : T + 0.02, h + 0.06, d.axis === 'x' ? T + 0.02 : 0.06), trim, cx, (h + 0.06) / 2, cz); }
     { const [cx, cz] = place(d, ac); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la + 0.12 : T + 0.02, 0.06, d.axis === 'x' ? T + 0.02 : la + 0.12), trim, cx, h + 0.03, cz); }
     // lever handles on round roses, both faces; the front door gets a smart lock and a peephole
     for (const s of [-1, 1]) {
-      const [kx, kz] = place(d, ac + knobSide * la * 0.4, s * 0.04);
+      const [kx, kz] = place(d, ac + knobSide * la * 0.4, s * 0.047);
       wb.add(new THREE.CylinderGeometry(0.03, 0.03, 0.012, 16).rotateX(Math.PI / 2).rotateY(d.axis === 'z' ? Math.PI / 2 : 0), matteBlack, kx, 1.0, kz);
       const [lx, lz] = place(d, ac + knobSide * la * 0.4 - knobSide * 0.06, s * 0.065);
       wb.add(new THREE.BoxGeometry(d.axis === 'x' ? 0.14 : 0.022, 0.022, d.axis === 'x' ? 0.022 : 0.14), matteBlack, lx, 1.0, lz);
       if (front) {
-        const [ux, uz] = place(d, ac + knobSide * la * 0.4, s * 0.035);
+        const [ux, uz] = place(d, ac + knobSide * la * 0.4, s * 0.045);
         wb.add(new THREE.BoxGeometry(d.axis === 'x' ? 0.07 : 0.025, 0.16, d.axis === 'x' ? 0.025 : 0.07), matteBlack, ux, 1.25, uz);
         const [ex, ez] = place(d, ac, s * 0.03);
         wb.add(new THREE.CylinderGeometry(0.01, 0.01, 0.02, 10).rotateX(Math.PI / 2).rotateY(d.axis === 'z' ? Math.PI / 2 : 0), matteBlack, ex, 1.55, ez);
@@ -573,7 +595,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   const bedSouth = addWall({ axis: 'x', at: 1.5, a0: X0, a1: -2, mat: bedWall, mat2: closetWall, open: [doorBath, doorCloset] });
   addWall({ axis: 'z', at: -6.8, a0: 1.5, a1: Z1, mat: bathWall });
   windowIn(backBed, winBed); windowIn(backLiv, winL1); windowIn(backLiv, winL2); windowIn(backLiv, winK);
-  doorIn(right, doorFront, '#2c2e33', 1, true);
+  doorIn(right, doorFront, '#4f6e7c', 1, true);
   doorIn(bedSouth, doorBath, '#f4f3f0');
   doorIn(bedSouth, doorCloset, '#f4f3f0', -1);
   // the doorway between bedroom and living room: a cased opening
