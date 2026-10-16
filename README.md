@@ -81,8 +81,9 @@ done (`playwright-cli close`) stops the rendering entirely.
 
 - Three.js covers the lighting, shadows, PBR materials and instancing, and the `postprocessing`
   library supplies the effect-composer stack the custom fog and grade passes plug into.
-- **All art and audio are procedural code.** Textures, geometry, characters, music and SFX are
-  generated at load time, so there are no asset pipelines to break.
+- **Almost all art and audio are procedural code.** Textures, geometry, the Converted, music and
+  SFX are generated at load time. The one authored asset is Theo: a Tripo model rigged in Mixamo,
+  built into `public/models/theo.glb` by a reproducible Blender script (see `art/`).
 - **Fast to iterate and test.** It runs in any browser, reloads instantly, and can be screenshotted
   and driven headlessly.
 
@@ -103,7 +104,11 @@ src/
   scene.ts       the lane layout, walkable heights, lights, the Converted, the drone, moods
   post.ts        post stack: SSAO, volumetric height fog + light halos + spot beam, DOF, bloom,
                  AgX tone map, film grade, vignette, grain
-  character.ts   parametric 3D characters (hero, Converted) with a procedural walk/idle rig
+  theo.ts        the hero: loads theo.glb (4k texture on High, 2k on Low), blends idle/walk/run by
+                 speed with the feet locked to the ground, and a soft fill on him alone
+  character.ts   parametric 3D characters (the Converted) with a procedural walk/idle rig
+  viewer.ts      dev-only viewer (viewer.html): theo.glb under the Blender review stage, or ?loco
+                 for the game's locomotion blend
   buildings.ts   rowhouses: windows (intact/broken/boarded/lit), stoops, cornices, bow fronts
   flagstones.ts  Voronoi flagstones as real beveled geometry, plus gap points for grass
   foliage.ts     wind-swept grass, leaf-card bushes and ivy, trees, hanging moss
@@ -119,6 +124,11 @@ src/
   noise.ts       value / fbm / cellular noise and small math helpers
   audio.ts       WebAudio synth, step sequencer, songs, ambience, SFX
   style.css      loader, HUD, title card, story text box and notifications, touch stick
+art/
+  source/        Tripo model, Mixamo rig and clips (inputs)
+  blender/build_theo.py  builds theo.blend (retargeted clips, weights, matte material) and
+                 exports public/models/theo.glb / theo-2k.glb
+  theo.blend
 planning/
   game_outline.md
   prologue_script.md

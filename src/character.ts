@@ -1,6 +1,6 @@
 // Stylized 3D characters built from smooth primitives (chunky, big-headed proportions in the
 // spirit of the Ocarina remake reference), with fabric/skin/hair materials and a procedural
-// walk/idle rig. One parametric builder covers the hero and the Converted.
+// walk/idle rig. Used for the Converted; the hero is the rigged model in theo.ts.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { pbr, emblemTex } from './textures';
@@ -27,13 +27,6 @@ export interface Char3DSpec {
   scale?: number;
   seed?: number;
 }
-
-export const HERO: Char3DSpec = {
-  skin: '#b98264', hair: '#4a2c1a', hairStyle: 'messy', beard: true,
-  top: '#1f2b55', topStyle: 'sweater', emblem: true,
-  bottom: '#5b7fae', shorts: true, shoes: '#26305a', sole: '#e6e0d0', socks: '#d8d2c4',
-  backpack: '#5e553a', bedroll: '#6a2e28', eye: '#3a2414', seed: 1,
-};
 
 export const CONVERTED: Char3DSpec[] = [
   { skin: '#e0b090', hair: '#4a3020', hairStyle: 'short', top: '#c4c8cc', topStyle: 'jumpsuit', bottom: '#b4b8be', shoes: '#e4e4e4', glowEyes: '#7ff0ff', seed: 11 },

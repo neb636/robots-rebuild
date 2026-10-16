@@ -15,17 +15,12 @@ import { tree, leafCards, bushCards, Card } from './foliage';
 import { rng } from './noise';
 import * as D from './decor';
 import type { Built, Mood } from './scene';
-import type { Char3DSpec } from './character';
-import { HERO } from './character';
 
 const H = 3.0; // wall height (a gut-renovated Beacon Hill walk-up: tall ceilings)
 const T = 0.16; // wall thickness
 /** the unit's footprint */
 const X0 = -10, X1 = 10, Z0 = -6, Z1 = 4.6;
 const ZL = 2.5; // the living room's front wall: shallower than the bedroom wing (bath, closet)
-
-/** Theo on Day Zero: same sweater, no pack, no bedroll. Nothing to run from yet. */
-export const HERO_DAY0: Char3DSpec = { ...HERO, backpack: undefined, bedroll: undefined };
 
 const sunDir: [number, number, number] = [0.45, 0.62, -1];
 export const MORNING: Mood = {
@@ -1568,7 +1563,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     heightAt, spawn: { x: -5.0, z: -2.7, heading: -Math.PI * 0.85 },
     card: ['MT. VERNON STREET', 'Beacon Hill · day zero'],
     music: 'apartment', ambience: 'city',
-    mood: MORNING, hero: HERO_DAY0, normalHidden,
+    mood: MORNING, normalHidden,
     at, inLiving, tv, clock, phone, cat, lamps,
     setFollow(on: boolean) { follow = on; ceiling.visible = on; },
     cameraBlock(from, to) {

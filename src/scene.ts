@@ -12,7 +12,6 @@ import { rowhouse, poster, graffiti, placeAABB, AABB } from './buildings';
 import { pbrMat, gasLamp, hangingLantern, barrelFire, wreckedCar, drone, stringLights, balustrade, rubble, trashBags, crate, FogLight, flickerUpdate, ironMat } from './props';
 import { skyDome, skyline, SkySettings } from './sky';
 import { Character, CONVERTED, blobShadow } from './character';
-import type { Char3DSpec } from './character';
 import type { Grade, FogSettings } from './post';
 
 export const TERRACE_Y = 3.2;
@@ -105,7 +104,6 @@ export interface Built {
   music: string; ambience: string;
   /** fixed lighting (interiors ignore the player's mood setting) */
   mood?: Mood;
-  hero?: Char3DSpec;
   drone?: ReturnType<typeof drone>;
   emberOrigin?: THREE.Vector3;
   /** kept out of the SSAO normal pass */
