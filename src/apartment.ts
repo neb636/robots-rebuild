@@ -18,6 +18,8 @@ import type { Built, Mood } from './scene';
 
 const H = 3.0; // wall height (a gut-renovated Beacon Hill walk-up: tall ceilings)
 const T = 0.16; // wall thickness
+// trim stops this far short of a jamb, so its faces never share a plane with the wall's
+const CASING_REVEAL = 0.006;
 /** the unit's footprint */
 const X0 = -10, X1 = 10, Z0 = -6, Z1 = 4.6;
 const ZL = 2.5; // the living room's front wall: shallower than the bedroom wing (bath, closet)
@@ -466,7 +468,11 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     const group = new THREE.Group(), deco = new THREE.Group();
     group.add(deco); root.add(group);
     const wb = new Batch();
+    // walls overlap where they meet; drop each one's top a hair so the overlapping tops (seen from
+    // the overhead camera) don't share a plane and flicker between the two finishes
+    const drop = walls.length * 0.0006;
     for (const p of wallPieces(d)) {
+      if (p.y + p.h / 2 > H - 1e-6) { p.h -= drop; p.y -= drop / 2; }
       const [x, z] = place(d, p.a);
       const [w, dd] = d.axis === 'x' ? [p.la, T] : [T, p.la];
       if (d.mat2) {
@@ -484,8 +490,11 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
       for (const s of [-1, 1]) {
         if (bottom < 0.01) {
           // a slim, flat charcoal baseboard; no wainscot, no crown: clean drywall to the ceiling
-          const [bx, bz] = place(d, p.a, s * (T / 2 + 0.006));
-          wb.add(along(p.la, 0.012, 0.08), base, bx, 0.04, bz, 0, 0, 0, 1, 1, 1, false);
+          // stop short of a door so the end dies into the casing rather than poking past its reveal
+          const doorAt = (e: number) => (d.open ?? []).some((o) => o.y0 === 0 && (Math.abs(o.a0 - e) < 1e-6 || Math.abs(o.a1 - e) < 1e-6)) ? 0.03 : 0;
+          const e0 = p.a - p.la / 2 + doorAt(p.a - p.la / 2), e1 = p.a + p.la / 2 - doorAt(p.a + p.la / 2);
+          const [bx, bz] = place(d, (e0 + e1) / 2, s * (T / 2 + 0.006));
+          wb.add(along(e1 - e0, 0.012, 0.08), base, bx, 0.04, bz, 0, 0, 0, 1, 1, 1, false);
         }
       }
       // colliders: full-height pieces and anything that reaches the floor
@@ -526,7 +535,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     // a flush drywall return (no casing), a thin stone sill, and the roller-shade cassette
     const inward = d.out ? -(d.out[0] + d.out[1]) : 1;
     const [sx, sz] = place(d, ac, inward * (T / 2 - 0.02));
-    wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la + 0.02 : T / 2 + 0.06, 0.025, d.axis === 'x' ? T / 2 + 0.06 : la + 0.02), paint('#e8e6e2', 0.35), sx, o.y0 - 0.012, sz);
+    wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la + 0.02 : T / 2 + 0.06, 0.025, d.axis === 'x' ? T / 2 + 0.06 : la + 0.02), paint('#e8e6e2', 0.35), sx, o.y0 - 0.0085, sz);
     const [rx, rz] = place(d, ac, inward * (T / 2 + 0.05));
     wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la + 0.04 : 0.1, 0.1, d.axis === 'x' ? 0.1 : la + 0.04), paint('#d8d8d6', 0.45, { metalness: 0.3 }), rx, o.y1 + 0.02, rz);
     const glass = new THREE.Mesh(new THREE.PlaneGeometry(la - 0.05, h - 0.05), paint('#cfe4f0', 0.05, { transparent: true, opacity: 0.12, metalness: 0.1, depthWrite: false }));
@@ -564,9 +573,11 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
       const [hx, hz] = place(d, ac - knobSide * (dw / 2 + 0.008));
       wb.add(new THREE.BoxGeometry(d.axis === 'x' ? 0.016 : dt + 0.012, 0.1, d.axis === 'x' ? dt + 0.012 : 0.016), matteBlack, hx, y, hz);
     }
-    // casing
-    for (const a of [o.a0 - 0.03, o.a1 + 0.03]) { const [cx, cz] = place(d, a); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? 0.06 : T + 0.02, h + 0.06, d.axis === 'x' ? T + 0.02 : 0.06), trim, cx, (h + 0.06) / 2, cz); }
-    { const [cx, cz] = place(d, ac); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la + 0.12 : T + 0.02, 0.06, d.axis === 'x' ? T + 0.02 : la + 0.12), trim, cx, h + 0.03, cz); }
+    // casing: set back from the jamb by a small reveal and standing proud of the baseboard, so no
+    // face of it lies in the same plane as the wall (coplanar faces z-fight when the camera moves)
+    const cd = T + 0.04, rv = CASING_REVEAL;
+    for (const a of [o.a0 - rv - 0.03, o.a1 + rv + 0.03]) { const [cx, cz] = place(d, a); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? 0.06 : cd, h + rv, d.axis === 'x' ? cd : 0.06), trim, cx, (h + rv) / 2, cz); }
+    { const [cx, cz] = place(d, ac); wb.add(new THREE.BoxGeometry(d.axis === 'x' ? la + 0.12 + rv * 2 : cd, 0.06, d.axis === 'x' ? cd : la + 0.12 + rv * 2), trim, cx, h + rv + 0.03, cz); }
     // lever handles on round roses, both faces; the front door gets a smart lock and a peephole
     for (const s of [-1, 1]) {
       const [kx, kz] = place(d, ac + knobSide * la * 0.4, s * 0.047);
@@ -611,8 +622,9 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   // the doorway between bedroom and living room: a cased opening
   {
     const wb = new Batch();
-    for (const a of [doorway.a0 - 0.02, doorway.a1 + 0.02]) wb.add(new THREE.BoxGeometry(T + 0.01, 2.32, 0.04), trim, -2, 1.16, a);
-    wb.add(new THREE.BoxGeometry(T + 0.01, 0.04, doorway.a1 - doorway.a0 + 0.08), trim, -2, 2.32, (doorway.a0 + doorway.a1) / 2);
+    const rv = CASING_REVEAL, top = doorway.y1 + rv;
+    for (const a of [doorway.a0 - rv - 0.02, doorway.a1 + rv + 0.02]) wb.add(new THREE.BoxGeometry(T + 0.04, top, 0.04), trim, -2, top / 2, a);
+    wb.add(new THREE.BoxGeometry(T + 0.04, 0.04, doorway.a1 - doorway.a0 + 0.08 + rv * 2), trim, -2, top + 0.02, (doorway.a0 + doorway.a1) / 2);
     wb.flush(part.group);
   }
   // the visible ceiling, for the follow camera (the overhead view leaves it off)
