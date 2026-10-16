@@ -39,7 +39,7 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 
 ## Settings
 
-Mood, camera and quality are player settings, saved on the device (localStorage)
+Mood, camera, quality and audio are player settings, saved on the device (localStorage)
 and restored on the next visit. They're set from **Options** on the title screen (there is no
 in-game settings panel); in game, the keys still work (1 / 2 / 3, C):
 
@@ -52,9 +52,11 @@ a shoulder-height **Follow** camera (the default) and an **Overhead** dollhouse 
   `src/main.ts`).
 - **Quality:** High, or Low (no SSAO or depth of field, 1x pixel ratio, no MSAA). Touch devices
   default to Low.
+- **Audio:** Web Audio (the default: synthesized voices and sounds) or Generated (the recorded
+  ElevenLabs voice-over and effects, where a scene has them). See Voice-over below.
 
 URL params override the saved settings without changing them, for sharing a specific setup:
-`?mood=curfew&cam=jrpg&q=low&ui=0&card=0`. `?menu=0` skips the title screen and goes
+`?mood=curfew&cam=jrpg&q=low&audio=generated&ui=0&card=0`. `?menu=0` skips the title screen and goes
 straight into the game. `?start=street` skips Day Zero and starts on Acorn Lane. `?debug` exposes `window.__THREE` (and `window.__title` on the title screen).
 
 ## Frame rate and browser testing
@@ -89,6 +91,11 @@ done (`playwright-cli close`) stops the rendering entirely.
   and driven headlessly.
 
 ## Voice-over
+
+New scenes are written with Web Audio only: each speaker "talks" in synthesized blips (a `TALK`
+profile in `src/audio.ts`). Once a scene's script is final it can be converted to recorded audio with
+ElevenLabs (the `elevenlabs-audio` skill in `.claude/skills/` has the cast and the process). Players
+choose in **Options → Audio**: Web Audio (the default) or Generated (`?audio=generated`).
 
 Day Zero's lines are voiced with ElevenLabs. Theo's inner voice is a designed voice (low, slow,
 somber), with a livelier read for lines he says out loud; the narrator reads object text and the
