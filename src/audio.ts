@@ -165,18 +165,19 @@ interface Talk {
   buzz?: number;
 }
 const TALK: Record<string, Talk> = {
-  // Levels are matched (peak about -24 dB through a small speaker's ~250 Hz rolloff), and every voice
-  // keeps harmonics above 300 Hz: a pure low tone vanishes on laptop and phone speakers.
+  // Levels are matched to each other through a small speaker's ~250 Hz rolloff and sit about level with
+  // the music (which also dips while a line types), and every voice keeps harmonics above 300 Hz: a pure
+  // low tone vanishes on laptop and phone speakers.
   // low, slow and somber: a dark, buzzy low hum, close and dry
-  theo: { wave: 'sawtooth', hz: 150, spread: 0.08, dur: 0.09, vol: 0.06, filter: 1000 },
+  theo: { wave: 'sawtooth', hz: 150, spread: 0.08, dur: 0.09, vol: 0.2, filter: 1200 },
   // the same voice said out loud: a little higher and brighter
-  aloud: { wave: 'sawtooth', hz: 175, spread: 0.12, dur: 0.07, vol: 0.05, filter: 1600 },
+  aloud: { wave: 'sawtooth', hz: 175, spread: 0.12, dur: 0.07, vol: 0.16, filter: 1700 },
   // warm, calm, a touch of room
-  narrator: { wave: 'sine', hz: 300, spread: 0.06, dur: 0.08, vol: 0.05, filter: 1800, room: 0.4 },
+  narrator: { wave: 'sine', hz: 300, spread: 0.06, dur: 0.08, vol: 0.16, filter: 1800, room: 0.4 },
   // urgent, through a phone
-  marcus: { wave: 'sawtooth', hz: 175, spread: 0.18, dur: 0.06, vol: 0.065, filter: [500, 2600] },
+  marcus: { wave: 'sawtooth', hz: 175, spread: 0.18, dur: 0.06, vol: 0.2, filter: [500, 2600] },
   // perfectly even, robotic: no pitch drift and a metallic buzz
-  tv: { wave: 'square', hz: 220, spread: 0, dur: 0.07, vol: 0.055, filter: 2400, buzz: 48 },
+  tv: { wave: 'square', hz: 220, spread: 0, dur: 0.07, vol: 0.17, filter: 2400, buzz: 48 },
 };
 
 // ---------------------------------------------------------------- engine
@@ -330,6 +331,12 @@ class AudioEngine {
     out.connect(f).connect(g).connect(this.voiceBus);
     if (p.room) { const s = c.createGain(); s.gain.value = p.room; g.connect(s).connect(this.reverbSend); }
     o.start(t); o.stop(t + p.dur + 0.05);
+    // dip the music while the line types, like a recorded voice; it comes back once the blips stop
+    if (!this.voiceSrc) {
+      this.duck.gain.cancelScheduledValues(t);
+      this.duck.gain.setTargetAtTime(0.6, t, 0.05);
+      this.duck.gain.setTargetAtTime(1, t + 0.3, 0.35);
+    }
   }
 
   /** fade out the voice line that's playing, if any */
