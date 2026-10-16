@@ -339,6 +339,14 @@ class AudioEngine {
     }
   }
 
+  /** dip the music under a voice the browser speaks (src/speech.ts) */
+  duckMusic(on: boolean) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    this.duck.gain.cancelScheduledValues(t);
+    this.duck.gain.setTargetAtTime(on ? 0.55 : 1, t, on ? 0.08 : 0.4);
+  }
+
   /** fade out the voice line that's playing, if any */
   stopVoice() {
     this.voiceTok++;

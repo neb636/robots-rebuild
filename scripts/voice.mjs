@@ -35,13 +35,8 @@ const VOICES = {
 // the robot filter delays its output by about this many samples (44.1 kHz) against the dry take
 const FX_LATENCY = 138;
 const CALLS = { ALOUD: 'aloud', NARR: 'narrator', CLOCK: 'narrator', BROWSER: 'narrator', MARCUS: 'marcus', TV: 'tv' };
-// what to say when the on-screen text doesn't read well aloud
-const SPOKEN = {
-  'I-N-E-F-F-I-C-I-E-N-T.': 'I... N... E... F... F... I... C... I... E... N... T.',
-  'Pinned tab: "SUPERINTELLIGENCE INC — Your Future, Optimized™"': 'Pinned tab: "Superintelligence Inc. Your Future, Optimized."',
-  'TUESDAY — JUNE 12, 2027.': 'Tuesday. June twelfth, twenty twenty-seven.',
-  '— SIGNAL LOST —': 'Signal lost.',
-};
+// what to say when the on-screen text doesn't read well aloud (shared with the browser voices, src/speech.ts)
+const SPOKEN = JSON.parse(await readFile('src/spoken.json', 'utf8'));
 
 const args = process.argv.slice(2);
 const dry = args.includes('--dry');
@@ -71,9 +66,12 @@ const add = (l, prev, next) => {
   if (had && had.role !== l.role) throw new Error(`"${l.text}" is voiced by both ${had.role} and ${l.role}`);
   if (!had) lines.set(l.text, { ...l, prev, next });
 };
-(function walk(n) {
+// only what's handed to say() (directly, or through pick() and ternaries) is dialogue
+const isPick = (n) => ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'pick';
+(function walk(n, inSay = false) {
+  inSay ||= isSay(n) || isPick(n);
   // arrays of lines (say([...]) and pick lists), with same-voice neighbours for request stitching
-  if (ts.isArrayLiteralExpression(n)) {
+  if (inSay && ts.isArrayLiteralExpression(n)) {
     const ls = n.elements.map(lineOf);
     ls.forEach((l, i) => {
       if (!l) return;
@@ -83,7 +81,7 @@ const add = (l, prev, next) => {
   }
   // a single line passed straight to say()
   if (isSay(n) && n.arguments.length) add(lineOf(n.arguments[0]));
-  ts.forEachChild(n, walk);
+  ts.forEachChild(n, (c) => walk(c, inSay));
 })(sf);
 
 // ---------------------------------------------------------------- plan

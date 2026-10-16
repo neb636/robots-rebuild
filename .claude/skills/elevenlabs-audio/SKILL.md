@@ -5,10 +5,12 @@ description: Convert a finished scene's Web Audio placeholders into ElevenLabs v
 
 # ElevenLabs audio for Quiet Machines
 
-Scenes are written and iterated with **Web Audio** (synth talk blips, procedural SFX in `src/audio.ts`).
+Scenes are written and iterated with **browser audio**: the browser's text-to-speech speaks the lines
+(`src/speech.ts`, with talk blips in `src/audio.ts` as the fallback) and SFX are procedural Web Audio.
 Only when the user says a scene's script is final do we convert it. Everything recorded is **optional at
-runtime**: the title menu's **Options → Audio** switches between `Web Audio` (default) and `Generated`
-(`?audio=generated` in the URL), so every recorded clip must keep a working Web Audio fallback.
+runtime**: the title menu's **Options → Audio** switches between `Web` (default) and `Generated`
+(`?audio=generated` in the URL), so every recorded clip must keep a working browser fallback. With
+Generated, lines that have no clip yet still fall back to the browser voice.
 
 Needs `ELEVENLABS_API_KEY` in `.env.local` (gitignored) and `ffmpeg` (blends, loudness). The key has no
 `user_read` permission, so the credit balance isn't readable: tell the user the estimated cost instead.
@@ -30,7 +32,7 @@ The user's taste so far: Theo's inner voice should be **low, deep, slow and somb
 inner-monologue narrator, never a clone of a real actor); out loud he's more energetic but the same
 voice. The broadcast should be clearly robotic but **not echoey** (hence the wet/dry blend and no
 runtime reverb). Marcus's tags describe his mood in that scene; change them when his mood changes
-(put a per-line override in `SPOKEN`/tags rather than changing his default for everyone).
+(put a per-line override in the tags rather than changing his default for everyone).
 
 Biscuit's sounds are ElevenLabs sound effects (`eleven_text_to_sound_v2`) in `public/audio/sfx/`,
 with synth fallbacks (`meow`, `meowLow`, `purr` in `audio.sfx`).
@@ -43,7 +45,7 @@ with synth fallbacks (`meow`, `meowLow`, `purr` in `audio.sfx`).
    `voice: 'none'` aren't voiced. If the scene isn't `src/prologue.ts`, extend `SRC` in the script to
    a list of files (it currently reads one).
 2. **Fix pronunciation** for anything that reads badly aloud (all caps, dates, symbols, spelled-out
-   words) in `SPOKEN`.
+   words) in `src/spoken.json` (shared by the generator and the browser voices).
 3. **Dry run and quote the cost:** `npm run voice -- --dry` (about 1 credit per character; a `wet`
    blend costs double). Tell the user before spending.
 4. **Generate:** `npm run voice`. Only new or changed lines are generated; `--force "text"` re-rolls.
@@ -76,8 +78,8 @@ Never pick a voice for the user. Build an audition page and let them choose:
      (`DELETE /v1/voices/{id}`) — each one holds a voice slot.
    - Raw Voice Design previews (`/v1/text-to-voice/design` alone) are temporary; save one with
      `POST /v1/text-to-voice` (`generated_voice_id`) before using it.
-4. Add the role to `VOICES` and `CALLS` in `scripts/voice.mjs`, a `TALK` profile in `src/audio.ts`
-   for its Web Audio voice, and a row to the table above.
+4. Add the role to `VOICES` and `CALLS` in `scripts/voice.mjs` and a row to the table above (its
+   `SPEECH` and `TALK` profiles for the browser should already exist from when the scene was written).
 
 ## API notes
 
