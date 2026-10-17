@@ -1,0 +1,18 @@
+{
+  "_note": "Landmarks the game builds by hand (src/harbor/landmarks/). Each maps to the OpenStreetMap outlines whose building parts it replaces.",
+  "faneuil": { "name": "Faneuil Hall", "osm": ["w29551702"] },
+  "quincy": { "name": "Quincy Market", "osm": ["w29573399"] },
+  "northMarket": { "name": "North Market", "osm": ["w29946293"] },
+  "southMarket": { "name": "South Market", "osm": ["w29626992"] },
+  "marriott": { "name": "Boston Marriott Long Wharf", "osm": ["w29625335"] },
+  "customHouseBlock": { "name": "Custom House Block", "osm": ["w29619641"] },
+  "chartHouse": { "name": "Chart House (Gardiner Building)", "osm": ["w29620958"] },
+  "aquarium": { "name": "New England Aquarium", "osm": ["w29660091"] },
+  "customHouse": { "name": "Custom House Tower", "osm": ["w29719177"] },
+  "harborTowers": { "name": "Harbor Towers", "osm": ["w240415949", "w240415950"] },
+  "rowesWharf": { "name": "Rowes Wharf", "osm": ["w29615909"] },
+  "paulRevere": { "name": "Paul Revere House", "osm": ["w240376785"] },
+  "carousel": { "name": "Greenway Carousel", "osm": ["w484942338"] },
+  "oldStateHouse": { "name": "Old State House", "osm": ["w29608515"] },
+  "cityHall": { "name": "Boston City Hall", "osm": ["w788015166"] }
+}

@@ -1,0 +1,362 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "cordon",
+    "note": "The play area. Hand-tuned from the screenshot sketch: west edge moved onto the Congress St median so Faneuil Hall, Dock Square and the Blackstone Block are inside."
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -71.0567961,
+       42.3632648
+      ],
+      [
+       -71.0562855,
+       42.3636356
+      ],
+      [
+       -71.0549118,
+       42.364133
+      ],
+      [
+       -71.053538,
+       42.3645128
+      ],
+      [
+       -71.0521643,
+       42.364748
+      ],
+      [
+       -71.0506204,
+       42.3648927
+      ],
+      [
+       -71.0487239,
+       42.3650102
+      ],
+      [
+       -71.0481282,
+       42.3647751
+      ],
+      [
+       -71.0477027,
+       42.3645399
+      ],
+      [
+       -71.0474352,
+       42.3641239
+      ],
+      [
+       -71.0471799,
+       42.3632829
+      ],
+      [
+       -71.0469733,
+       42.3621976
+      ],
+      [
+       -71.046876,
+       42.3618359
+      ],
+      [
+       -71.0463289,
+       42.3611214
+      ],
+      [
+       -71.0454658,
+       42.360407
+      ],
+      [
+       -71.0446877,
+       42.3597016
+      ],
+      [
+       -71.0452956,
+       42.3590866
+      ],
+      [
+       -71.0463168,
+       42.3581099
+      ],
+      [
+       -71.0473501,
+       42.3573683
+      ],
+      [
+       -71.0488941,
+       42.3569251
+      ],
+      [
+       -71.0494168,
+       42.3567352
+      ],
+      [
+       -71.0499274,
+       42.3563102
+      ],
+      [
+       -71.050438,
+       42.3562378
+      ],
+      [
+       -71.051131,
+       42.356473
+      ],
+      [
+       -71.0519819,
+       42.3569432
+      ],
+      [
+       -71.0526749,
+       42.3575944
+      ],
+      [
+       -71.0531855,
+       42.3576215
+      ],
+      [
+       -71.0542188,
+       42.3576939
+      ],
+      [
+       -71.0549118,
+       42.3579833
+      ],
+      [
+       -71.0552522,
+       42.3582184
+      ],
+      [
+       -71.0558235,
+       42.358553
+      ],
+      [
+       -71.0566624,
+       42.3585078
+      ],
+      [
+       -71.0568083,
+       42.3588786
+      ],
+      [
+       -71.0569055,
+       42.3591228
+      ],
+      [
+       -71.0569906,
+       42.3594393
+      ],
+      [
+       -71.0571122,
+       42.3598824
+      ],
+      [
+       -71.0572216,
+       42.3602261
+      ],
+      [
+       -71.057404,
+       42.3609044
+      ],
+      [
+       -71.0575863,
+       42.3613566
+      ],
+      [
+       -71.0577322,
+       42.3616279
+      ],
+      [
+       -71.0578902,
+       42.3618268
+      ],
+      [
+       -71.0575498,
+       42.3627131
+      ],
+      [
+       -71.0569785,
+       42.3631834
+      ],
+      [
+       -71.0567961,
+       42.3632648
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "state",
+    "heading": 90,
+    "spawn": true,
+    "note": "top of the Blue Line stairs at 60 State St"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0566502,
+     42.3591047
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "faneuil",
+    "heading": 90
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0566016,
+     42.3600362
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "quincy",
+    "heading": 90
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0558235,
+     42.3602713
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "longwharf",
+    "heading": 90
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0476784,
+     42.3602713
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "aquarium",
+    "heading": 180
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0496235,
+     42.3594574
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "columbus",
+    "heading": 45
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0509,
+     42.3613566
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "customhouse",
+    "heading": 135
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0537569,
+     42.3592222
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "harbortowers",
+    "heading": 90
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0507176,
+     42.3580556
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "rowes",
+    "heading": 90
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0508149,
+     42.3567443
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "northsquare",
+    "heading": 0
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0536353,
+     42.3635723
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "blackstone",
+    "heading": 0
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0568204,
+     42.3608139
+    ]
+   }
+  }
+ ]
+}

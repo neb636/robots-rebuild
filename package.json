@@ -8,7 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "voice": "node --env-file-if-exists=.env.local scripts/voice.mjs"
+    "voice": "node --env-file-if-exists=.env.local scripts/voice.mjs",
+    "harbor:fetch": "node scripts/harbor/fetch.mjs",
+    "harbor:bake": "node scripts/harbor/bake.mjs"
   },
   "dependencies": {
     "@fontsource/cormorant-garamond": "^5.3.0",
@@ -19,8 +21,8 @@
   "devDependencies": {
     "@types/earcut": "^3.0.0",
     "@types/three": "^0.180.0",
-    "clipper2-js": "^1.2.4",
     "geotiff": "^3.0.5",
+    "js-angusj-clipper": "^1.3.1",
     "osmtogeojson": "^2.2.12",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"
