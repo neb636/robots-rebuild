@@ -1,21 +1,22 @@
-// Player settings shared by the title menu and the game: mood, camera, quality.
+// Player settings shared by the title menu and the game: mood, camera, quality, audio.
 // They persist on this device. URL params still win, so a shared link like ?mood=curfew&cam=jrpg
 // opens exactly that setup.
 import { MOODS } from './scene';
 
 export type CamMode = 'follow' | 'jrpg' | 'cinematic';
+export type AudioMode = 'web' | 'generated';
 export const CAMS: CamMode[] = ['follow', 'jrpg', 'cinematic'];
 export const params = new URLSearchParams(location.search);
 export const isTouch = matchMedia('(pointer: coarse)').matches;
 
 const SETTINGS_KEY = 'quiet-machines.settings.v1';
-type Saved = { mood?: string; cam?: string; quality?: string };
+type Saved = { mood?: string; cam?: string; quality?: string; audio?: string };
 function loadSettings(): Saved {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
 export function saveSettings(): boolean {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ mood: state.mood, cam: state.cam, quality: state.quality }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ mood: state.mood, cam: state.cam, quality: state.quality, audio: state.audio }));
     return true;
   } catch { return false; /* storage blocked (private mode): settings just won't persist */ }
 }
@@ -26,6 +27,10 @@ export const state = {
   mood: pick<keyof typeof MOODS>(params.get('mood') ?? saved.mood, Object.keys(MOODS), 'curfew'),
   cam: pick<CamMode>(params.get('cam') ?? saved.cam, CAMS, 'follow'),
   quality: pick<'high' | 'low'>(params.get('q') ?? saved.quality, ['high', 'low'], isTouch ? 'low' : 'high'),
+  /** generated (the default): the ElevenLabs voice-over and recorded effects where a scene has them, and
+   *  the browser's voice (speech.ts) for any line not recorded yet;
+   *  web: only the browser speaks the lines and synthesizes the sounds */
+  audio: pick<AudioMode>(params.get('audio') ?? saved.audio, ['web', 'generated'], 'generated'),
   ui: params.get('ui') !== '0',
   sound: false,
 };

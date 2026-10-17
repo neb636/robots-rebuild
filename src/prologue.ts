@@ -7,6 +7,7 @@ import type { Theo } from './theo';
 import type { Action, ActionMenu } from './actions';
 import { Dialogue, Interactable, Line } from './dialogue';
 import { audio } from './audio';
+import { state } from './settings';
 
 export interface PrologueHost {
   apt: Apartment;
@@ -39,15 +40,15 @@ type Phase = 'morning' | 'broadcast' | 'outro' | 'out';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-const MARCUS = (text: string, sfx?: string): Line => ({ who: 'Marcus  ·  phone', text, style: 'phone', sfx });
-const TV = (text: string): Line => ({ who: 'Superintelligence Inc.  ·  live broadcast', text, style: 'tv' });
-const CLOCK = (text: string): Line => ({ who: 'Alarm clock', text });
-const BROWSER = (text: string): Line => ({ who: 'Browser', text });
+const MARCUS = (text: string, sfx?: string): Line => ({ who: 'Marcus  ·  phone', text, style: 'phone', voice: 'marcus', sfx });
+const TV = (text: string): Line => ({ who: 'Superintelligence Inc.  ·  live broadcast', text, style: 'tv', voice: 'tv' });
+const CLOCK = (text: string): Line => ({ who: 'Alarm clock', text, voice: 'narrator' });
+const BROWSER = (text: string): Line => ({ who: 'Browser', text, voice: 'narrator' });
 const ITEM = (text: string): Line => ({ who: '', text, style: 'item' });
 // Unlabelled lines, told apart only by who voices them (scripts/voice.mjs): plain strings are Theo's
 // inner voice, NARR is the narrator, ALOUD is Theo talking to himself.
-const NARR = (text: string): Line => ({ who: '', text });
-const ALOUD = (text: string): Line => ({ who: '', text });
+const NARR = (text: string): Line => ({ who: '', text, voice: 'narrator' });
+const ALOUD = (text: string): Line => ({ who: '', text, voice: 'aloud' });
 /** The records by the turntable. Each is a song in audio.ts; `dance` is what it gets out of Theo
  *  (a key of DANCES in theo.ts), and `label` the color of the record's label as it spins. */
 const RECORDS = {
@@ -61,8 +62,14 @@ type RecordId = keyof typeof RECORDS;
 const ROTATION: (RecordId | null)[] = ['apartment', 'rumba', 'silly', 'monster', null];
 const ease = (k: number) => k * k * (3 - 2 * k);
 
-// Biscuit, recorded (ElevenLabs sound effects, level-matched to the voice-over)
-const CAT = { chirp: 'audio/sfx/cat-chirp.mp3', purr: 'audio/sfx/cat-purr.mp3', startle: 'audio/sfx/cat-startle.mp3', hiding: 'audio/sfx/cat-hiding.mp3' };
+// Biscuit: recorded with Audio set to Generated (ElevenLabs, level-matched to the voice-over), else synth
+const CAT_CLIPS = { chirp: 'audio/sfx/cat-chirp.mp3', purr: 'audio/sfx/cat-purr.mp3', startle: 'audio/sfx/cat-startle.mp3', hiding: 'audio/sfx/cat-hiding.mp3' };
+type CatSound = keyof typeof CAT_CLIPS;
+const CAT_SYNTH: Record<CatSound, [string, number]> = { chirp: ['meow', 0.8], purr: ['purr', 0.9], startle: ['meow', 1], hiding: ['meowLow', 0.8] };
+function meow(s: CatSound, hold = 0) {
+  if (state.audio === 'generated') void audio.play(CAT_CLIPS[s], 1, hold);
+  else audio.sfx(...CAT_SYNTH[s]);
+}
 
 export class Prologue {
   phase: Phase = 'morning';
@@ -96,7 +103,7 @@ export class Prologue {
 
   constructor(private h: PrologueHost) {
     this.build();
-    for (const f of Object.values(CAT)) void audio.load(f);
+    if (state.audio === 'generated') for (const f of Object.values(CAT_CLIPS)) void audio.load(f);
   }
 
   get pre() { return this.phase === 'morning'; }
@@ -118,8 +125,8 @@ export class Prologue {
     audio.sfx('alarm', 0.5);
     await dlg.fade(0, 2600);
     await this.say(['...', ALOUD('Okay. Okay, I\'m up.')]);
-    void audio.play(CAT.chirp);
-    await this.say([{ who: 'Biscuit', text: 'Mrrp.' }]);
+    meow('chirp');
+    await this.say([{ who: 'Biscuit', text: 'Mrrp.', voice: 'none' }]);
     this.h.lock(false);
     dlg.objective('Start your day. Look around.');
   }
@@ -186,7 +193,7 @@ export class Prologue {
       id: 'cat', name: 'Biscuit', pos: a.cat.clone().setY(a.cat.y + 0.15), radius: 1.5, verb: 'Pet',
       use: async () => {
         if (apt.cat.state === 'loaf') {
-          apt.cat.pet(); void audio.play(CAT.purr, 1, 2.5);
+          apt.cat.pet(); meow('purr', 2.5);
           await this.say(this.pick('cat', [
             ['Biscuit purrs like a tiny outboard motor.'],
             ['Biscuit allows exactly one more pet.', 'Then she bites me. Gently. As a treat.'],
@@ -195,7 +202,7 @@ export class Prologue {
             ['Biscuit purrs like a tiny outboard motor.'],
           ], 4));
         } else {
-          void audio.play(CAT.hiding);
+          meow('hiding');
           await this.say(this.pick('catHide', [
             ['Biscuit is under the couch. Only her tail is sticking out.', 'Animals know first.'],
             ['She\'s not coming out. Honestly? Smart.'],
@@ -448,7 +455,7 @@ export class Prologue {
     audio.sfx('static');
     apt.tv.set('static');
     if (apt.cat.state === 'loaf') {
-      void audio.play(CAT.startle);
+      meow('startle');
       apt.cat.bolt([apt.at.cat.clone(), v(6.2, 0, -4.7), v(4.6, 0, -3.3), v(3.4, 0, -3.15), v(2.2, 0, -2.4)]);
     }
     this.h.face(apt.at.tv);

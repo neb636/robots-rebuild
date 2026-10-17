@@ -74,7 +74,7 @@ export class Menu {
       main: {
         rows: [
           { label: 'New Game', desc: () => 'Begin the prologue. Boston, two years after the broadcast.', act: () => this.start() },
-          { label: 'Options', desc: () => 'Mood, camera, render style and quality. Saved on this device.', act: () => this.go('options') },
+          { label: 'Options', desc: () => 'Mood, camera, quality and audio. Saved on this device.', act: () => this.go('options') },
           { label: 'Controls', desc: () => isTouch ? 'How to move, look and zoom with touch.' : 'Keyboard, mouse and gamepad controls.', act: () => this.go('controls') },
           { label: 'Characters', desc: () => 'The character stage: every animation, on a bare floor.', act: () => location.assign(`${import.meta.env.BASE_URL}stage.html`) },
           { label: 'Credits', desc: () => 'Who and what made this.', act: () => this.go('credits') },
@@ -88,6 +88,8 @@ export class Menu {
             () => ({ follow: 'Over the shoulder, following the hero.', jrpg: 'A high diorama angle, like the classics.', cinematic: 'Hand-placed shots that play on their own.' })[state.cam]),
           optRow('Quality', () => state.quality === 'high' ? 'High' : 'Low', () => { state.quality = state.quality === 'high' ? 'low' : 'high'; },
             () => state.quality === 'high' ? 'Ambient occlusion, depth of field and antialiasing.' : 'Lighter rendering for tablets and older machines.'),
+          optRow('Audio', () => state.audio === 'web' ? 'Web' : 'Generated', () => { state.audio = state.audio === 'web' ? 'generated' : 'web'; },
+            () => state.audio === 'web' ? 'The browser speaks the lines, and sounds are synthesized.' : 'Recorded voice-over and sound effects, where a scene has them.'),
           back,
         ],
       },
@@ -110,6 +112,7 @@ export class Menu {
         rows: [
           info('Prologue', 'Static'),
           info('Art & Sound', 'Generated in code at load time'),
+          info('Voices', 'Your browser · ElevenLabs (Audio: Generated)'),
           info('Engine', 'Three.js · postprocessing · Vite'),
           info('Type', 'Cormorant Garamond'),
           { ...back, desc: () => 'Thank you for playing.' },

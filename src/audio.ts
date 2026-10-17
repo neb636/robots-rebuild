@@ -194,6 +194,38 @@ const SONGS: Record<string, Song> = {
   },
 };
 
+// ---------------------------------------------------------------- talk blips
+// Each speaker's synthesized "voice": a short blip every few typed characters, shaped to echo their
+// recorded voice (scripts/voice.mjs). New characters get a profile here before anything is recorded.
+interface Talk {
+  wave: OscillatorType;
+  /** pitch in Hz, and how far each blip wanders from it (0.1 = ±10%) */
+  hz: number; spread: number;
+  /** length and level of one blip */
+  dur: number; vol: number;
+  /** lowpass cutoff, or a [low, high] band (the phone) */
+  filter: number | [number, number];
+  /** share sent to the reverb */
+  room?: number;
+  /** a fast tremolo, for the broadcast's robot buzz */
+  buzz?: number;
+}
+const TALK: Record<string, Talk> = {
+  // Levels are matched to each other through a small speaker's ~250 Hz rolloff and sit about level with
+  // the music (which also dips while a line types), and every voice keeps harmonics above 300 Hz: a pure
+  // low tone vanishes on laptop and phone speakers.
+  // low, slow and somber: a dark, buzzy low hum, close and dry
+  theo: { wave: 'sawtooth', hz: 150, spread: 0.08, dur: 0.09, vol: 0.2, filter: 1200 },
+  // the same voice said out loud: a little higher and brighter
+  aloud: { wave: 'sawtooth', hz: 175, spread: 0.12, dur: 0.07, vol: 0.16, filter: 1700 },
+  // warm, calm, a touch of room
+  narrator: { wave: 'sine', hz: 300, spread: 0.06, dur: 0.08, vol: 0.16, filter: 1800, room: 0.4 },
+  // urgent, through a phone
+  marcus: { wave: 'sawtooth', hz: 175, spread: 0.18, dur: 0.06, vol: 0.2, filter: [500, 2600] },
+  // perfectly even, robotic: no pitch drift and a metallic buzz
+  tv: { wave: 'square', hz: 220, spread: 0, dur: 0.07, vol: 0.17, filter: 2400, buzz: 48 },
+};
+
 // ---------------------------------------------------------------- engine
 class AudioEngine {
   ctx!: AudioContext;
@@ -318,6 +350,48 @@ class AudioEngine {
       g.gain.linearRampToValueAtTime(0.0001, t + hold + 0.6);
       src.stop(t + hold + 0.7);
     }
+  }
+
+  /** one talk blip in a speaker's synthesized voice (TALK); 'none' is silent, unknown names get the UI blip */
+  talk(name: string) {
+    if (!this.ready || name === 'none') return;
+    const p = TALK[name];
+    if (!p) { this.sfx('blip', 0.6); return; }
+    const c = this.ctx, t = c.currentTime;
+    const o = c.createOscillator(); o.type = p.wave;
+    o.frequency.value = p.hz * (1 + (Math.random() * 2 - 1) * p.spread);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(p.vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + p.dur);
+    let out: AudioNode = o;
+    if (p.buzz) {
+      const am = c.createGain(); am.gain.value = 0.5;
+      const lfo = c.createOscillator(); lfo.type = 'square'; lfo.frequency.value = p.buzz;
+      const depth = c.createGain(); depth.gain.value = 0.5;
+      lfo.connect(depth).connect(am.gain); lfo.start(t); lfo.stop(t + p.dur + 0.05);
+      out = out.connect(am);
+    }
+    const f = c.createBiquadFilter();
+    if (Array.isArray(p.filter)) { f.type = 'bandpass'; f.frequency.value = Math.sqrt(p.filter[0] * p.filter[1]); f.Q.value = Math.sqrt(p.filter[0] * p.filter[1]) / (p.filter[1] - p.filter[0]); }
+    else { f.type = 'lowpass'; f.frequency.value = p.filter; }
+    out.connect(f).connect(g).connect(this.voiceBus);
+    if (p.room) { const s = c.createGain(); s.gain.value = p.room; g.connect(s).connect(this.reverbSend); }
+    o.start(t); o.stop(t + p.dur + 0.05);
+    // dip the music while the line types, like a recorded voice; it comes back once the blips stop
+    if (!this.voiceSrc) {
+      this.duck.gain.cancelScheduledValues(t);
+      this.duck.gain.setTargetAtTime(0.6, t, 0.05);
+      this.duck.gain.setTargetAtTime(1, t + 0.3, 0.35);
+    }
+  }
+
+  /** dip the music under a voice the browser speaks (src/speech.ts) */
+  duckMusic(on: boolean) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    this.duck.gain.cancelScheduledValues(t);
+    this.duck.gain.setTargetAtTime(on ? 0.55 : 1, t, on ? 0.08 : 0.4);
   }
 
   /** fade out the voice line that's playing, if any */
@@ -759,6 +833,23 @@ class AudioEngine {
       case 'drip': { const x = o('sine', 1800 + Math.random() * 600, t, 0.12); x.frequency.exponentialRampToValueAtTime(600, t + 0.1); const gg = env(0.04, 0.12); x.connect(gg); gg.connect(this.reverbSend); break; }
       case 'bird': { const st = t; const x = o('sine', 2800, st, 0.25); x.frequency.setValueAtTime(2800, st); x.frequency.linearRampToValueAtTime(3600, st + 0.08); x.frequency.linearRampToValueAtTime(2600, st + 0.18); x.connect(env(0.015, 0.2, 0.01)); break; }
       case 'foghorn': { const x = o('sawtooth', 73, t, 2.5); const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260; const gg = env(0.12, 2.4, 0.4); x.connect(lp).connect(gg); gg.connect(this.reverbSend); break; }
+      case 'meow': case 'meowLow': {
+        const k = name === 'meow' ? 1 : 0.7, dur = name === 'meow' ? 0.42 : 0.6;
+        const x = o('triangle', 700 * k, t, dur + 0.03); x.frequency.linearRampToValueAtTime(1000 * k, t + 0.12); x.frequency.linearRampToValueAtTime(600 * k, t + dur - 0.02);
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1100 * k; x.connect(bp).connect(env(0.12, dur, 0.04));
+        break;
+      }
+      case 'purr': {
+        // filtered noise pulsing at a purr's ~25 Hz, for about the length of a pet
+        const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260;
+        const am = c.createGain(); am.gain.value = 0.5;
+        const lfo = o('sine', 25, t, 2.6); const depth = c.createGain(); depth.gain.value = 0.5; lfo.connect(depth).connect(am.gain);
+        const gg = c.createGain(); gg.connect(g);
+        gg.gain.setValueAtTime(0.0001, t); gg.gain.linearRampToValueAtTime(0.5, t + 0.3); gg.gain.setValueAtTime(0.5, t + 2.2); gg.gain.linearRampToValueAtTime(0.0001, t + 2.8);
+        const s = c.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true; s.start(t, Math.random()); s.stop(t + 2.9);
+        s.connect(lp).connect(am).connect(gg);
+        break;
+      }
       case 'glass': { for (let i = 0; i < 6; i++) { const st = t + Math.random() * 0.2; o('sine', 2500 + Math.random() * 3000, st, 0.2).connect(env(0.04, 0.2, 0.002, st)); } n(0.15).connect(env(0.25, 0.15)); break; }
     }
   }
