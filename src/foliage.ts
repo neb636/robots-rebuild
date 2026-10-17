@@ -9,7 +9,7 @@ export const wind = { value: 0 };
 export const foliageMats: THREE.Material[] = [];
 
 // -------------------------------------------------------------------------------- grass
-function tuftGeometry(blades: number, R: () => number, tall = 1) {
+export function tuftGeometry(blades: number, R: () => number, tall = 1) {
   const pos: number[] = [], nrm: number[] = [], uv: number[] = [], col: number[] = [], idx: number[] = [];
   const base = new THREE.Color('#141a0e'), mid = new THREE.Color('#384422'), tipG = new THREE.Color('#6a7a40'), tipD = new THREE.Color('#8a8250');
   let v0 = 0;
@@ -75,7 +75,7 @@ function windify(m: THREE.Material, amp: number, weight: 'up' | 'down' = 'up') {
 }
 
 let grassMat: THREE.MeshStandardMaterial | null = null;
-function getGrassMat() {
+export function getGrassMat() {
   if (!grassMat) {
     grassMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
     windify(grassMat, 0.09);

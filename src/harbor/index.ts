@@ -15,6 +15,7 @@ import { ChunkBuilder, type Chunk } from './chunks';
 import { buildLamps } from './lights';
 import { buildBoats } from './boats';
 import { buildStation } from './station';
+import { buildStreetscape } from './streetscape';
 import { LAYERS } from './texarray';
 import { groundUniforms } from './groundmat';
 import { facadeUniforms } from './facade';
@@ -109,6 +110,11 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   chunks.push(...cordon.chunks);
   lamps.addSources(cordon.floods);
 
+  progress(0.88, 'Planting the trees…'); await nextFrame();
+  const street = buildStreetscape(d, root, collide, walk, all, quality);
+  chunks.push(...street.chunks);
+  console.info('harbor streetscape', JSON.stringify(street.counts));
+
   // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets)
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
   const streets = new Set(groundChunks);
@@ -202,7 +208,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     spots,
     cine: { shots: cine, pose: spawn },
     // for tests: the play area's outline
-    ...({ __boundary: d.h.boundary } as object),
+    ...({ __boundary: d.h.boundary, __street: street.debug } as object),
     onAttach(ctx) { post = ctx.post; reflect(ctx.hero); ctx.fill.layers.enable(REFLECT_LAYER); station?.setDialogue(ctx.dlg); },
     applyMood(m) {
       // rain chops the harbour up; Grey Pall's dead calm stills it
@@ -232,6 +238,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
       lamps.update(dt, t, player, lampScale);
       for (const u of landmarkUpdates) u(dt, t);
       station?.update(t);
+      street.update(t, player);
       flickerUpdate(beacon, t, 91);
       waterUniforms.uTime.value = t;
       if ((cullT -= dt) <= 0) { cullT = 0.25; cull(cam); }

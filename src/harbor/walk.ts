@@ -35,6 +35,27 @@ export class WalkMesh {
     for (const i of keep) span(i, (c) => { this.items[fill[c]++] = i; });
   }
 
+  /** The walkable triangle at (x, z) (as heightAt picks it), or -1: for asking what the ground is there. */
+  triAt = (x: number, z: number, nearY?: number): number => {
+    const i = Math.floor((x - this.x0) / this.cell), j = Math.floor((z - this.z0) / this.cell);
+    if (i < 0 || j < 0 || i >= this.nx || j >= this.nz) return -1;
+    const c = j * this.nx + i, v = this.v, t = this.t;
+    let best = -1, bestD = Infinity;
+    for (let k = this.start[c]; k < this.start[c + 1]; k++) {
+      const tri = this.items[k];
+      const a = t[tri * 3] * 3, b = t[tri * 3 + 1] * 3, cc = t[tri * 3 + 2] * 3;
+      const ax = v[a], az = v[a + 2], bx = v[b], bz = v[b + 2], cx = v[cc], cz = v[cc + 2];
+      const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+      if (Math.abs(d) < 1e-12) continue;
+      const l1 = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d, l2 = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d, l3 = 1 - l1 - l2;
+      if (l1 < -1e-5 || l2 < -1e-5 || l3 < -1e-5) continue;
+      const y = l1 * v[a + 1] + l2 * v[b + 1] + l3 * v[cc + 1];
+      const dd = nearY === undefined ? -y : Math.abs(y - nearY);
+      if (dd < bestD) { bestD = dd; best = tri; }
+    }
+    return best;
+  };
+
   /** Walkable height at (x, z): of the surfaces there, the one nearest `nearY` (the highest without it), or NaN. */
   heightAt = (x: number, z: number, nearY?: number): number => {
     const i = Math.floor((x - this.x0) / this.cell), j = Math.floor((z - this.z0) / this.cell);

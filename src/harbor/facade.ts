@@ -61,12 +61,15 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
         // a room behind a window, by interior mapping: o is the point on the glass (room space, floor at
         // y = 0, glass at z = 0), d the view ray; returns the colour of whatever wall it meets
         vec3 room(vec3 o, vec3 d, vec2 hsz, float depth, float floorH, float id, bool lit) {
-          d += vec3(1e-5);
+          // keep the ray inside the room and off the axes: a zero component or a start outside the box
+          // sends t negative or infinite, and one Inf pixel blacks out the frame through the bloom
+          d = vec3(d.x >= 0.0 ? max(d.x, 1e-4) : min(d.x, -1e-4), d.y >= 0.0 ? max(d.y, 1e-4) : min(d.y, -1e-4), max(d.z, 1e-4));
+          o = vec3(clamp(o.x, -hsz.x, hsz.x), clamp(o.y, 0.0, floorH), 0.0);
           vec3 inv = 1.0 / d;
           float tx = ((d.x > 0.0 ? hsz.x : -hsz.x) - o.x) * inv.x;
           float ty = ((d.y > 0.0 ? floorH : 0.0) - o.y) * inv.y;
           float tz = depth * inv.z;
-          float t = min(tx, min(ty, tz));
+          float t = clamp(min(tx, min(ty, tz)), 0.0, 60.0);
           vec3 p = o + d * t;
           vec3 wall = mix(vec3(0.55, 0.5, 0.42), vec3(0.42, 0.46, 0.5), h11(id)) * (0.7 + 0.3 * h11(id + 3.0));
           vec3 c;
