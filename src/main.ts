@@ -328,7 +328,8 @@ class App {
       this.placeCamera(1, true);
       return;
     }
-    this.yaw = state.cam === 'jrpg' ? Math.PI / 2 : 0; this.pitch = state.cam === 'jrpg' ? 0.6 : 0.24; this.dist = state.cam === 'jrpg' ? 14 : 5.0;
+    // follow: start behind the hero (Acorn Lane's hero faces north, so that's yaw 0 there)
+    this.yaw = state.cam === 'jrpg' ? Math.PI / 2 : this.heading + Math.PI; this.pitch = state.cam === 'jrpg' ? 0.6 : 0.24; this.dist = state.cam === 'jrpg' ? 14 : 5.0;
     this.camera.fov = state.cam === 'jrpg' ? 30 : 40; this.camera.updateProjectionMatrix();
     this.placeCamera(1, true);
   }

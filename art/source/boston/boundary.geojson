@@ -196,15 +196,15 @@
    "properties": {
     "kind": "spot",
     "name": "state",
-    "heading": 90,
+    "heading": 92,
     "spawn": true,
-    "note": "top of the Blue Line stairs at 60 State St"
+    "note": "out of the Blue Line stairs at 60 State St, on the sidewalk, looking down State St to the harbour"
    },
    "geometry": {
     "type": "Point",
     "coordinates": [
-     -71.0566502,
-     42.3591047
+     -71.0566259,
+     42.3589961
     ]
    }
   },

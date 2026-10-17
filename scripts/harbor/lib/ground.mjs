@@ -102,8 +102,8 @@ export function paintGround({ zone, land, buildings, sidewalks, parcels, osm, lo
   if (row.length) take(G.road, row);
   take(G.lot, avail);
 
-  // tidy: no slivers, nothing under 0.25 m2
-  for (let i = 0; i < classes.length; i++) classes[i] = dropSmall(openClose(classes[i], 0.06), 0.25);
+  // (no sliver tidying here: removing a piece after painting would leave a hole in the ground, and the
+  // walkable surface must have none)
 
   const stats = { landArea: Math.round(total), classes: Object.fromEntries(GROUND.map((g, i) => [g.name, Math.round(pathsArea(classes[i]))])) };
   return { classes, stats };
