@@ -4,7 +4,8 @@
 
 type InstName =
   | 'pad' | 'strings' | 'pluck' | 'bell' | 'piano' | 'bass' | 'lead' | 'sub'
-  | 'kick' | 'snare' | 'hat' | 'box' | 'organ';
+  | 'kick' | 'snare' | 'hat' | 'box' | 'organ'
+  | 'flute' | 'kazoo' | 'brass' | 'clave' | 'conga' | 'shaker' | 'clap' | 'crackle';
 
 interface Track { inst: InstName; notes: string; vol?: number; }
 interface Song { bpm: number; div?: number; tracks: Track[]; once?: boolean; }
@@ -63,6 +64,51 @@ const SONGS: Record<string, Song> = {
     ],
   },
   tv: { bpm: 60, tracks: [{ inst: 'sub', notes: 'A1_16', vol: 0.12 }] },
+  // ---- the records on Theo's turntable. Each one's tempo matches the dance it gets out of him: a
+  // bar of the rumba is one loop of Rumba Dancing (2.9 s), two bars of the novelty number one loop of
+  // Silly Dancing (3.83 s), and four bars of the monster funk the looped stretch of Thriller Part 3
+  // (8.23 s, see DANCES in theo.ts).
+  rumba: {
+    bpm: 82.76, tracks: [
+      // A minor, Am Dm E7 Am; son clave 3-2, a tumbao bass that skips the downbeat
+      { inst: 'clave', notes: 'x . . x . . x . . . x . x . . .', vol: 0.16 },
+      { inst: 'conga', notes: '. . G4? G4 . . C4 C4 . . G4? G4 . G4? C4 C4', vol: 0.32 },
+      { inst: 'shaker', notes: 'x? x? x x? x? x? x x?', vol: 0.1 },
+      { inst: 'bass', notes: '._3 A2_3 E2_2 ._3 D2_3 A2_2 ._3 E2_3 B1_2 ._3 A2_3 E2_2', vol: 0.3 },
+      { inst: 'pluck', notes: 'A3+C4+E4 . A3+C4+E4? A3+C4+E4 . A3+C4+E4 A3+C4+E4? . A3+D4+F4 . A3+D4+F4? A3+D4+F4 . A3+D4+F4 A3+D4+F4? . G#3+B3+D4+E4 . G#3+B3+D4+E4? G#3+B3+D4+E4 . G#3+B3+D4+E4 G#3+B3+D4+E4? . A3+C4+E4 . A3+C4+E4? A3+C4+E4 . A3+C4+E4 A3+C4+E4? .', vol: 0.2 },
+      { inst: 'flute', notes: 'E5_3 D5 C5_2 B4_2 A4_3 B4 C5_2 D5_2 B4_3 G#4 B4_2 D5_2 C5_6 ._2 E5_3 F5 E5_2 C5_2 F5_3 E5 D5_2 A4_2 G#4_3 A4 B4_2 E5_2 A4_6 ._2', vol: 0.28 },
+      { inst: 'crackle', notes: 'x x x x', vol: 0.5 },
+    ],
+  },
+  silly: {
+    bpm: 125.3, tracks: [
+      // C major oom-pah with a kazoo on top
+      { inst: 'kick', notes: 'x . . . x . . .', vol: 0.34 },
+      { inst: 'snare', notes: '. . x . . . x .', vol: 0.16 },
+      { inst: 'hat', notes: 'x? x x? x x? x x? x', vol: 0.08 },
+      { inst: 'bass', notes: 'C2_2 ._2 G1_2 ._2 G1_2 ._2 D2_2 ._2 C2_2 ._2 G1_2 ._2 G1_2 ._2 B1_2 ._2 F1_2 ._2 C2_2 ._2 C2_2 ._2 G1_2 ._2 G1_2 ._2 D2_2 ._2 C2_2 ._2 C2_2 ._2', vol: 0.36 },
+      { inst: 'piano', notes: '._2 E4+G4+C5_2 ._2 E4+G4+C5_2 ._2 D4+G4+B4_2 ._2 D4+G4+B4_2 ._2 E4+G4+C5_2 ._2 E4+G4+C5_2 ._2 D4+F4+B4_2 ._2 D4+F4+B4_2 ._2 F4+A4+C5_2 ._2 F4+A4+C5_2 ._2 E4+G4+C5_2 ._2 E4+G4+C5_2 ._2 D4+G4+B4_2 ._2 D4+F4+B4_2 ._2 E4+G4+C5_2 ._2 E4+G4+C5_2', vol: 0.2 },
+      { inst: 'kazoo', notes: 'C5 . E5 . G5_2 E5_2 D5 . F5 . B4_2 G4_2 C5 . E5 . G5 G5 A5 G5 F5_2 E5_2 D5_4 A5 . A5 . G5_2 F5_2 E5 . G5 . C5_4 D5 D5 E5 F5 G5_2 B4_2 C5_2 G4_2 C5_2 ._2', vol: 0.26 },
+      { inst: 'bell', notes: '._24 C6?_2 E6?_2 G6?_4 ._32', vol: 0.06 },
+      { inst: 'crackle', notes: 'x x x x', vol: 0.5 },
+    ],
+  },
+  monster: {
+    bpm: 116.6, div: 4, tracks: [
+      // F minor creep-funk, Fm Fm Db C7: a walking synth bass, brass stabs, a haunted bell
+      { inst: 'kick', notes: 'x . . . x . . . x . . . x . . x', vol: 0.42 },
+      { inst: 'snare', notes: '. . . . x . . . . . . . x . . .', vol: 0.22 },
+      { inst: 'clap', notes: '. . . . x . . . . . . . x . . .', vol: 0.16 },
+      { inst: 'hat', notes: 'x x? x x? x x? x x? x x? x x? x x? x x?', vol: 0.09 },
+      { inst: 'bass', notes: 'F2 . F2 . Ab2 . F2 Eb2 . F2 . C3 . Bb2 Ab2 . F2 . F2 . Ab2 . F2 Eb2 . F2 . Ab2 . G2 F2 . Db2 . Db2 . F2 . Db2 C2 . Db2 . Ab2 . F2 Db2 . C2 . C2 . E2 . G2 . Bb2 . G2 . E2 . Db2 C2', vol: 0.42 },
+      { inst: 'brass', notes: '._6 F4+Ab4+C5_2 ._6 F4+Ab4+C5_2 ._6 F4+Ab4+C5_2 ._4 F4+Ab4+C5_2 F4+Ab4+C5_2 ._6 Db4+F4+Ab4_2 ._6 Db4+F4+Ab4_2 ._6 C4+E4+Bb4_2 ._4 C4+E4+Bb4_4', vol: 0.16 },
+      { inst: 'strings', notes: 'F3+Ab3+C4_32 Db3+F3+Ab3_16 C3+E3+G3+Bb3_16', vol: 0.12 },
+      { inst: 'lead', notes: '._8 C5_2 Eb5_2 F5_2 Eb5_2 C5_4 Ab4_4 ._8 ._8 Db5_2 F5_2 Ab5_2 F5_2 E5_4 G5_4 C5_8', vol: 0.12 },
+      { inst: 'bell', notes: 'C6?_8 ._24 Ab5?_8 ._24', vol: 0.07 },
+      { inst: 'crackle', notes: 'x_4 x_4 x_4 x_4', vol: 0.5 },
+    ],
+  },
+
   swell: {
     bpm: 64, tracks: [
       { inst: 'strings', notes: `${THEME_CHORDS} D3+F3+A3+D4_16`, vol: 0.32 },
@@ -202,6 +248,7 @@ class AudioEngine {
   private seqState: { steps: Step[]; idx: number; t: number; tr: Track; out: GainNode }[] = [];
   private songSpb = 0.25;
   private songOnce = false;
+  private songT0 = 0;
   private ambNodes: { stop: () => void } | null = null;
   private ambName: string | null = null;
   private clips = new Map<string, Promise<AudioBuffer | null>>();
@@ -465,6 +512,79 @@ class AudioEngine {
         this.env(g, t, 0.001, 0.25 * vel, 0.04, 0, 0.03, 0.01);
         break;
       }
+      case 'flute': {
+        // breathy sine with a delayed vibrato
+        const o = osc('sine', f); const o2 = osc('triangle', f * 2); const h = c.createGain(); h.gain.value = 0.12;
+        o.connect(g); o2.connect(h).connect(g);
+        const lfo = c.createOscillator(); lfo.frequency.value = 5; const lg = c.createGain();
+        lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * 0.008, t + 0.4);
+        lfo.connect(lg); lg.connect(o.frequency); lg.connect(o2.frequency); lfo.start(t); lfo.stop(stopAt);
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 2; bp.Q.value = 2;
+        const ng = c.createGain(); ng.gain.value = 0.06; noise().connect(bp).connect(ng).connect(g);
+        this.env(g, t, 0.06, 0.16 * vel, 0.3, 0.75, 0.2, dur * 0.95);
+        break;
+      }
+      case 'kazoo': {
+        // a buzzy saw through two vocal formants; it scoops up into each note
+        const o = osc('sawtooth', f);
+        o.frequency.setValueAtTime(f * 0.93, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.06);
+        const lfo = c.createOscillator(); lfo.frequency.value = 6.2; const lg = c.createGain(); lg.gain.value = f * 0.014;
+        lfo.connect(lg).connect(o.frequency); lfo.start(t); lfo.stop(stopAt);
+        for (const [ff, q, a] of [[900, 3, 1], [2400, 4, 0.5]] as const) {
+          const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = ff; bp.Q.value = q;
+          const fg = c.createGain(); fg.gain.value = a; o.connect(bp).connect(fg).connect(g);
+        }
+        this.env(g, t, 0.02, 0.5 * vel, 0.15, 0.8, 0.06, dur * 0.85);
+        break;
+      }
+      case 'brass': {
+        const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 2;
+        lp.frequency.setValueAtTime(400, t); lp.frequency.exponentialRampToValueAtTime(2800, t + 0.04); lp.frequency.exponentialRampToValueAtTime(1100, t + 0.3);
+        lp.connect(g);
+        osc('sawtooth', f, -6).connect(lp); osc('sawtooth', f, 6).connect(lp);
+        this.env(g, t, 0.015, 0.14 * vel, 0.25, 0.5, 0.1, dur * 0.9);
+        break;
+      }
+      case 'clave': {
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2500; bp.Q.value = 12; bp.connect(g);
+        osc('sine', 2500).connect(bp); osc('square', 2500).connect(bp);
+        this.env(g, t, 0.001, 0.9 * vel, 0.07, 0, 0.04, 0.01);
+        break;
+      }
+      case 'conga': {
+        const o = osc('sine', f * 1.25); o.frequency.exponentialRampToValueAtTime(f, t + 0.03); o.connect(g);
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; const ng = c.createGain(); ng.gain.value = 0.25;
+        noise().connect(bp).connect(ng).connect(g);
+        this.env(g, t, 0.002, 0.6 * vel, 0.2, 0, 0.1, 0.02);
+        break;
+      }
+      case 'shaker': {
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 6500; bp.Q.value = 1.2; bp.connect(g);
+        noise().connect(bp);
+        this.env(g, t, 0.012, 0.3 * vel, 0.07, 0, 0.04, 0.02);
+        break;
+      }
+      case 'clap': {
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 0.8; bp.connect(g);
+        noise().connect(bp);
+        const p = g.gain; p.setValueAtTime(0.0001, t);
+        for (let i = 0; i < 3; i++) { p.setValueAtTime(0.5 * vel, t + i * 0.011); p.exponentialRampToValueAtTime(0.05, t + i * 0.011 + 0.009); }
+        p.setValueAtTime(0.4 * vel, t + 0.033); p.exponentialRampToValueAtTime(0.0001, t + 0.2);
+        break;
+      }
+      case 'crackle': {
+        // surface noise: a few dust pops scattered through the step, plus a faint hiss
+        const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500; hp.connect(g);
+        g.gain.value = 1;
+        for (let i = 0; i < 3; i++) {
+          const at = t + Math.random() * dur;
+          const s = c.createBufferSource(); s.buffer = this.noiseBuf; s.start(at, Math.random() * 1.5); s.stop(at + 0.002 + Math.random() * 0.004);
+          const pg = c.createGain(); pg.gain.value = 0.02 + Math.random() ** 3 * 0.12; s.connect(pg).connect(hp);
+        }
+        const hs = c.createBufferSource(); hs.buffer = this.noiseBuf; hs.start(t, Math.random()); hs.stop(t + dur);
+        const hg = c.createGain(); hg.gain.value = 0.004; hs.connect(hg).connect(hp);
+        return;
+      }
     }
     // reverb send
     const send = c.createGain();
@@ -488,7 +608,7 @@ class AudioEngine {
     this.songGain = sg;
     this.songSpb = 60 / song.bpm / (song.div ?? 2);
     this.songOnce = !!song.once;
-    const t0 = this.ctx.currentTime + 0.1;
+    const t0 = this.songT0 = this.ctx.currentTime + 0.1;
     this.seqState = song.tracks.map((tr) => {
       const out = this.ctx.createGain(); out.gain.value = tr.vol ?? 0.3; out.connect(sg);
       return { steps: parsePattern(tr.notes), idx: 0, t: t0, tr, out };
@@ -525,6 +645,8 @@ class AudioEngine {
   }
 
   get song() { return this.currentSong; }
+  /** seconds since the current song's first beat (0 with no song, or before it starts) */
+  songTime() { return this.ready && this.currentSong ? Math.max(0, this.ctx.currentTime - this.songT0) : 0; }
 
   // ------------------------------------------------ ambience
   ambience(name: string | null) {
@@ -675,6 +797,25 @@ class AudioEngine {
           const gg = c.createGain(); gg.connect(bp); e(gg, 0.01, 0.07, 0.16, st);
           o('sine', 480, st, 0.18).connect(gg); o('sine', 620, st, 0.18).connect(gg);
         }
+        break;
+      }
+      // the turntable: the stylus touching down (a soft thump, then lead-in groove crackle), and lifting off
+      case 'needle': {
+        const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180;
+        n(0.12).connect(lp).connect(env(0.5, 0.12, 0.004));
+        const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500; hp.connect(g);
+        for (let i = 0; i < 26; i++) {
+          const st = t + 0.05 + Math.random() * 1.1;
+          const pg = c.createGain(); pg.gain.value = (0.03 + Math.random() ** 3 * 0.2) * (1 - (st - t) / 1.3); pg.connect(hp);
+          n(0.002 + Math.random() * 0.004, st).connect(pg);
+        }
+        const hs = c.createGain(); hs.connect(hp); e(hs, 0.05, 0.02, 1.2, t + 0.04); n(1.3, t + 0.04).connect(hs);
+        break;
+      }
+      case 'needleUp': {
+        const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+        n(0.04).connect(lp).connect(env(0.12, 0.04));
+        o('sine', 420, t, 0.05).connect(env(0.02, 0.05));
         break;
       }
       case 'static': { const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 0.4; n(0.9).connect(bp).connect(env(0.25, 0.8, 0.02)); break; }
