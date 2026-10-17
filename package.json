@@ -12,11 +12,16 @@
   },
   "dependencies": {
     "@fontsource/cormorant-garamond": "^5.3.0",
+    "earcut": "^3.2.4",
     "postprocessing": "^6.37.8",
     "three": "^0.180.0"
   },
   "devDependencies": {
+    "@types/earcut": "^3.0.0",
     "@types/three": "^0.180.0",
+    "clipper2-js": "^1.2.4",
+    "geotiff": "^3.0.5",
+    "osmtogeojson": "^2.2.12",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"
   }

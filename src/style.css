@@ -109,3 +109,6 @@ html, body {
   .objective { top: 52px; left: 14px; font-size: 13px; }
   .dlg { padding: 16px 34px 18px; border-radius: 36px; }
 }
+
+/* ?debug=stats */
+.stats { position: fixed; right: 10px; top: 10px; z-index: 50; padding: 4px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.55); color: #cfe0c8; font: 11px/1.4 ui-monospace, Menlo, monospace; pointer-events: none; white-space: nowrap; }
