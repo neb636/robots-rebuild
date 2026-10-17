@@ -177,7 +177,7 @@ class App {
     this.applyMood();
     if (!this.interior && state.cam === 'cinematic') { state.cam = 'follow'; if (built.cine) this.setCam('cinematic', false); }
     this.resetCamera();
-    built.onAttach?.({ gl: this.gl, post: this.post, camera: this.camera, fill: this.fill });
+    built.onAttach?.({ gl: this.gl, post: this.post, camera: this.camera, fill: this.fill, hero: this.player.group });
     if (this.interior) {
       this.prologue = new Prologue({
         apt: built as Apartment, dlg: this.dlg,

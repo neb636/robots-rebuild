@@ -95,6 +95,8 @@ export interface AttachContext {
   camera: THREE.PerspectiveCamera;
   /** the camera fill light that follows the hero */
   fill: THREE.PointLight;
+  /** the hero's model */
+  hero: THREE.Object3D;
 }
 
 /** A playable level: the street (outdoors, with moods) or an interior with its own fixed lighting. */

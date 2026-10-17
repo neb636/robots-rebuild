@@ -9,8 +9,8 @@ import type { CollisionGrid } from './collide';
 
 /** grey-box wall colours per facade style (sRGB) */
 const STYLE_COLOR: Record<string, string> = {
-  brickTenement: '#7a4434', brickCommercial: '#86503a', graniteWarehouse: '#8a8478', masonryOffice: '#9a8c78',
-  modernConcrete: '#7c7a74', glassTower: '#4a5a66', garage: '#6e6c66', modernBrick: '#7e4a3a', civic: '#8c8070',
+  brickTenement: '#9a5a44', brickCommercial: '#a6664c', graniteWarehouse: '#aaa498', masonryOffice: '#b4a690',
+  modernConcrete: '#a09c94', glassTower: '#6a7a86', garage: '#8e8c86', modernBrick: '#9e6450', civic: '#ac9e8a',
 };
 
 export interface Part { i: number; outer: number[][]; holes: number[][][]; base: number; top: number; style: string; tier: number; seed: number; landmark: string | null }

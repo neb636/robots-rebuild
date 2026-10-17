@@ -6,9 +6,9 @@ import { ChunkBuilder } from './chunks';
 
 /** grey-box colours per surface class (sRGB) */
 const CLASS_COLOR: Record<string, string> = {
-  road: '#2e2f33', crosswalk: '#5a5a5c', parking: '#38393c', lot: '#4a463e',
-  sidewalkBrick: '#6e3e30', sidewalkConcrete: '#6a6864', pavers: '#77705f', setts: '#4e4842',
-  path: '#7a6e58', grass: '#36472a', deckWood: '#5a4636', deckConcrete: '#5c5c58',
+  road: '#55565a', crosswalk: '#8a8a86', parking: '#5c5d60', lot: '#6e695e',
+  sidewalkBrick: '#8e5444', sidewalkConcrete: '#9a968e', pavers: '#a39a84', setts: '#6e665c',
+  path: '#a49478', grass: '#4e6238', deckWood: '#7a6048', deckConcrete: '#8a8a84',
 };
 
 export function buildGround(d: HarborData, parent: THREE.Object3D, quality: 'high' | 'low') {
