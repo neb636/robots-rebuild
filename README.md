@@ -58,7 +58,7 @@ a shoulder-height **Follow** camera (the default) and an **Overhead** dollhouse 
 
 URL params override the saved settings without changing them, for sharing a specific setup:
 `?mood=curfew&cam=jrpg&q=low&audio=web&ui=0&card=0`. `?menu=0` skips the title screen and goes
-straight into the game. `?start=street` skips Day Zero and starts on Acorn Lane. `?debug` exposes `window.__THREE` (and `window.__title` on the title screen).
+straight into the game. `?start=street` skips Day Zero and starts on Acorn Lane. `?debug` exposes `window.__THREE` and the game as `window.__app` (and `window.__title` on the title screen).
 
 ## Frame rate and browser testing
 
@@ -77,6 +77,30 @@ When driving the game from an agent, `?menu=0&card=0` goes straight into the apa
 fade), `?menu=0&card=0&start=street` straight to the street, `?q=low` is
 lighter still if the screenshot doesn't need the high-quality look, and closing the browser when
 done (`playwright-cli close`) stops the rendering entirely.
+
+## Theo's idle and dancing
+
+Left alone (no key, click, touch or gamepad input, and nothing else going on) Theo does a Happy Idle
+after 15 seconds, then again at random gaps of 9 to 24 seconds, once or twice through at a slightly
+different speed each time, so it never settles into a loop. That's in `Theo` itself, so it applies
+in every scene; any input cuts it short and restarts the clock (`FIDGET` in `src/theo.ts`).
+
+The turntable in the living room cycles through the records by the credenza (the prompt names the
+next one): the morning record, then three dance records, then the needle up. Theo walks up, lifts the
+tonearm off what's playing, swaps the record, cues the arm and drops the needle (a two-bone IK reach
+on his left arm, under a fixed camera shot), and for a dance record steps out into the room and dances:
+*Rumba del Martes* (Rumba Dancing), *Wiggle Your Business* (Silly Dancing) and *Graveyard Shift*
+(Thriller Part 3: the routine's front-facing first half, then its 5.6 to 13.8 s stretch on a loop,
+since the end walks 3 m off with his back to the camera). Each song's tempo is set from its dance
+clip's loop length. Walk away and he stops; stand still in the living room for a moment and he
+picks the dance back up where the song is (`DANCES` in `src/theo.ts`, `RECORDS` in
+`src/prologue.ts`, the songs in `src/audio.ts`).
+
+While he dances, a floating action menu on the right offers **🎵 Next song** (he goes back to the
+turntable for the next dance record) and **🛑 Stop dancing** (he stops and sits that record out; the
+song plays on). The menu is `ActionMenu` in `src/actions.ts`, a reusable list of actions with one
+always selected: click or tap an item, or use Up / Down and Enter (the d-pad and A on a gamepad).
+While it's open, the arrow keys drive the menu instead of walking (W / S still walk).
 
 ## Character stage
 
@@ -142,12 +166,13 @@ src/
   prologue.ts    Day Zero's script: every interaction's lines, the broadcast, Marcus's call, the fade
                  (planning/prologue_script.md is the reference for its lines)
   dialogue.ts    JRPG text box, interaction prompt, objective line, fades and captions
+  actions.ts     floating action menu on the right (the dance controls; reusable)
   scene.ts       the lane layout, walkable heights, lights, the Converted, the drone, moods
   post.ts        post stack: SSAO, volumetric height fog + light halos + spot beam, DOF, bloom,
                  AgX tone map, film grade, vignette, grain
   theo.ts        the hero: loads theo.glb (4k texture on High, 2k on Low), blends idle/walk/run by
-                 speed with the feet locked to the ground, plays the Jumping clip along the
-                 game's jump arc, and a soft fill on him alone
+                 speed with the feet locked to the ground, idle fidgets, dances, a procedural reach,
+                 the Jumping clip along the game's jump arc, and a soft fill on him alone
   character.ts   parametric 3D characters (the Converted) with a procedural walk/idle rig
   viewer.ts      dev-only viewer (viewer.html): theo.glb under the Blender review stage, or ?loco
                  for the game's locomotion blend

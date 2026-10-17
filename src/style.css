@@ -107,8 +107,39 @@ html, body {
 
 @media (max-width: 700px) {
   .objective { top: 52px; left: 14px; font-size: 13px; }
+  .notify { width: max-content; max-width: calc(100% - 32px); white-space: normal; text-align: center; line-height: 1.4; }
   .dlg { padding: 16px 34px 18px; border-radius: 36px; }
 }
 
 /* ?debug=stats */
 .stats { position: fixed; right: 10px; top: 10px; z-index: 50; padding: 4px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.55); color: #cfe0c8; font: 11px/1.4 ui-monospace, Menlo, monospace; pointer-events: none; white-space: nowrap; }
+/* floating action menu (actions.ts), on the same glass as the dialogue box */
+.actions { position: absolute; right: calc(clamp(16px, 4vw, 56px) + env(safe-area-inset-right)); top: 50%; z-index: 21; min-width: 210px; padding: 10px; border-radius: 22px;
+  background: rgba(8, 10, 14, 0.6); color: #f6f5f0; font: 500 16px var(--sans); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  opacity: 0; transform: translate(14px, -50%); pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease; user-select: none; -webkit-user-select: none; }
+.actions.show { opacity: 1; transform: translate(0, -50%); pointer-events: auto; }
+.actions.off { display: none; }
+.actions .list { display: flex; flex-direction: column; gap: 4px; }
+.actions .item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 8px 20px 8px 12px; border: 0; border-radius: 14px; background: transparent;
+  color: rgba(246, 245, 240, 0.78); font: inherit; text-align: left; white-space: nowrap; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; }
+.actions .item .ic { width: 1.5em; font-size: 1.15em; text-align: center; text-shadow: none; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.actions .item.sel { color: #fff; background: rgba(246, 245, 240, 0.16); box-shadow: inset 0 0 0 1px rgba(246, 245, 240, 0.4); }
+.actions .item:active { background: rgba(246, 245, 240, 0.26); }
+.actions .hint { margin: 8px 6px 2px; font-size: 11px; color: rgba(246, 245, 240, 0.6); text-align: center; }
+.actions .hint b { color: #f6f5f0; font-weight: 600; }
+/* iPad and other touch screens: bigger targets */
+@media (pointer: coarse) {
+  .actions .item { min-height: 52px; font-size: 17px; }
+}
+/* phones, portrait: smaller, a little above the middle (clear of the move stick) */
+@media (max-width: 700px) {
+  .actions { min-width: 0; top: 40%; padding: 6px; border-radius: 18px; font-size: 14px; }
+  .actions .item { min-height: 44px; padding: 6px 14px 6px 8px; gap: 8px; font-size: 14px; }
+}
+/* phones, landscape: high on the right, under the notifications and above the interact button */
+@media (max-height: 500px) {
+  .actions { top: calc(72px + env(safe-area-inset-top)); transform: translate(14px, 0); padding: 6px; border-radius: 18px; }
+  .actions.show { transform: none; }
+  .actions .item { min-height: 40px; padding: 4px 14px 4px 8px; font-size: 14px; }
+}

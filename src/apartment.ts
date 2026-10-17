@@ -56,6 +56,7 @@ export interface Apartment extends Built {
   phone: { ringing: boolean };
   cat: Cat;
   lamps: { bedside: () => void; floor: () => boolean };
+  turntable: Turntable;
   /** the drones' first migration over the city (after the broadcast) */
   startFlock(): void;
   /** follow camera indoors: show the ceiling and stop cutting walls down */
@@ -315,6 +316,103 @@ export class Cat {
 
 
 // --------------------------------------------------------------------------------------- build
+// --------------------------------------------------------------------------------------- turntable
+/** The record player on the credenza: a platter that spins up and down, a tonearm that swings
+ *  between its rest and the record (lifting as it travels), and a label that changes per record. */
+export interface Turntable {
+  /** the headshell's finger lift, in world space, kept current: where a hand goes to move the arm */
+  cue: THREE.Vector3;
+  /** the middle of the record (the label), in world space */
+  center: THREE.Vector3;
+  /** swing the arm onto the record or back to its rest; resolves when it gets there */
+  arm(on: boolean): Promise<void>;
+  /** motor on or off (the platter takes a moment to get up to speed, and to stop) */
+  spin(on: boolean): void;
+  /** the record on the platter, by its label color */
+  label(color: string): void;
+  update(dt: number): void;
+}
+
+function buildTurntable(root: THREE.Object3D, at: THREE.Vector3, steel: THREE.Material, black: THREE.Material): Turntable {
+  const RPM = (33.33 / 60) * Math.PI * 2, ARM_S = 0.9, ARM_L = 0.245;
+  const g = new THREE.Group(); g.position.copy(at); root.add(g);
+  const mesh = (geo: THREE.BufferGeometry, m: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0) => {
+    const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; parent.add(o); return o;
+  };
+  // platter: the vinyl, a printed label (so you can see it turn) and the spindle
+  const platter = new THREE.Group(); g.add(platter);
+  mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.01, 48), paint('#121214', 0.28), platter, 0, 0.005);
+  mesh(new THREE.TorusGeometry(0.15, 0.004, 6, 48).rotateX(Math.PI / 2), paint('#0c0c0e', 0.4), platter, 0, 0.006);
+  const lab = canvas(128, 128);
+  const labelMat = new THREE.MeshStandardMaterial({ map: lab.tex, roughness: 0.6 });
+  mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.012, 32), labelMat, platter, 0, 0.006);
+  mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.03, 8), steel, platter, 0, 0.01);
+  const drawLabel = (color: string) => {
+    const c = lab.c;
+    c.clearRect(0, 0, 128, 128);
+    c.fillStyle = color; c.beginPath(); c.arc(64, 64, 64, 0, 7); c.fill();
+    // a pale band with "printing" on one side, a logo dot on the other: the turn shows
+    c.fillStyle = 'rgba(255,248,232,0.85)'; c.fillRect(0, 22, 128, 20);
+    c.fillStyle = 'rgba(30,20,20,0.7)'; for (let i = 0; i < 4; i++) c.fillRect(30 + i * 18, 29, 12, 5);
+    c.fillStyle = 'rgba(255,248,232,0.8)'; c.beginPath(); c.arc(64, 98, 9, 0, 7); c.fill();
+    c.fillStyle = 'rgba(0,0,0,0.25)'; for (let i = 0; i < 3; i++) c.fillRect(44, 76 + i * 5, 40 - i * 10, 2);
+    lab.tex.needsUpdate = true;
+  };
+  // tonearm: pivots at the back right corner of the plinth; at rest it points at the front
+  const pivot = new THREE.Group(); pivot.position.set(0.21, 0, 0.12); g.add(pivot);
+  mesh(new THREE.CylinderGeometry(0.026, 0.03, 0.03, 18), steel, pivot, 0, 0.015);
+  const lift = new THREE.Group(); lift.position.y = 0.045; pivot.add(lift);
+  mesh(new THREE.BoxGeometry(0.01, 0.01, ARM_L), steel, lift, 0, 0, -ARM_L / 2 + 0.01);
+  mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.04, 14).rotateX(Math.PI / 2), black, lift, 0, 0, 0.04);
+  const shell = mesh(new THREE.BoxGeometry(0.026, 0.012, 0.04), black, lift, 0, -0.004, -ARM_L);
+  // a rest post for it to sit in, at the front
+  mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.04, 8), steel, g, 0.2, 0.02, -ARM_L + 0.12 + 0.03);
+  // where the stylus meets the record: the swing that puts it ~2 cm in from the edge
+  let onAngle = 0;
+  for (let lo = 0, hi = 1.5, i = 0; i < 30; i++) {
+    onAngle = (lo + hi) / 2;
+    const tx = 0.21 - Math.sin(onAngle) * ARM_L, tz = 0.12 - Math.cos(onAngle) * ARM_L;
+    if (Math.hypot(tx, tz) > 0.13) lo = onAngle; else hi = onAngle;
+  }
+
+  let armK = 1, armTo = 1, armDone: (() => void) | null = null;
+  let rate = RPM, motor = true, groove = 0;
+  const cue = new THREE.Vector3(), center = new THREE.Vector3();
+  const place = () => {
+    const k = armK * armK * (3 - 2 * armK);
+    // it tracks inward a little as the record plays
+    pivot.rotation.y = k * (onAngle + groove);
+    // cue lever up while it travels: an arc, down on the rest and down on the record
+    lift.rotation.x = Math.sin(Math.PI * k) * 0.16;
+    g.updateMatrixWorld(true);
+    shell.getWorldPosition(cue); cue.y += 0.015;
+    platter.getWorldPosition(center); center.y += 0.02;
+  };
+  drawLabel('#d84a3a');
+  place();
+  return {
+    cue, center,
+    arm(on) {
+      armTo = on ? 1 : 0;
+      if (armK === armTo) return Promise.resolve();
+      return new Promise((r) => { armDone = r; });
+    },
+    spin(on) { motor = on; },
+    label: drawLabel,
+    update(dt) {
+      rate += THREE.MathUtils.clamp((motor ? RPM : 0) - rate, -dt * 2.6, dt * 2.6);
+      platter.rotation.y -= rate * dt;
+      if (armK === 1 && motor) groove = Math.min(0.05, groove + dt * 0.0004);
+      else if (armK === 0) groove = 0;
+      if (armK !== armTo) {
+        armK = armTo > armK ? Math.min(1, armK + dt / ARM_S) : Math.max(0, armK - dt / ARM_S);
+        if (armK === armTo) { const r = armDone; armDone = null; r?.(); }
+      }
+      place();
+    },
+  };
+}
+
 export function buildApartment(quality: 'high' | 'low'): Apartment {
   const scene = new THREE.Scene();
   const root = new THREE.Group(); scene.add(root);
@@ -324,6 +422,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   const lights: FogLight[] = [];
   const updaters: ((dt: number, t: number) => void)[] = [];
   const at: Record<string, THREE.Vector3> = {};
+  let turntable!: Turntable;
   const normalHidden: THREE.Object3D[] = [];
   const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   const solid = (x0: number, z0: number, x1: number, z1: number) => colliders.push({ x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1) });
@@ -1188,17 +1287,18 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     box(1.9, 0.66, 0.46, wood, cx, 0.08, cz);
     for (const lx of [-0.88, 0.88]) for (const lz of [-0.17, 0.17]) box(0.025, 0.08, 0.025, matteBlack, cx + lx, 0, cz + lz);
     for (const s of [-1, 1]) box(0.86, 0.5, 0.01, darkWood, cx + s * 0.46, 0.15, cz - 0.235);
-    // turntable, speakers
+    // turntable (its platter and tonearm move, see `turntable` below), speakers
     box(0.46, 0.08, 0.36, black, cx - 0.2, 0.74, cz);
-    cyl(0.15, 0.15, 0.01, paint('#111', 0.3), cx - 0.22, 0.82, cz, 28);
-    cyl(0.04, 0.04, 0.012, paint('#d84a3a', 0.6), cx - 0.22, 0.825, cz, 12);
-    box(0.015, 0.015, 0.2, steel, cx - 0.02, 0.84, cz - 0.04, 0.2);
+    turntable = buildTurntable(root, v3(cx - 0.22, 0.82, cz), steel, black);
+    updaters.push((dt) => turntable.update(dt));
     for (const s of [-1, 1]) { box(0.22, 0.34, 0.22, darkWood, cx + s * 0.75, 0.74, cz); b.add(new THREE.CircleGeometry(0.07, 20).rotateY(Math.PI), black, cx + s * 0.75, 0.86, cz - 0.112); b.add(new THREE.CircleGeometry(0.03, 16).rotateY(Math.PI), black, cx + s * 0.75, 1.0, cz - 0.112); }
     // a crate of records on the floor, sleeves showing
     box(0.42, 0.34, 0.36, pbrMat('wood', '#c8a070'), cx + 1.35, 0, cz);
     ART.albums.forEach((r, i) => b.add(atlas.quad(r, 0.31), atlas.mat, cx + 1.35, 0.3, cz - 0.12 + i * 0.045, -0.3 + i * 0.04, Math.PI, 0));
     solid(cx - 0.98, cz - 0.26, cx + 1.58, ZL);
     at.records = v3(cx - 0.2, 0.85, cz - 0.3);
+    // where he stands to work it: square on, close enough to reach in
+    at.recordStand = v3(cx - 0.18, 0, cz - 0.55);
   }
   decoOn(front, (bb) => {
     const wz = ZL - T / 2 - 0.006, ry = Math.PI;
@@ -1768,7 +1868,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     card: ['MT. VERNON STREET', 'Beacon Hill · day zero'],
     music: 'apartment', ambience: 'city',
     mood: HONEYLIGHT, normalHidden,
-    at, inLiving, tv, clock, phone, cat, lamps,
+    at, inLiving, tv, clock, phone, cat, lamps, turntable,
     setFollow(on: boolean) { follow = on; ceiling.visible = on; },
     cameraBlock(from, to) {
       // walls as thin lines; walkable doorways are gaps the camera can see through
