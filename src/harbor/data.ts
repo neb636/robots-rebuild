@@ -18,7 +18,8 @@ export interface Header {
   styles: string[]; roofs: string[]; tiers: string[];
   ground: { name: string; off: number | null; raised: boolean }[];
   curbHeight: number;
-  landmarks: { key: string; name: string }[];
+  /** hand-built landmarks: key, name, and their OpenStreetMap outline rings (local metres) */
+  landmarks: { key: string; name: string; outline: [number, number][][] }[];
   names: Record<string, string>;
   water: { fine: number; coarse: number; box: { x0: number; z0: number; x1: number; z1: number } };
   terrain: { x0: number; z0: number; cell: number; nx: number; nz: number };

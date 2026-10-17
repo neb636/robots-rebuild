@@ -241,7 +241,7 @@ const header = {
   styles: STYLES, roofs: ROOFS, tiers: TIERS,
   ground: GROUND.map((g) => ({ name: g.name, off: g.off, raised: !!g.raised })),
   curbHeight: CURB_H,
-  landmarks: landmarks.map((l) => ({ key: l.key, name: l.name })),
+  landmarks: landmarks.map((l) => ({ key: l.key, name: l.name, outline: l.rings.map((r) => r.map(([x, z]) => [G.round2(x), G.round2(z)])) })),
   names: Object.fromEntries(parts.map((p, i) => [i, p.name]).filter(([, n]) => n)),
   water: { fine: water.fine, coarse: water.coarse, box: coastBox },
   terrain: { x0: detail.x0, z0: detail.z0, cell: TERRAIN_OUT, nx: onx, nz: onz },

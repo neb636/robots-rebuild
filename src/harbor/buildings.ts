@@ -53,7 +53,11 @@ export function buildBuildings(d: HarborData, list: Part[], parent: THREE.Object
   const roofMat = pbrMat('tar', '#9a968e');
   const corniceMetal = pbrMat('metal', '#3a3430', { metalness: 0.4 }), corniceStone = pbrMat('ashlar', '#c8c0b0');
   for (const p of list) {
-    if (skip(p)) continue;
+    if (skip(p)) {
+      // a landmark builds this part, but its footprint still stops the camera
+      if (p.tier <= 1) for (const r of [p.outer, ...p.holes]) for (let e = 0; e < r.length; e++) { const a = r[e], b = r[(e + 1) % r.length]; collide.addSeg(a[0], a[1], b[0], b[1], p.top); }
+      continue;
+    }
     const cb = p.tier <= 1 ? near : far;
     const [cx, cz] = p.outer.reduce((s, q) => [s[0] + q[0] / p.outer.length, s[1] + q[1] / p.outer.length], [0, 0]);
     const walls = cb.at(p.tier <= 1 ? wallNear : wallFar, cx, cz, { cast: true });

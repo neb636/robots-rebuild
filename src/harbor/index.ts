@@ -7,7 +7,8 @@ import { loadHarbor } from './data';
 import { WalkMesh } from './walk';
 import { CollisionGrid } from './collide';
 import { buildGround } from './ground';
-import { buildBuildings, parts } from './buildings';
+import { buildBuildings, parts, type Part } from './buildings';
+import { LANDMARKS } from './landmarks';
 import { buildWaterfront } from './waterfront';
 import { buildCordon } from './cordon';
 import { ChunkBuilder, type Chunk } from './chunks';
@@ -63,7 +64,22 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
 
   progress(0.45, 'Raising the buildings…'); await nextFrame();
   const all = parts(d);
-  chunks.push(...buildBuildings(d, all, root, collide, () => false, quality));
+  // the landmarks first: whatever they build replaces those parts' generic walls
+  const byKey = new Map<string, Part[]>();
+  for (const p of all) if (p.landmark) { if (!byKey.has(p.landmark)) byKey.set(p.landmark, []); byKey.get(p.landmark)!.push(p); }
+  const landmarkDone = new Set<string>(), landmarkObjs: THREE.Object3D[] = [], landmarkLights: FogLight[] = [], landmarkUpdates: ((dt: number, t: number) => void)[] = [];
+  for (const lm of d.h.landmarks) {
+    const make = LANDMARKS[lm.key];
+    if (!make) continue;
+    try {
+      const res = make({ d, key: lm.key, parts: byKey.get(lm.key) ?? [], outline: lm.outline, heightAt: walk.heightAt, terrainAt: (x, z) => d.terrainAt(x, z), quality, collide });
+      if (!res) continue;
+      landmarkDone.add(lm.key); root.add(res.group); landmarkObjs.push(res.group);
+      if (res.lights) landmarkLights.push(...res.lights);
+      if (res.update) landmarkUpdates.push(res.update);
+    } catch (e) { console.error(`landmark ${lm.key} failed; using the generic facade`, e); }
+  }
+  chunks.push(...buildBuildings(d, all, root, collide, (p) => !!p.landmark && landmarkDone.has(p.landmark), quality));
 
   progress(0.7, 'Pouring the harbour…'); await nextFrame();
   const wf = buildWaterfront(d, root, quality);
@@ -92,7 +108,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
   const streets = new Set(groundChunks);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
-  for (const o of [sky.mesh, cordon.buoys, cordon.lamps, lamps.group, ...wf.floats, ...boats.map((b) => b.group)]) reflect(o);
+  for (const o of [sky.mesh, cordon.buoys, cordon.lamps, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs]) reflect(o);
 
   // ---------------------------------------------------------------- light
   const moon = new THREE.DirectionalLight('#ffffff', 1);
@@ -168,7 +184,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   progress(1, 'Lighting the lamps…');
   return {
     kind: 'street',
-    scene, sky, lights: [...lamps.pool, beacon], colliders: [], converted: [], moon, hemi, wetMats: [], puddles: new THREE.Group(),
+    scene, sky, lights: [...lamps.pool, beacon, ...landmarkLights], colliders: [], converted: [], moon, hemi, wetMats: [], puddles: new THREE.Group(),
     heightAt, spawn,
     card: ['THE HARBOR', 'Downtown waterfront · two years after'],
     music: 'static', ambience: 'harbor',
@@ -208,6 +224,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     update(dt, t, cam, player) {
       tNow = t;
       lamps.update(dt, t, player, lampScale);
+      for (const u of landmarkUpdates) u(dt, t);
       flickerUpdate(beacon, t, 91);
       waterUniforms.uTime.value = t;
       if ((cullT -= dt) <= 0) { cullT = 0.25; cull(cam); }
