@@ -13,6 +13,9 @@ import { buildCordon } from './cordon';
 import { ChunkBuilder, type Chunk } from './chunks';
 import { buildLamps } from './lights';
 import { buildBoats } from './boats';
+import { LAYERS } from './texarray';
+import { groundUniforms } from './groundmat';
+import { facadeUniforms } from './facade';
 import { shoreField } from './water/sdf';
 import { waterMaterial, buildWater, waterUniforms } from './water/water';
 import { PlanarReflection, REFLECT_LAYER } from './water/reflection';
@@ -35,7 +38,7 @@ export interface HarborHooks {
 }
 
 /** the texture sets this area uses (generated behind the loader before the build) */
-export const HARBOR_PBR = ['asphalt', 'brick', 'ashlar', 'brownstone', 'stone', 'wood', 'metal', 'dirt'];
+export const HARBOR_PBR = [...LAYERS];
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 const smoothstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -60,7 +63,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
 
   progress(0.45, 'Raising the buildings…'); await nextFrame();
   const all = parts(d);
-  chunks.push(...buildBuildings(d, all, root, collide, () => false));
+  chunks.push(...buildBuildings(d, all, root, collide, () => false, quality));
 
   progress(0.7, 'Pouring the harbour…'); await nextFrame();
   const wf = buildWaterfront(d, root, quality);
@@ -182,6 +185,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     applyMood(m) {
       // rain chops the harbour up; Grey Pall's dead calm stills it
       lampScale = m.lamps;
+      groundUniforms.uWet.value = m.wet ? 1 : 0;
       waterUniforms.uRain.value = m.rain ? 1 : 0;
       waterUniforms.uAmp.value = m.rain ? 1.3 : m.name === 'Grey Pall' ? 0.45 : 0.85;
       waterUniforms.uChop.value = m.rain ? 1.25 : m.name === 'Grey Pall' ? 0.5 : 0.85;

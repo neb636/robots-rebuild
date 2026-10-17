@@ -48,6 +48,7 @@ const underground = (t) => isTrue(t.tunnel) || t.tunnel === 'building_passage' |
  * Returns { classes: Paths64[] indexed by GROUND, curbs: [[x,z]...][], stats }
  */
 export function paintGround({ zone, land, buildings, sidewalks, parcels, osm, log = () => {} }) {
+  let crossingLines = [];
   let avail = difference(intersect(land, zone), buildings);
   const total = pathsArea(avail);
   const classes = GROUND.map(() => []);
@@ -73,6 +74,7 @@ export function paintGround({ zone, land, buildings, sidewalks, parcels, osm, lo
 
   // 1. crosswalks: OSM crossings, 3 m wide, only where there's carriageway
   const crossings = lines((t) => t.footway === 'crossing' || t.highway === 'crossing' || (t.highway === 'footway' && t.crossing));
+  crossingLines = crossings.map((l) => l.pts);
   take(G.crosswalk, intersect(bufferLines(crossings.map((l) => l.pts), 3.0), union([...roads, ...row])));
   // 2. sidewalks (city inventory), grown up to the facades they stop just short of
   const sw = { BR: [], other: [] };
@@ -106,7 +108,7 @@ export function paintGround({ zone, land, buildings, sidewalks, parcels, osm, lo
   // walkable surface must have none)
 
   const stats = { landArea: Math.round(total), classes: Object.fromEntries(GROUND.map((g, i) => [g.name, Math.round(pathsArea(classes[i]))])) };
-  return { classes, stats };
+  return { classes, stats, crossings: crossingLines };
 }
 
 /**
@@ -151,8 +153,8 @@ const ringBoundsOf = (r) => {
  * that follow the terrain. yAt(cls, x, z) gives each vertex its height.
  * walkable(x, z) flags triangles inside the play area.
  */
-export function triangulateGround(classes, cell, yAt, walkable) {
-  const verts = [], cls = [], flags = [], idx = [];
+export function triangulateGround(classes, cell, yAt, walkable, dirAt = () => 0) {
+  const verts = [], cls = [], flags = [], idx = [], dirs = [];
   for (let c = 0; c < classes.length; c++) {
     const paths = classes[c];
     if (!paths.length) continue;
@@ -176,9 +178,28 @@ export function triangulateGround(classes, cell, yAt, walkable) {
           else idx.push(base + a, base + cc, base + bb);
           cls.push(c);
           flags.push(walkable(mx, mz) ? 1 : 0);
+          dirs.push(GROUND[c].name === 'crosswalk' ? dirAt(mx, mz) : 0);
         }
       }
     }
   }
-  return { verts: new Float32Array(verts), tris: new Uint32Array(idx), triClass: new Uint8Array(cls), triFlags: new Uint8Array(flags) };
+  return { verts: new Float32Array(verts), tris: new Uint32Array(idx), triClass: new Uint8Array(cls), triFlags: new Uint8Array(flags), triDir: new Uint8Array(dirs) };
+}
+
+/** For crosswalk stripes: the direction of the crossing nearest (x, z), as a byte (0..255 = 0..pi). */
+export function crossingDirs(lines) {
+  const g = new Grid(20), segs = [];
+  for (const l of lines) for (let i = 0; i < l.length - 1; i++) {
+    const s = [l[i][0], l[i][1], l[i + 1][0], l[i + 1][1]];
+    segs.push(s);
+    g.insert(s, { x0: Math.min(s[0], s[2]) - 4, z0: Math.min(s[1], s[3]) - 4, x1: Math.max(s[0], s[2]) + 4, z1: Math.max(s[1], s[3]) + 4 });
+  }
+  return (x, z) => {
+    let best = null, bd = Infinity;
+    for (const s of g.query({ x0: x, z0: z, x1: x, z1: z })) { const d = segDist(x, z, s[0], s[1], s[2], s[3]).d; if (d < bd) { bd = d; best = s; } }
+    if (!best) return 0;
+    let a = Math.atan2(best[3] - best[1], best[2] - best[0]);
+    if (a < 0) a += Math.PI;
+    return Math.min(255, Math.round((a / Math.PI) * 255));
+  };
 }

@@ -18,7 +18,7 @@ import { parseOsm } from './lib/osm.mjs';
 import { landFromCoast } from './lib/coast.mjs';
 import { Dem, terrainGrid, terrainAt, gridSize } from './lib/terrain.mjs';
 import { buildParts, STYLES, ROOFS, TIERS } from './lib/buildings.mjs';
-import { paintGround, curbLines, triangulateGround, GROUND, CURB_H } from './lib/ground.mjs';
+import { paintGround, curbLines, triangulateGround, crossingDirs, GROUND, CURB_H } from './lib/ground.mjs';
 import { piers, waterCells, seawalls, pileLayout } from './lib/water.mjs';
 import { cordon } from './lib/cordon.mjs';
 import { points } from './lib/points.mjs';
@@ -126,8 +126,33 @@ painted.classes[deckIdx] = G.difference(decks, footprints);
 const curbs = curbLines(painted.classes).map((l) => l.map(([x, z]) => [G.round2(x), G.round2(tAt(x, z)), G.round2(z)]));
 const yAt = (c, x, z) => (GROUND[c].off === null ? tAt(x, z) + CURB_H : tAt(x, z) + GROUND[c].off);
 const walkable = (x, z) => G.inRing(x, z, playRing) && (!window || Math.hypot(x - window.x, z - window.z) < window.r);
-const ground = triangulateGround(painted.classes, GROUND_CELL, yAt, walkable);
+const ground = triangulateGround(painted.classes, GROUND_CELL, yAt, walkable, crossingDirs(painted.crossings));
 log(`  ${ground.tris.length / 3} triangles, ${ground.verts.length / 3} vertices, ${curbs.length} curbs`);
+
+// ------------------------------------------------------------------ which walls face the street
+log('facades');
+const PUBLIC = new Set(['road', 'crosswalk', 'parking', 'sidewalkBrick', 'sidewalkConcrete', 'pavers', 'setts', 'path', 'grass', 'deckWood']);
+const cg = { x0: detail.x0, z0: detail.z0, cell: 1, nx: Math.ceil(detail.x1 - detail.x0) + 1, nz: Math.ceil(detail.z1 - detail.z0) + 1 };
+const publicMask = G.rasterRings(painted.classes.flatMap((c, i) => (PUBLIC.has(GROUND[i].name) ? c.map(G.fromPath) : [])), cg.x0, cg.z0, cg.cell, cg.nx, cg.nz);
+const waterMask = landMask; // land samples at 2 m (TERRAIN_CELL): 0 = water
+const isPublic = (x, z) => { const i = Math.round(x - cg.x0), j = Math.round(z - cg.z0); return i >= 0 && j >= 0 && i < cg.nx && j < cg.nz && publicMask[j * cg.nx + i] === 1; };
+const isWater = (x, z) => { const i = Math.round((x - detail.x0) / TERRAIN_CELL), j = Math.round((z - detail.z0) / TERRAIN_CELL); return i >= 0 && j >= 0 && i < tnx && j < tnz && waterMask[j * tnx + i] === 0; };
+let fronts = 0;
+for (const p of parts) {
+  p.edgeFlags = [p.outer, ...p.holes].map((r) => r.map((a, i) => {
+    const b = r[(i + 1) % r.length], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
+    const nx = dz / L, nz = -dx / L; // outward
+    let f = 0;
+    for (const t of [0.25, 0.5, 0.75]) {
+      const x = a[0] + dx * t, z = a[1] + dz * t;
+      if (isPublic(x + nx * 2.5, z + nz * 2.5)) f |= 2;
+      if (p.tier <= 1 && isWater(x + nx * 6, z + nz * 6) && !isPublic(x + nx * 2.5, z + nz * 2.5)) f |= 4;
+    }
+    if (f & 2) fronts++;
+    return f;
+  }));
+}
+log(`  ${fronts} street-facing walls`);
 
 // ------------------------------------------------------------------ waterfront
 log('waterfront');
@@ -177,11 +202,13 @@ const bw = new BlobWriter();
   bw.add('bSeed', Uint32Array.from(parts, (p) => p.seed));
   const lmKeys = landmarks.map((l) => l.key);
   bw.add('bLandmark', Uint8Array.from(parts, (p) => (p.landmark ? lmKeys.indexOf(p.landmark) + 1 : 0)));
+  // one byte per ring vertex: flags for the edge that starts there (2 = faces the street, 4 = the water)
+  bw.add('bEdge', Uint8Array.from(parts.flatMap((p) => (p.edgeFlags ?? [p.outer, ...p.holes].map((r) => r.map(() => 0))).flat())));
   const spans = [];
   parts.forEach((p, i) => { for (const s of p.spans ?? []) spans.push(i, ...s); });
   bw.add('bSpan', Float32Array.from(spans));
 }
-bw.add('gVert', ground.verts); bw.add('gTri', ground.tris); bw.add('gTriClass', ground.triClass); bw.add('gTriFlag', ground.triFlags);
+bw.add('gVert', ground.verts); bw.add('gTri', ground.tris); bw.add('gTriClass', ground.triClass); bw.add('gTriFlag', ground.triFlags); bw.add('gTriDir', ground.triDir);
 { const c = packLines(curbs, 3); bw.add('curbVert', c.v); bw.add('curbIdx', c.idx); }
 { const s = packLines(walls, 3); bw.add('wallVert', s.v); bw.add('wallIdx', s.idx); }
 { const d = packLines(deckRings, 3); bw.add('deckVert', d.v); bw.add('deckIdx', d.idx); }

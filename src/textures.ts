@@ -373,6 +373,70 @@ const GEN: Record<string, () => PBRSet> = {
     const fuzz = vnoise(u * 200, v * 200, 200, 201) * 0.05;
     return [c[0] - fuzz, c[1] - fuzz, c[2] - fuzz, puff * 0.6 * seam + fuzz, 0.95];
   }),
+  /** City sidewalk: poured concrete slabs with scored joints, stains, gum spots and hairline cracks. */
+  concrete: () => build(512, 2.2, (u, v) => {
+    const sx = u * 2, sz = v * 2, fx = sx - Math.floor(sx), fz = sz - Math.floor(sz);
+    const joint = Math.min(sstep(0, 0.012, fx), sstep(0, 0.012, 1 - fx), sstep(0, 0.012, fz), sstep(0, 0.012, 1 - fz));
+    const slab = Math.abs(Math.sin(Math.floor(sx) * 37.1 + Math.floor(sz) * 91.3)) * 0.12;
+    const n = fbm(u, v, 6, 5, 141), g = vnoise(u * 300, v * 300, 300, 142);
+    const stain = sstep(0.55, 0.8, fbm(u, v, 3, 4, 143));
+    const gum = sstep(0.985, 0.995, vnoise(u * 90, v * 90, 90, 144));
+    const [c1, c2] = cellular(u, v, 7, 145);
+    const crack = (1 - sstep(0.0, 0.012, c2 - c1)) * sstep(0.6, 0.75, fbm(u, v, 4, 3, 146));
+    let c = mixc(hex('#8a8680'), hex('#a8a49c'), n * 0.6 + g * 0.2 + slab);
+    c = mixc(c, hex('#5e5a54'), stain * 0.4);
+    c = mixc(c, hex('#3a3834'), gum * 0.7 + crack * 0.7);
+    c = mixc(c, hex('#4a4640'), 1 - joint);
+    return [c[0], c[1], c[2], joint * 0.7 + n * 0.2 + g * 0.1 - crack * 0.4, 0.86 - stain * 0.08];
+  }),
+  /** Granite setts: rough rectangular cobbles in staggered rows, dark joints with grit (North and South
+   *  Market Streets, North Square). */
+  setts: () => build(512, 5, (u, v) => {
+    const rows = 10, per = 6;
+    const ry = v * rows, row = Math.floor(ry), fy = ry - row;
+    const rx = u * per + (row % 2) * 0.5 + Math.sin(row * 7.7) * 0.2, cx = Math.floor(rx), fx = rx - cx;
+    const wob = (vnoise(u * 60, v * 60, 60, 151) - 0.5) * 0.08;
+    const e = Math.min(fx + wob, 1 - fx + wob, (fy + wob) * 1.2, (1 - fy + wob) * 1.2);
+    const stone = sstep(0.02, 0.12, e);
+    const dome = Math.sqrt(clamp01(e * 3));
+    const id = Math.abs(Math.sin(cx * 127.1 + row * 311.7));
+    const n = fbm(u, v, 24, 3, 152);
+    let c = mixc(hex('#5a5652'), hex('#8a847c'), id * 0.6 + n * 0.4);
+    c = mixc(c, hex('#6a5a4c'), sstep(0.7, 0.9, id) * 0.4);
+    c = mixc(hex('#24221e'), c, stone);
+    return [c[0], c[1], c[2], dome * stone * 0.8 + n * 0.1, 0.78 + (1 - stone) * 0.18 - id * 0.06];
+  }),
+  /** Granite pavers: big rectangular slabs, light grey, for plazas and the marketplace. */
+  pavers: () => build(512, 2.5, (u, v) => {
+    const rows = 4, per = 2;
+    const ry = v * rows, row = Math.floor(ry), fy = ry - row;
+    const rx = u * per + (row % 2) * 0.5, cx = Math.floor(rx), fx = rx - cx;
+    const joint = Math.min(sstep(0, 0.01, fx), sstep(0, 0.01, 1 - fx), sstep(0, 0.02, fy), sstep(0, 0.02, 1 - fy));
+    const id = Math.abs(Math.sin(cx * 91.7 + row * 47.3));
+    const n = fbm(u, v, 10, 4, 161), g = vnoise(u * 400, v * 400, 400, 162);
+    let c = mixc(hex('#8a8680'), hex('#b0aaa0'), id * 0.4 + n * 0.4 + g * 0.2);
+    c = mixc(c, hex('#5a5048'), sstep(0.65, 0.85, fbm(u, v, 4, 3, 163)) * 0.3);
+    c = mixc(c, hex('#3a3834'), 1 - joint);
+    return [c[0], c[1], c[2], joint * 0.5 + n * 0.2 + g * 0.15, 0.8 - id * 0.06];
+  }),
+  /** Unmown city lawn two years on: coarse grass, clover, bare patches. */
+  turf: () => build(512, 3, (u, v) => {
+    const blades = vnoise(u * 180, v * 180, 180, 171) * 0.6 + vnoise(u * 420, v * 420, 420, 172) * 0.4;
+    const patch = fbm(u, v, 5, 4, 173);
+    const bare = sstep(0.62, 0.78, fbm(u, v, 3, 4, 174));
+    let c = mixc(hex('#2e3e1c'), hex('#5a6e2e'), blades * 0.7 + patch * 0.3);
+    c = mixc(c, hex('#6a6e34'), sstep(0.6, 0.8, patch) * 0.4);
+    c = mixc(c, hex('#4a3e2c'), bare * 0.8);
+    return [c[0], c[1], c[2], blades * 0.5 + patch * 0.3 - bare * 0.2, 0.95];
+  }),
+  /** Flat-roof membrane: tar, gravel ballast, patches. */
+  tar: () => build(512, 2, (u, v) => {
+    const grav = vnoise(u * 300, v * 300, 300, 181) * 0.6 + vnoise(u * 90, v * 90, 90, 182) * 0.4;
+    const patch = sstep(0.6, 0.75, fbm(u, v, 4, 4, 183));
+    let c = mixc(hex('#2a2826'), hex('#55524c'), grav);
+    c = mixc(c, hex('#1a1918'), patch * 0.7);
+    return [c[0], c[1], c[2], grav * 0.5, 0.95 - patch * 0.25];
+  }),
   asphalt: () => build(512, 2.5, (u, v) => {
     const n = fbm(u, v, 8, 5, 131), g = vnoise(u * 220, v * 220, 220, 132);
     const crack = sstep(0.015, 0.0, Math.abs(fbm(u, v, 3, 4, 133) - 0.5));
@@ -387,7 +451,9 @@ export function pbr(name: string): PBRSet {
   if (!s) { s = GEN[name](); cache.set(name, s); }
   return s;
 }
-export const PBR_NAMES = Object.keys(GEN);
+/** sets only the harbor district uses: generated on demand there, never at the other areas' boot */
+const HARBOR_ONLY = ['concrete', 'setts', 'pavers', 'turf', 'tar'];
+export const PBR_NAMES = Object.keys(GEN).filter((n) => !HARBOR_ONLY.includes(n));
 
 // ---------------------------------------------------------------------------------- canvas textures
 function canvasTex(w: number, h: number, draw: (c: CanvasRenderingContext2D) => void, srgb = true) {
