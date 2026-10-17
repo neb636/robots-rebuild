@@ -16,7 +16,8 @@ import { rng } from '../noise';
 
 // ground classes (header.ground): what a pit, a bench or a pole stands on, and where cars were left
 const SIDEWALK = new Set([4, 5, 6, 7, 8]);
-const ROAD = new Set([0, 2, 3]);
+// carriageway and parking lanes (not 'lot': the bake paints pedestrian plazas like Dock Square that way)
+const ROAD = new Set([0, 2]);
 const UP = new THREE.Vector3(0, 1, 0);
 
 /** non-indexed, with a flat vertex colour (multiplied by the instance's colour where there is one) */
