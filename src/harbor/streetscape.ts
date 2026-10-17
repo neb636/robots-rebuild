@@ -101,7 +101,10 @@ function treeKit(seed: number, height: number) {
       tips.push(e);
     }
   }
-  return { bark: mergeGeometries(geos), tips, r0 };
+  // the crown's middle, and how big it is, for the leaf mass that hides the limbs
+  const crown = tips.reduce((a, t) => a.add(t), new THREE.Vector3()).divideScalar(tips.length);
+  const spread = tips.reduce((a, t) => Math.max(a, Math.hypot(t.x - crown.x, t.z - crown.z)), 1);
+  return { bark: mergeGeometries(geos), tips, r0, crown, spread };
 }
 
 /** the city's standard bench: three seat slats and two back slats on cast-iron ends (some lost a slat or two) */
@@ -200,20 +203,58 @@ function carKit(k: number) {
 const PAINT = ['#4e6a6c', '#6a2c26', '#8a8a86', '#2a3440', '#b8b4a8', '#1c1d20', '#5a5440', '#7a6a48', '#3c4a3a', '#a8a090', '#40465a'];
 
 // -------------------------------------------------------------------------------- weeds
-/** weeds in the gutters, the tree pits and the unmown lawns: every tuft is baked here, and the patch
- *  around the hero is copied into three instanced meshes whenever they've moved a few metres */
+/** a clump of unmown meadow grass, knee-high and gone to straw at the tips: what two summers did to
+ *  the Greenway's lawns (denser and paler than the crack weeds) */
+function meadowClump(R: () => number, blades: number) {
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], col: number[] = [], idx: number[] = [];
+  const base = new THREE.Color('#2a3218'), mid = new THREE.Color('#566030');
+  const tips = [new THREE.Color('#9c9658'), new THREE.Color('#7c864a'), new THREE.Color('#b0a46a')];
+  const SEG = 3;
+  let v0 = 0;
+  for (let b = 0; b < blades; b++) {
+    const a = R() * Math.PI * 2, r = Math.sqrt(R()) * 0.3;
+    const ox = Math.cos(a) * r, oz = Math.sin(a) * r;
+    const h = 0.28 + R() * 0.38, w = 0.012 + R() * 0.01, lean = 0.25 + R() * 0.55, dir = a + (R() - 0.5) * 1.2;
+    const dx = Math.cos(dir), dz = Math.sin(dir), px = -dz, pz = dx, tip = tips[Math.floor(R() * 3)];
+    const n = new THREE.Vector3(dx * 0.3, 1, dz * 0.3).normalize();
+    for (let s = 0; s <= SEG; s++) {
+      const t = s / SEG, bend = lean * t * t * h, ww = w * (1 - t * 0.85);
+      const cx = ox + dx * bend, cz = oz + dz * bend, cy = h * t * (1 - lean * 0.3 * t);
+      pos.push(cx - px * ww, cy, cz - pz * ww, cx + px * ww, cy, cz + pz * ww);
+      nrm.push(n.x, n.y, n.z, n.x, n.y, n.z);
+      uv.push(0, t, 1, t);
+      const c = t < 0.5 ? base.clone().lerp(mid, t * 2) : mid.clone().lerp(tip, (t - 0.5) * 2);
+      col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+    }
+    for (let s = 0; s < SEG; s++) { const i = v0 + s * 2; idx.push(i, i + 1, i + 2, i + 1, i + 3, i + 2); }
+    v0 += (SEG + 1) * 2;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  return g;
+}
+
+/** weeds in the gutters and tree pits (kinds 0-2) and meadow in the lawns (3-4): every tuft is baked
+ *  here, and the patch around the hero is copied into one instanced mesh per kind whenever they've
+ *  moved a few metres, nearest first */
 class WeedPatch {
-  private x: number[] = []; private z: number[] = []; private m: number[] = []; private c: number[] = [];
+  static CRACK = 0; static MEADOW = 3;
+  private x: number[] = []; private z: number[] = []; private k: number[] = []; private m: number[] = []; private c: number[] = [];
   private mf: Float32Array | null = null; private cf: Float32Array | null = null;
   private cells = new Map<number, number[]>();
   private meshes: THREE.InstancedMesh[];
   private last = new THREE.Vector2(1e9, 1e9);
   private order: [number, number][];
-  constructor(parent: THREE.Object3D, private radius: number, cap: number, seed: number) {
+  constructor(parent: THREE.Object3D, private radius: number, crack: number, meadow: number, seed: number) {
     const R = rng(seed);
-    const geos = [tuftGeometry(7, R), tuftGeometry(11, R), tuftGeometry(6, R, 1.6)];
-    this.meshes = geos.map((g) => {
-      const im = new THREE.InstancedMesh(g, getGrassMat(), Math.ceil(cap / 3));
+    const geos = [tuftGeometry(7, R), tuftGeometry(11, R), tuftGeometry(6, R, 1.6), meadowClump(R, 16), meadowClump(R, 20)];
+    const caps = [crack / 3, crack / 3, crack / 3, meadow / 2, meadow / 2].map(Math.ceil);
+    this.meshes = geos.map((g, i) => {
+      const im = new THREE.InstancedMesh(g, getGrassMat(), caps[i]);
       im.count = 0; im.frustumCulled = false; im.castShadow = false; im.receiveShadow = true;
       im.setColorAt(0, new THREE.Color(1, 1, 1));
       parent.add(im);
@@ -225,13 +266,15 @@ class WeedPatch {
     this.order.sort((a, b) => a[0] ** 2 + a[1] ** 2 - (b[0] ** 2 + b[1] ** 2));
   }
   private m4 = new THREE.Matrix4(); private q = new THREE.Quaternion(); private e = new THREE.Euler(); private v = new THREE.Vector3(); private s = new THREE.Vector3();
-  add(x: number, y: number, z: number, s: number, R: () => number) {
+  /** a tuft of `kind` (a crack weed picks one of the three tufts itself) */
+  add(x: number, y: number, z: number, s: number, R: () => number, kind = WeedPatch.CRACK) {
     const i = this.x.length;
     this.x.push(x); this.z.push(z);
+    this.k.push(kind === WeedPatch.CRACK ? i % 3 : WeedPatch.MEADOW + (i & 1));
     this.m4.compose(this.v.set(x, y, z), this.q.setFromEuler(this.e.set(0, R() * 6.28, 0)), this.s.set(s, s * (0.8 + R() * 0.5), s));
     this.m.push(...this.m4.elements);
-    const k = R();
-    this.c.push(0.8 + k * 0.22, 0.88 + k * 0.25, 0.75 + k * 0.2);
+    const t = R();
+    this.c.push(0.8 + t * 0.22, 0.88 + t * 0.25, 0.75 + t * 0.2);
     const key = Math.floor(x / 16) * 100003 + Math.floor(z / 16);
     let l = this.cells.get(key);
     if (!l) this.cells.set(key, (l = []));
@@ -242,11 +285,11 @@ class WeedPatch {
     if (!this.mf) { this.mf = new Float32Array(this.m); this.cf = new Float32Array(this.c); this.m = []; this.c = []; }
     this.last.set(p.x, p.z);
     const gx = Math.floor(p.x / 16), gz = Math.floor(p.z / 16), r2 = this.radius ** 2;
-    const n = [0, 0, 0], cap = this.meshes[0].instanceMatrix.count;
+    const n = this.meshes.map(() => 0);
     for (const [i, j] of this.order) for (const k of this.cells.get((gx + i) * 100003 + gz + j) ?? []) {
       if ((this.x[k] - p.x) ** 2 + (this.z[k] - p.z) ** 2 > r2) continue;
-      const g = k % 3, im = this.meshes[g];
-      if (n[g] >= cap) continue;
+      const g = this.k[k], im = this.meshes[g];
+      if (n[g] >= im.instanceMatrix.count) continue;
       (im.instanceMatrix.array as Float32Array).set(this.mf.subarray(k * 16, k * 16 + 16), n[g] * 16);
       (im.instanceColor!.array as Float32Array).set(this.cf!.subarray(k * 3, k * 3 + 3), n[g] * 3);
       n[g]++;
@@ -268,27 +311,44 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   const segs = new Segs();
   for (const p of parts) if (p.tier <= 1) for (let e = 0; e < p.outer.length; e++) { const a = p.outer[e], b = p.outer[(e + 1) % p.outer.length]; segs.add(a[0], a[1], b[0], b[1]); }
   for (const line of curbs) for (let i = 0; i < line.length - 1; i++) segs.add(line[i][0], line[i][2], line[i + 1][0], line[i + 1][2]);
-  const weeds = new WeedPatch(group, quality === 'high' ? 42 : 28, quality === 'high' ? 13500 : 4800, 77);
+  const weeds = new WeedPatch(group, quality === 'high' ? 42 : 28, quality === 'high' ? 7500 : 3000, quality === 'high' ? 6000 : 2200, 77);
   const counts: Record<string, number> = {};
 
-  // ---- trees, in their pits where they stand in the sidewalk
+  // ---- trees: OSM's, in their pits where they stand in the sidewalk; then, since OSM maps only some of
+  // the parks' trees, a sparse grove on the lawns wherever none is mapped
   const kits = [0, 1, 2, 3, 4, 5].map((i) => treeKit(900 + i * 17, 8.5 + (i % 3) * 2.2));
   const perKit: THREE.Matrix4[][] = kits.map(() => []);
   const leaves: Card[][] = [[], []];
-  const perTip = quality === 'high' ? 24 : 11;
+  const perTip = quality === 'high' ? 20 : 9;
   const dirt = pbrMat('dirt', '#5e5040'), edging = pbrMat('ashlar', '#a8a49c');
   const v = new THREE.Vector3();
+  const trunks = new Map<number, [number, number][]>();
+  const tkey = (x: number, z: number) => Math.floor(x / 12) * 100003 + Math.floor(z / 12);
+  const nearTrunk = (x: number, z: number, r: number) => {
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const [tx, tz] of trunks.get(tkey(x + i * 12, z + j * 12)) ?? []) if ((tx - x) ** 2 + (tz - z) ** 2 < r * r) return true;
+    return false;
+  };
+  const plant = (x: number, z: number, y: number, big: boolean) => {
+    const k = Math.floor(R() * kits.length), kit = kits[k], s = (big ? 0.95 : 0.75) + R() * 0.45;
+    const m = xform(x, y, z, R() * Math.PI * 2, s);
+    perKit[k].push(m);
+    collide.addCircle(x, z, kit.r0 * s + 0.06, y + 3);
+    const key = tkey(x, z);
+    if (!trunks.has(key)) trunks.set(key, []);
+    trunks.get(key)!.push([x, z]);
+    if (R() > 0.16) {
+      const set = leaves[R() < 0.7 ? 0 : 1];
+      for (const tip of kit.tips) { v.copy(tip).applyMatrix4(m); set.push(...bushCards(v.x, v.y, v.z, 1.5 * s, 1.05 * s, 1.5 * s, perTip, R, 0.8 * s)); }
+      // and a mass through the middle of the crown so it reads as a canopy, not a few twigs
+      v.copy(kit.crown).applyMatrix4(m);
+      const cr = kit.spread * 0.75 * s;
+      set.push(...bushCards(v.x, v.y + 0.4 * s, v.z, cr, cr * 0.6, cr, perTip * 5, R, 0.85 * s));
+    }
+  };
   for (const p of d.h.furniture.tree) {
     const y = ground(p.x, p.z);
     if (Number.isNaN(y) || collide.blocked(p.x, p.z, 0.3)) continue;
-    const k = Math.floor(R() * kits.length), kit = kits[k], s = 0.75 + R() * 0.45;
-    const m = xform(p.x, y, p.z, R() * Math.PI * 2, s);
-    perKit[k].push(m);
-    collide.addCircle(p.x, p.z, kit.r0 * s + 0.06, y + 3);
-    if (R() > 0.16) {
-      const set = leaves[R() < 0.7 ? 0 : 1];
-      for (const tip of kit.tips) { v.copy(tip).applyMatrix4(m); set.push(...bushCards(v.x, v.y, v.z, 1.15 * s, 0.85 * s, 1.15 * s, perTip, R, 0.62 * s)); }
-    }
+    plant(p.x, p.z, y, false);
     if (SIDEWALK.has(classAt(p.x, p.z))) {
       const n = segs.nearest(p.x, p.z), ux = n ? n.ux : 1, uz = n ? n.uz : 0, vx = -uz, vz = ux, h = 0.72;
       const acc = cb.at(dirt, p.x, p.z, { cast: false });
@@ -305,6 +365,30 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
         ed.tri(q[0], q[2], q[1]); ed.tri(q[0], q[3], q[2]);
       }
       for (let i = 0; i < 9; i++) weeds.add(p.x + (R() - 0.5) * 1.3, y + 0.01, p.z + (R() - 0.5) * 1.3, 0.9 + R() * 0.8, R);
+    }
+  }
+  counts.osmTrees = perKit.reduce((a, l) => a + l.length, 0);
+  const gv = d.get('gVert'), gt = d.get<Uint32Array>('gTri');
+  const lawn: number[] = [];
+  for (let t = 0; t < gt.length / 3; t++) if (cls[t] === 9) lawn.push(t);
+  for (let i = lawn.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [lawn[i], lawn[j]] = [lawn[j], lawn[i]]; }
+  const maxGrove = quality === 'high' ? 260 : 170;
+  let grove = 0;
+  for (const t of lawn) {
+    if (grove >= maxGrove) break;
+    const a = gt[t * 3] * 3, b = gt[t * 3 + 1] * 3, e = gt[t * 3 + 2] * 3;
+    const area = Math.abs((gv[b] - gv[a]) * (gv[e + 2] - gv[a + 2]) - (gv[e] - gv[a]) * (gv[b + 2] - gv[a + 2])) / 2;
+    for (let n = Math.floor(area / 170 + R()); n > 0; n--) {
+      let u = R(), w = R();
+      if (u + w > 1) { u = 1 - u; w = 1 - w; }
+      const x = gv[a] + (gv[b] - gv[a]) * u + (gv[e] - gv[a]) * w, z = gv[a + 2] + (gv[b + 2] - gv[a + 2]) * u + (gv[e + 2] - gv[a + 2]) * w;
+      // well inside the lawn (not over a path), clear of other trunks and anything solid
+      if ([[2.6, 0], [-2.6, 0], [0, 2.6], [0, -2.6]].some(([dx, dz]) => classAt(x + dx, z + dz) !== 9)) continue;
+      if (nearTrunk(x, z, 10.5) || collide.blocked(x, z, 0.8)) continue;
+      const y = ground(x, z);
+      if (Number.isNaN(y)) continue;
+      plant(x, z, y, true);
+      grove++;
     }
   }
   kits.forEach((kit, i) => instanced(group, kit.bark, getBarkMat(), perKit[i]));
@@ -446,7 +530,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
       if (!Number.isNaN(y)) weeds.add(x, y, z, 0.6 + R() * 0.7, R);
     }
   }
-  const gv = d.get('gVert'), gt = d.get<Uint32Array>('gTri'), dens = quality === 'high' ? 1.5 : 0.7;
+  const dens = quality === 'high' ? 1.3 : 0.55;
   for (let t = 0; t < gt.length / 3; t++) {
     const c = cls[t], rate = c === 9 ? dens : c === 2 || c === 3 ? 0.05 : 0;
     if (!rate) continue;
@@ -458,7 +542,8 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
       if (u + w > 1) { u = 1 - u; w = 1 - w; }
       const x = gv[a] + (gv[b] - gv[a]) * u + (gv[e] - gv[a]) * w, z = gv[a + 2] + (gv[b + 2] - gv[a + 2]) * u + (gv[e + 2] - gv[a + 2]) * w;
       const y = gv[a + 1] + (gv[b + 1] - gv[a + 1]) * u + (gv[e + 1] - gv[a + 1]) * w;
-      weeds.add(x, y, z, c === 9 ? 1.1 + R() * 0.9 : 0.7 + R() * 0.6, R);
+      if (c === 9) weeds.add(x, y, z, 1 + R() * 0.55, R, WeedPatch.MEADOW);
+      else weeds.add(x, y, z, 0.7 + R() * 0.6, R);
     }
   }
   counts.weeds = weeds.size;
