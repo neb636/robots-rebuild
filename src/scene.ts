@@ -13,7 +13,7 @@ import { pbrMat, gasLamp, hangingLantern, barrelFire, wreckedCar, drone, stringL
 import { skyDome, skyline, SkySettings } from './sky';
 import { Character, CONVERTED, blobShadow } from './character';
 import type { Grade, FogSettings, Post } from './post';
-import type { Interactable } from './dialogue';
+import type { Interactable, Dialogue } from './dialogue';
 import type { CamMode } from './settings';
 
 export const TERRACE_Y = 3.2;
@@ -97,6 +97,8 @@ export interface AttachContext {
   fill: THREE.PointLight;
   /** the hero's model */
   hero: THREE.Object3D;
+  /** the dialogue box, for the area's own interactions */
+  dlg: Dialogue;
 }
 
 /** A playable level: the street (outdoors, with moods) or an interior with its own fixed lighting. */

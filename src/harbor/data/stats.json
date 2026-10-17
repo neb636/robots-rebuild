@@ -34,12 +34,12 @@
   "cityHall": 10
  },
  "ground": {
-  "landArea": 476105,
+  "landArea": 476084,
   "classes": {
-   "road": 163262,
+   "road": 163253,
    "crosswalk": 11451,
    "parking": 29968,
-   "lot": 80324,
+   "lot": 80312,
    "sidewalkBrick": 42288,
    "sidewalkConcrete": 47737,
    "pavers": 14294,
@@ -50,8 +50,8 @@
    "deckConcrete": 0
   }
  },
- "groundTriangles": 94301,
- "curbs": 17168,
+ "groundTriangles": 94295,
+ "curbs": 17152,
  "seawallRuns": 1,
  "decks": 24,
  "piles": 851,
@@ -74,7 +74,7 @@
   "lamp": 2273
  },
  "bytes": {
-  "json": 145482,
-  "bin": 4609284
+  "json": 145585,
+  "bin": 4608652
  }
 }

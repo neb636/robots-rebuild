@@ -357,6 +357,41 @@
      42.3608139
     ]
    }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "hole",
+    "name": "state-stairs",
+    "note": "the State station stairwell: no ground here; src/harbor/station.ts builds the stairs into it"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -71.0566563,
+       42.3590848
+      ],
+      [
+       -71.056559,
+       42.3590848
+      ],
+      [
+       -71.056559,
+       42.359054
+      ],
+      [
+       -71.0566563,
+       42.359054
+      ],
+      [
+       -71.0566563,
+       42.3590848
+      ]
+     ]
+    ]
+   }
   }
  ]
 }

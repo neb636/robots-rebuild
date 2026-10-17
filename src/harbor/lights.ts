@@ -14,7 +14,9 @@ import { rng } from '../noise';
 const HEAD_Y = 4.4;
 const WARM = new THREE.Color('#ffb066');
 
-interface Lamp { x: number; y: number; z: number; lit: boolean; flicker: number }
+/** something the pool can light: a lamp head, or (with its own height, colour and strength) a cordon flood */
+export interface LightSource { x: number; y: number; z: number; flicker: number; head?: number; color?: THREE.Color; power?: number; halo?: number }
+interface Lamp extends LightSource { lit: boolean }
 
 export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGrid, heightAt: (x: number, z: number) => number, quality: 'high' | 'low') {
   const R = rng(4421);
@@ -33,15 +35,15 @@ export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGr
   }
   // the pool
   const nPoint = quality === 'high' ? 10 : 4, nHalo = 14;
-  const lit = lamps.filter((l) => l.lit);
-  const pool: { fog: FogLight; lamp: Lamp | null; fade: number; light?: THREE.PointLight }[] = [];
+  const lit: LightSource[] = lamps.filter((l) => l.lit);
+  const pool: { fog: FogLight; lamp: LightSource | null; fade: number; power: number; light?: THREE.PointLight }[] = [];
   const group = new THREE.Group();
   for (let i = 0; i < nHalo; i++) {
     const anchor = new THREE.Object3D(); group.add(anchor);
     let light: THREE.PointLight | undefined;
     if (i < nPoint) { light = new THREE.PointLight(WARM, 0, 24, 2); anchor.add(light); light.position.set(0, -0.25, 0); }
     const fog: FogLight = { obj: anchor, color: WARM.clone(), radius: 0.35, base: 0, flicker: 0, point: light, pointBase: 0, priority: 1 };
-    pool.push({ fog, lamp: null, fade: 0, light });
+    pool.push({ fog, lamp: null, fade: 0, power: 1, light });
   }
   let t0 = 0;
   /** reassign the pool to the lit lamps nearest the hero, fading lights in and out as they move */
@@ -55,17 +57,22 @@ export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGr
       const want = near.filter((l) => !held.has(l));
       for (const s of pool) if (s.lamp && !keep.has(s.lamp)) s.lamp = null;
       // prefer giving the real lights to the nearest lamps
-      for (const s of pool) if (!s.lamp && s.fade <= 0.01 && want.length) { s.lamp = want.shift()!; s.fog.obj.position.set(s.lamp.x, s.lamp.y + HEAD_Y, s.lamp.z); s.fog.flicker = s.lamp.flicker; }
+      for (const s of pool) if (!s.lamp && s.fade <= 0.01 && want.length) {
+        const l = (s.lamp = want.shift()!);
+        s.fog.obj.position.set(l.x, l.head ?? l.y + HEAD_Y, l.z); s.fog.flicker = l.flicker;
+        s.fog.color.copy(l.color ?? WARM); s.light?.color.copy(s.fog.color);
+        s.fog.radius = l.halo ?? 0.35; s.power = l.power ?? 1;
+      }
     }
     pool.forEach((s, i) => {
       const target = s.lamp ? 1 : 0;
       s.fade += (target - s.fade) * Math.min(1, dt * 3);
       s.fog.base = 0.55 * s.fade;
-      s.fog.pointBase = 16 * s.fade * lampScale;
+      s.fog.pointBase = 16 * s.fade * lampScale * s.power;
       flickerUpdate(s.fog, t, i * 3.7);
     });
   }
-  return { lamps, pool: pool.map((s) => s.fog), group, update };
+  return { lamps, pool: pool.map((s) => s.fog), group, update, addSources: (ls: LightSource[]) => { lit.push(...ls); } };
 }
 
 /** a Boston pedestrian lamp: tapered fluted post, collar, a lantern with a cap and finial */

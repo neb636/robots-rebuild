@@ -14,6 +14,7 @@ import { buildCordon } from './cordon';
 import { ChunkBuilder, type Chunk } from './chunks';
 import { buildLamps } from './lights';
 import { buildBoats } from './boats';
+import { buildStation } from './station';
 import { LAYERS } from './texarray';
 import { groundUniforms } from './groundmat';
 import { facadeUniforms } from './facade';
@@ -93,6 +94,9 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   let tNow = 0;
   const waterHeight = (x: number, z: number, t = tNow) => d.h.waterY + swell(x, z, t, waterUniforms.uAmp.value) * smoothstep(0.6, 11, shore.distAt(x, z));
 
+  const station = buildStation(d, collide, quality);
+  if (station) root.add(station.group);
+
   progress(0.8, 'Lighting the lamps…'); await nextFrame();
   const lampChunks = new ChunkBuilder(64);
   const lamps = buildLamps(d, lampChunks, collide, (x, z) => walk.heightAt(x, z), quality);
@@ -101,14 +105,15 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   let lampScale = 1;
 
   progress(0.85, 'Raising the cordon…'); await nextFrame();
-  const cordon = buildCordon(d, root, collide);
+  const cordon = buildCordon(d, root, collide, (x, z) => walk.heightAt(x, z));
   chunks.push(...cordon.chunks);
+  lamps.addSources(cordon.floods);
 
   // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets)
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
   const streets = new Set(groundChunks);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
-  for (const o of [sky.mesh, cordon.buoys, cordon.lamps, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs]) reflect(o);
+  for (const o of [sky.mesh, cordon.buoys, cordon.lamps, cordon.eyes, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
 
   // ---------------------------------------------------------------- light
   const moon = new THREE.DirectionalLight('#ffffff', 1);
@@ -184,7 +189,8 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   progress(1, 'Lighting the lamps…');
   return {
     kind: 'street',
-    scene, sky, lights: [...lamps.pool, beacon, ...landmarkLights], colliders: [], converted: [], moon, hemi, wetMats: [], puddles: new THREE.Group(),
+    scene, sky, lights: [...lamps.pool, beacon, ...landmarkLights, ...(station ? [station.fog] : [])], colliders: [],
+    items: station ? [station.item] : [], converted: [], moon, hemi, wetMats: [], puddles: new THREE.Group(),
     heightAt, spawn,
     card: ['THE HARBOR', 'Downtown waterfront · two years after'],
     music: 'static', ambience: 'harbor',
@@ -197,7 +203,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     cine: { shots: cine, pose: spawn },
     // for tests: the play area's outline
     ...({ __boundary: d.h.boundary } as object),
-    onAttach(ctx) { post = ctx.post; reflect(ctx.hero); ctx.fill.layers.enable(REFLECT_LAYER); },
+    onAttach(ctx) { post = ctx.post; reflect(ctx.hero); ctx.fill.layers.enable(REFLECT_LAYER); station?.setDialogue(ctx.dlg); },
     applyMood(m) {
       // rain chops the harbour up; Grey Pall's dead calm stills it
       lampScale = m.lamps;
@@ -225,6 +231,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
       tNow = t;
       lamps.update(dt, t, player, lampScale);
       for (const u of landmarkUpdates) u(dt, t);
+      station?.update(t);
       flickerUpdate(beacon, t, 91);
       waterUniforms.uTime.value = t;
       if ((cullT -= dt) <= 0) { cullT = 0.25; cull(cam); }
@@ -252,6 +259,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
         cordon.buoys.setMatrixAt(i, m4); cordon.lamps.setMatrixAt(i, m4);
       });
       cordon.buoys.instanceMatrix.needsUpdate = true; cordon.lamps.instanceMatrix.needsUpdate = true;
+      cordon.update(t);
       // the cordon buoys blink together
       (cordon.lamps.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(t * 2.2) > 0.4 ? 7 : 0.6;
     },

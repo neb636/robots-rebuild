@@ -13,6 +13,8 @@ export interface Header {
   waterY: number;
   bounds: { x0: number; z0: number; x1: number; z1: number };
   boundary: [number, number][];
+  /** openings cut into the ground (the State station stairwell) */
+  holes: { name: string; ring: [number, number][] }[];
   spawn: string;
   spots: Record<string, Spot>;
   styles: string[]; roofs: string[]; tiers: string[];

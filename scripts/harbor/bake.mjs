@@ -56,6 +56,8 @@ for (const f of boundaryFc.features) {
   spots[f.properties.name] = { x: G.round2(x), z: G.round2(z), heading: G.round2((f.properties.heading * Math.PI) / 180) };
   if (f.properties.spawn) spawn = f.properties.name;
 }
+// openings cut into the ground (the State station stairwell): no ground, nothing to stand on
+const holes = boundaryFc.features.filter((f) => f.properties.kind === 'hole').map((f) => ({ name: f.properties.name, ring: G.openRing(f.geometry.coordinates[0].map(([lon, lat]) => project(lon, lat))) }));
 const window = winArg ? (() => { const [n, r] = winArg.split(':'); return { x: spots[n].x, z: spots[n].z, r: Number(r) }; })() : null;
 const landmarkDefs = readJson(new URL('landmarks.json', SRC_DIR));
 
@@ -120,7 +122,8 @@ log(`  footprints: ${footprints.length} paths`);
 
 // ------------------------------------------------------------------ ground
 log('ground');
-const painted = paintGround({ zone: groundZone, land, buildings: footprints, sidewalks, parcels, osm, log: VERBOSE ? log : undefined });
+const holePaths = G.polysToPaths(holes.map((h) => ({ outer: h.ring, holes: [] })));
+const painted = paintGround({ zone: groundZone, land: G.difference(land, holePaths), buildings: footprints, sidewalks, parcels, osm, log: VERBOSE ? log : undefined });
 const deckIdx = GROUND.findIndex((g) => g.name === 'deckWood');
 painted.classes[deckIdx] = G.difference(decks, footprints);
 const curbs = curbLines(painted.classes).map((l) => l.map(([x, z]) => [G.round2(x), G.round2(tAt(x, z)), G.round2(z)]));
@@ -236,6 +239,7 @@ const header = {
   waterY: WATER_Y,
   bounds: G.pathsBounds(groundZone),
   boundary: playRing.map(([x, z]) => [G.round2(x), G.round2(z)]),
+  holes: holes.map((h) => ({ name: h.name, ring: h.ring.map(([x, z]) => [G.round2(x), G.round2(z)]) })),
   spawn, spots,
   window: window ?? undefined,
   styles: STYLES, roofs: ROOFS, tiers: TIERS,
