@@ -7,7 +7,7 @@ import './style.css';
 import './shaderpatches';
 import * as THREE from 'three';
 import { PBR_NAMES, pbr, setAnisotropy } from './textures';
-import { buildScene, heightAt, MOODS, Mood, Built } from './scene';
+import { buildScene, MOODS, Mood, Built } from './scene';
 import { Post, MAX_LIGHTS } from './post';
 import { blobShadow, rim } from './character';
 import { Theo, loadTheo, TheoAsset } from './theo';
@@ -53,22 +53,35 @@ async function boot() {
   // the player may have changed quality in the title's options
   gl.setPixelRatio(Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1));
 
-  // the game opens on Day Zero in the apartment; ?start=street jumps to Acorn Lane, two years later
-  const street = params.get('start') === 'street';
-  const msgs = street
+  // the game opens on Day Zero in the apartment; ?start=street jumps to Acorn Lane, two years later,
+  // and ?start=harbor to the harbor district (its own area for now, loaded on demand)
+  const start = params.get('start');
+  const area = start === 'street' ? 'street' : start === 'harbor' ? 'harbor' : 'apartment';
+  const outdoors = area !== 'apartment';
+  const harbor = area === 'harbor' ? await import('./harbor') : null;
+  const msgs = area === 'harbor'
+    ? ['Pouring the harbour…', 'Setting the granite…', 'Raising the cordon…', 'Barnacling the pilings…', 'Salting the air…', 'Lighting the lamps…']
+    : outdoors
     ? ['Weathering brick…', 'Laying flagstones…', 'Growing moss…', 'Rusting the cars…', 'Knitting a sweater…', 'Lighting the lamps…']
     : ['Sanding the floorboards…', 'Folding sweaters…', 'Watering Gerald…', 'Brewing coffee…', 'Fluffing the cat…', 'Opening the blinds…'];
-  for (let i = 0; i < PBR_NAMES.length; i++) { setLoad((i / PBR_NAMES.length) * 0.7, msgs[i % msgs.length]); await nextFrame(); pbr(PBR_NAMES[i]); }
-  setLoad(0.75, street ? 'Building the street…' : 'Making the bed (badly)…'); await nextFrame();
-  const built = street ? buildScene(state.quality) : buildApartment(state.quality);
+  const sets = harbor ? harbor.HARBOR_PBR : PBR_NAMES;
+  for (let i = 0; i < sets.length; i++) { setLoad((i / sets.length) * 0.7, msgs[i % msgs.length]); await nextFrame(); pbr(sets[i]); }
+  setLoad(0.75, harbor ? 'Building the waterfront…' : outdoors ? 'Building the street…' : 'Making the bed (badly)…'); await nextFrame();
+  const built = harbor ? await harbor.buildHarbor(state.quality, (p, msg) => setLoad(0.75 + p * 0.1, msg))
+    : outdoors ? buildScene(state.quality) : buildApartment(state.quality);
   setLoad(0.85, 'Waking Theo…');
   const theo = await loadTheo(state.quality);
-  setLoad(0.9, street ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
+  setLoad(0.9, outdoors ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
   const app3 = new App(gl, built, theo);
   if (params.has('debug')) (window as any).__app = app3;
   setLoad(1, ''); await nextFrame();
   // compile shaders up front so the first frames don't hitch
-  gl.compile(built.scene, app3.camera);
+  if (harbor) {
+    // a big area: compile without blocking, then draw a couple of frames behind the loader so the
+    // shadow, normal-pass and reflection variants exist before the first real frame
+    await gl.compileAsync(built.scene, app3.camera);
+    for (let i = 0; i < 2; i++) { app3.frame(1 / 60); await nextFrame(); }
+  } else gl.compile(built.scene, app3.camera);
   loader.classList.add('done');
   setTimeout(() => loader.remove(), 1200);
   app3.start();
@@ -97,11 +110,14 @@ class App {
   ash = ash(state.quality === 'high' ? 2600 : 1200);
   embers: ReturnType<typeof embers> | null = null;
   rain = rain(state.quality === 'high' ? 5000 : 2200);
-  banks = fogBanks([{ x: -1, y: 1.2, z: -24, s: 9 }, { x: 1.5, y: 0.9, z: -30, s: 10 }, { x: -2, y: 3.2, z: -40, s: 14 }, { x: 6, y: 4.2, z: -22, s: 8 }, { x: 0, y: 4, z: -52, s: 18 }]);
+  banks = fogBanks([]);
   pmrem: THREE.PMREMGenerator;
   /** soft fill riding just above the camera so the hero never reads as a pure silhouette */
   fill = new THREE.PointLight('#ffe6cc', 2.5, 6, 2);
   envRT: THREE.WebGLRenderTarget | null = null;
+  /** toward the moon (from the mood); the shadow camera rides up this from the hero */
+  moonDir = new THREE.Vector3(0, 1, 0);
+  stats: StatsOverlay | null = null;
   keys = new Set<string>();
   stick = { x: 0, y: 0 };
   look = { dx: 0, dy: 0 };
@@ -131,6 +147,7 @@ class App {
     this.post = new Post(gl, built.scene, this.camera, state.quality === 'high' ? 4 : 0);
     this.pmrem = new THREE.PMREMGenerator(gl);
     this.dlg.onInteract = () => void this.interact();
+    if (params.get('debug') === 'stats') { this.stats = new StatsOverlay(); app.appendChild(this.stats.el); gl.info.autoReset = false; }
     this.applyQuality();
     this.attach(built);
     this.bindInput();
@@ -148,18 +165,27 @@ class App {
   attach(built: Built) {
     this.built = built;
     const s = built.scene;
+    // fog banks belong to the area
+    this.banks.obj.removeFromParent();
+    this.banks = fogBanks(built.fogBanks ?? []);
+    this.banks.obj.visible = !!built.fogBanks?.length;
     s.add(this.player.group, this.pShadow, this.ash.obj, this.rain.obj, this.banks.obj, this.fill);
-    this.banks.obj.visible = built.kind === 'street';
+    const cam = built.camera ?? { near: 0.1, far: 1500 };
+    this.camera.near = cam.near; this.camera.far = cam.far; this.camera.updateProjectionMatrix();
     if (this.embers) this.embers.obj.removeFromParent();
     this.embers = built.emberOrigin ? embers(built.emberOrigin, 90) : null;
     if (this.embers) s.add(this.embers.obj);
     this.post.setScene(s);
     this.post.normalHidden = built.normalHidden ?? [];
-    this.pos.set(built.spawn.x, 0, built.spawn.z); this.heading = built.spawn.heading;
+    // ?at=name starts at one of the area's named spots
+    const sp = built.spots?.[params.get('at') ?? ''] ?? built.spawn;
+    const sy = built.heightAt(sp.x, sp.z);
+    this.pos.set(sp.x, isNaN(sy) ? 0 : sy, sp.z); this.heading = sp.heading;
     this.player.group.position.copy(this.pos);
     this.applyMood();
-    if (!this.interior && state.cam === 'cinematic') { state.cam = 'follow'; this.setCam('cinematic', false); }
+    if (!this.interior && state.cam === 'cinematic') { state.cam = 'follow'; if (built.cine) this.setCam('cinematic', false); }
     this.resetCamera();
+    built.onAttach?.({ gl: this.gl, post: this.post, camera: this.camera, fill: this.fill, hero: this.player.group, dlg: this.dlg });
     if (this.interior) {
       this.prologue = new Prologue({
         apt: built as Apartment, dlg: this.dlg,
@@ -195,6 +221,7 @@ class App {
     this.attach(next);
     this.gl.compile(next.scene, this.camera);
     old.scene.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    old.dispose?.();
     if (state.sound) { audio.ambience(next.ambience); audio.playMusic(next.music, 4); }
     // open on the cinematic shots (not saved: the player's own camera setting comes back after)
     this.setCam('cinematic', false);
@@ -241,10 +268,11 @@ class App {
   applyMood() {
     const m = this.mood, b = this.built;
     b.sky.apply(m.sky);
-    this.post.applyFog(m.fog);
+    this.post.applyFog(b.fog ? { ...m.fog, ...b.fog } : m.fog);
     this.post.applyGrade(m.grade);
     b.moon.color.set(m.moon.color); b.moon.intensity = m.moon.intensity;
-    b.moon.position.set(...m.moon.dir).normalize().multiplyScalar(60);
+    this.moonDir.set(...m.moon.dir).normalize();
+    b.moon.position.copy(b.moon.target.position).addScaledVector(this.moonDir, b.shadow?.lift ?? 60);
     b.hemi.color.set(m.hemi.sky); b.hemi.groundColor.set(m.hemi.ground); b.hemi.intensity = m.hemi.intensity;
     for (const l of b.lights) if (l.point && l.pointBase !== undefined) {
       (l as any).origBase ??= l.pointBase;
@@ -270,6 +298,7 @@ class App {
     b.scene.environmentIntensity = m.env;
     rim.color.value.set(m.rim.color); rim.strength.value = m.rim.strength;
     this.player.setFill(m.fill);
+    b.applyMood?.(m);
   }
 
   applyQuality() {
@@ -283,9 +312,12 @@ class App {
   private savedPose: { pos: THREE.Vector3; heading: number } | null = null;
   setCam(c: CamMode, persist = true) {
     if (this.interior) { state.cam = c === 'cinematic' ? 'follow' : c; this.resetCamera(); this.ui?.sync(); if (persist) saveSettings(); return; }
+    if (c === 'cinematic' && !this.built.cine) c = 'follow';
     if (c === 'cinematic' && state.cam !== 'cinematic') {
+      const pose = this.built.cine!.pose;
       this.savedPose = { pos: this.pos.clone(), heading: this.heading };
-      this.pos.set(CINE_POSE.x, 0, CINE_POSE.z); this.heading = CINE_POSE.heading;
+      const py = this.built.heightAt(pose.x, pose.z);
+      this.pos.set(pose.x, isNaN(py) ? 0 : py, pose.z); this.heading = pose.heading;
     } else if (c !== 'cinematic' && state.cam === 'cinematic' && this.savedPose) {
       this.pos.copy(this.savedPose.pos); this.heading = this.savedPose.heading; this.savedPose = null;
     }
@@ -314,7 +346,8 @@ class App {
       this.placeCamera(1, true);
       return;
     }
-    this.yaw = state.cam === 'jrpg' ? Math.PI / 2 : 0; this.pitch = state.cam === 'jrpg' ? 0.6 : 0.24; this.dist = state.cam === 'jrpg' ? 14 : 5.0;
+    // follow: start behind the hero (Acorn Lane's hero faces north, so that's yaw 0 there)
+    this.yaw = state.cam === 'jrpg' ? Math.PI / 2 : this.heading + Math.PI; this.pitch = state.cam === 'jrpg' ? 0.6 : 0.24; this.dist = state.cam === 'jrpg' ? 14 : 5.0;
     this.camera.fov = state.cam === 'jrpg' ? 30 : 40; this.camera.updateProjectionMatrix();
     this.placeCamera(1, true);
   }
@@ -338,7 +371,10 @@ class App {
       if (e.code === 'Digit1') this.setMood('ashfall');
       if (e.code === 'Digit2') this.setMood('curfew');
       if (e.code === 'Digit3') this.setMood('pall');
-      if (e.code === 'KeyC') this.setCam(this.interior ? (state.cam === 'jrpg' ? 'follow' : 'jrpg') : CAMS[(CAMS.indexOf(state.cam) + 1) % CAMS.length]);
+      if (e.code === 'KeyC') {
+        const cams = CAMS.filter((c) => c !== 'cinematic' || this.built.cine);
+        this.setCam(this.interior ? (state.cam === 'jrpg' ? 'follow' : 'jrpg') : cams[(cams.indexOf(state.cam) + 1) % cams.length]);
+      }
       if (e.code === 'KeyH') { state.ui = !state.ui; this.ui?.sync(); }
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -529,7 +565,7 @@ class App {
 
   /** the closest usable thing in reach, favouring what the hero is facing */
   updateFocus() {
-    const items = this.prologue?.items;
+    const items = this.prologue?.items ?? this.built.items;
     let best: Interactable | null = null, bestS = Infinity;
     if (items && !this.frozen) {
       const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
@@ -557,11 +593,12 @@ class App {
 
   blocked(x: number, z: number) {
     const r = 0.28;
+    if (this.built.blocked) return this.built.blocked(x, z, r);
     for (const c of this.built.colliders) if (x + r > c.x0 && x - r < c.x1 && z + r > c.z0 && z - r < c.z1) return true;
     return false;
   }
   canStand(x: number, z: number, fromY: number) {
-    const h = this.built.heightAt(x, z);
+    const h = this.built.heightAt(x, z, fromY);
     return !isNaN(h) && Math.abs(h - fromY) < 0.45 && !this.blocked(x, z);
   }
 
@@ -577,11 +614,13 @@ class App {
       const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
       const dx = fx * mv.y + rx * mv.x, dz = fz * mv.y + rz * mv.x;
       const sp = (run ? 4.6 : 2.3) * Math.min(1, mv.length());
-      const cur = heightAt(this.pos.x, this.pos.z) || 0;
+      const h0 = heightAt(this.pos.x, this.pos.z, this.pos.y);
+      const cur = isNaN(h0) ? this.pos.y : h0;
       const nx = this.pos.x + dx * sp * dt, nz = this.pos.z + dz * sp * dt;
       const ox = this.pos.x, oz = this.pos.z;
       if (this.canStand(nx, this.pos.z, cur)) this.pos.x = nx;
-      if (this.canStand(this.pos.x, nz, heightAt(this.pos.x, this.pos.z) || cur)) this.pos.z = nz;
+      const h1 = heightAt(this.pos.x, this.pos.z, cur);
+      if (this.canStand(this.pos.x, nz, isNaN(h1) ? cur : h1)) this.pos.z = nz;
       speed = Math.hypot(this.pos.x - ox, this.pos.z - oz) / dt;
       const target = Math.atan2(dx, dz);
       let d = target - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -593,7 +632,7 @@ class App {
       this.heading += d * Math.min(1, dt * 8);
       if (Math.abs(d) < 0.02 || speed > 0.1) this.turnTo = null;
     }
-    const gy = heightAt(this.pos.x, this.pos.z);
+    const gy = heightAt(this.pos.x, this.pos.z, this.pos.y);
     if (!isNaN(gy)) this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 14);
     if (this.jumpV !== 0 || this.jumpY > 0) {
       this.jumpV -= 15 * dt;
@@ -623,13 +662,18 @@ class App {
     this.built.sky.update(this.t, this.camera.position);
     this.ash.update(this.t, this.camera.position);
     this.rain.update(this.t, this.camera.position);
+    const fb = this.built.fxBand;
+    if (fb) { this.ash.band(this.pos.y - fb.below, fb.below + fb.above); this.rain.band(this.pos.y - fb.below, fb.below + fb.above); }
     this.embers?.update(this.t);
     this.banks.update(this.t, this.camera);
     this.post.dof.target = this.shot ? this.shot.look.clone() : state.cam === 'jrpg' ? this.pos.clone().add(new THREE.Vector3(0, 1, 0)) : this.pos.clone().add(new THREE.Vector3(0, 1.2, 0));
     this.prologue?.update(dt);
     this.dlg.tick(dt);
     this.updateFocus();
+    this.stats?.begin(this.gl);
+    this.built.beforeRender?.(this.gl, this.camera);
     this.post.render(dt);
+    this.stats?.end(this.gl, this.fps);
   }
 
   updateCamera(dt: number, speed: number) {
@@ -694,7 +738,7 @@ class App {
       this.camPos.lerp(pos, ks); this.camLook.lerp(look, snap ? 1 : 1 - Math.exp(-dt * (this.shot ? 2.2 : 8)));
     } else if (state.cam === 'cinematic') {
       this.cinT += dt;
-      const shots = CINE;
+      const shots = this.built.cine!.shots;
       const T = 12, i = Math.floor(this.cinT / T) % shots.length, f = (this.cinT % T) / T;
       const s = shots[i];
       const e = f * f * (3 - 2 * f);
@@ -709,17 +753,20 @@ class App {
       pos = target.clone().add(new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp).multiplyScalar(this.dist));
       look = target.clone();
       if (state.cam === 'jrpg') look.add(new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).multiplyScalar(2.2));
+      const b = this.built;
       if (state.cam === 'follow') {
         // frame the hero slightly low and to the side, like the reference
         look.add(new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).multiplyScalar(1.6)).add(new THREE.Vector3(0, 0.35, 0));
-        // keep the camera inside the street
-        pos.x = THREE.MathUtils.clamp(pos.x, -5.4, this.pos.y > 1.5 ? 7.4 : 6.2);
-        pos.z = Math.min(pos.z, 9.2);
-        const gh = heightAt(pos.x, pos.z);
-        pos.y = Math.max(pos.y, (isNaN(gh) ? this.pos.y : gh) + 0.5);
+        b.clampCamera?.(pos, this.pos, 'follow');
+        // pull in in front of any wall between the hero and the camera
+        const t = b.cameraBlock?.(target, pos) ?? 1;
+        if (t < 1) pos.lerpVectors(target, pos, Math.max(0.12, t - 0.3 / Math.max(this.dist, 0.1)));
+        let floor: number;
+        if (b.cameraFloor) floor = b.cameraFloor(pos.x, pos.z);
+        else { const gh = b.heightAt(pos.x, pos.z); floor = (isNaN(gh) ? this.pos.y : gh) + 0.5; }
+        pos.y = Math.max(pos.y, floor);
       } else {
-        // diorama camera: stay in front of the terrace houses and inside the block
-        pos.x = Math.min(pos.x, 11.4); pos.z = Math.min(pos.z, 9.0);
+        b.clampCamera?.(pos, this.pos, 'jrpg');
       }
       this.ui?.cineFade(0);
       this.camPos.lerp(pos, snap ? 1 : k); this.camLook.lerp(look, snap ? 1 : 1 - Math.exp(-dt * 9));
@@ -732,9 +779,8 @@ class App {
     // keep the directional shadow frustum centred on the action (indoors it stays put, so the
     // window light doesn't shimmer as the hero walks)
     const m = this.built.moon, c = this.interior ? ROOM_CENTER : state.cam === 'cinematic' ? this.camLook : this.pos;
-    const dir = m.position.clone().sub(m.target.position).normalize();
     m.target.position.set(c.x, 0, c.z);
-    m.position.copy(m.target.position).addScaledVector(dir, 60);
+    m.position.copy(m.target.position).addScaledVector(this.moonDir, this.built.shadow?.lift ?? 60);
   }
 
   private fl = new THREE.Vector3();
@@ -752,8 +798,9 @@ class App {
     });
     f.set('nLights', cand.length);
     // drone searchlight beam
-    if (!this.built.drone) { f.set('spotLen', 0); return; }
-    const s = this.built.drone.spot;
+    const dr = this.built.activeDrone ? this.built.activeDrone() : this.built.drone;
+    if (!dr) { f.set('spotLen', 0); return; }
+    const s = dr.spot;
     const sp = s.getWorldPosition(new THREE.Vector3()), st = s.target.getWorldPosition(new THREE.Vector3());
     f.u<THREE.Vector3>('spotPos').copy(sp);
     f.u<THREE.Vector3>('spotDir').copy(st.sub(sp).normalize());
@@ -763,8 +810,9 @@ class App {
   }
 
   updateScan(dt: number) {
-    if (!this.built.drone) { this.scan = 0; this.ui?.setScan(0); return; }
-    const s = this.built.drone.spot;
+    const dr = this.built.activeDrone ? this.built.activeDrone() : this.built.drone;
+    if (!dr) { this.scan = 0; this.ui?.setScan(0); return; }
+    const s = dr.spot;
     const sp = s.getWorldPosition(new THREE.Vector3()), st = s.target.getWorldPosition(new THREE.Vector3());
     const dir = st.sub(sp).normalize();
     const toP = this.pos.clone().add(new THREE.Vector3(0, 0.9, 0)).sub(sp);
@@ -774,22 +822,33 @@ class App {
   }
 }
 
-// cinematic shots: [from, to] camera positions and look targets
-const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-const CINE = [
-  { from: v(0.9, 1.0, 3.2), to: v(0.7, 1.6, 0.6), lookFrom: v(0.2, 1.5, -8), lookTo: v(0.2, 1.8, -14) },
-  { from: v(-0.6, 1.25, -4.3), to: v(0.0, 1.35, -3.9), lookFrom: v(0.55, 1.35, -1.5), lookTo: v(0.6, 1.4, -1.5) },
-  { from: v(-1.2, 0.7, -2.2), to: v(0.3, 0.9, -1.9), lookFrom: v(1.5, 1.2, -4.6), lookTo: v(1.5, 1.4, -4.6) },
-  { from: v(-0.6, 1.1, -11.5), to: v(0.4, 1.3, -13.5), lookFrom: v(0.4, 1.4, -26), lookTo: v(0.5, 1.5, -26) },
-  { from: v(5.6, 4.6, 2), to: v(5.0, 5.4, -4), lookFrom: v(-2, 2, -14), lookTo: v(-1, 6, -17) },
-  { from: v(4.3, 4.5, -14.6), to: v(4.6, 4.5, -16.8), lookFrom: v(6.6, 4.3, -21), lookTo: v(6.6, 4.4, -21) },
-];
-const ROOM_CENTER = v(0, 0, 0);
-/** where the hero stands while the cinematic plays */
-const CINE_POSE = { x: 0.6, z: -1.5, heading: Math.PI };
+const ROOM_CENTER = new THREE.Vector3(0, 0, 0);
 
 // ------------------------------------------------------------------------------ UI
 function el(tag: string, cls: string, html = '') { const e = document.createElement(tag); e.className = cls; e.innerHTML = html; return e; }
+
+/**
+ * ?debug=stats: what a frame costs, summed over every pass (scene, shadows, normals, reflections,
+ * post), and a console warning whenever a new shader program shows up after warm-up, since that
+ * means some material or light change forced a recompile mid-game.
+ */
+class StatsOverlay {
+  el = el('div', 'stats');
+  private programs = 0;
+  private born = performance.now();
+  private shown = 0;
+  begin(gl: THREE.WebGLRenderer) { gl.info.reset(); }
+  end(gl: THREE.WebGLRenderer, fps: number) {
+    const i = gl.info, n = i.programs?.length ?? 0, now = performance.now();
+    if (n > this.programs) {
+      if (now - this.born > 5000) console.warn(`[stats] shader programs ${this.programs} -> ${n} after warm-up`);
+      this.programs = n;
+    }
+    if (now - this.shown < 250) return;
+    this.shown = now;
+    this.el.textContent = `${fps.toFixed(0)} fps · ${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`;
+  }
+}
 
 class UI {
   root = el('div', 'ui');
@@ -807,7 +866,7 @@ class UI {
   sync() {
     this.root.classList.toggle('hidden', !state.ui);
     this.a.actions.root.classList.toggle('off', !state.ui);
-    this.root.querySelector('.b2')!.textContent = this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static';
+    this.root.querySelector('.b2')!.textContent = this.a.built.brand ?? (this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static');
     this.bars.classList.toggle('on', state.cam === 'cinematic' && !this.a.interior);
   }
   setScan(k: number) { this.scanEl.style.opacity = String(k > 0.05 ? Math.min(1, k * 1.4) * (0.75 + 0.25 * Math.sin(performance.now() / 90)) : 0); this.scanVig.style.opacity = String(k * 0.9); }

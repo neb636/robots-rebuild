@@ -1,0 +1,80 @@
+{
+ "parts": {
+  "play": 600,
+  "edge": 388,
+  "backdrop": 2078,
+  "far": 319
+ },
+ "styles": {
+  "brickTenement": 349,
+  "brickCommercial": 211,
+  "graniteWarehouse": 103,
+  "masonryOffice": 140,
+  "modernConcrete": 22,
+  "glassTower": 32,
+  "garage": 28,
+  "modernBrick": 98,
+  "civic": 5
+ },
+ "landmarks": {
+  "faneuil": 1,
+  "quincy": 5,
+  "northMarket": 25,
+  "southMarket": 22,
+  "marriott": 1,
+  "customHouseBlock": 6,
+  "chartHouse": 1,
+  "aquarium": 3,
+  "customHouse": 5,
+  "harborTowers": 4,
+  "rowesWharf": 19,
+  "paulRevere": 1,
+  "carousel": 0,
+  "oldStateHouse": 1,
+  "cityHall": 10
+ },
+ "ground": {
+  "landArea": 476084,
+  "classes": {
+   "road": 163253,
+   "crosswalk": 11451,
+   "parking": 29968,
+   "lot": 80312,
+   "sidewalkBrick": 42288,
+   "sidewalkConcrete": 47737,
+   "pavers": 14294,
+   "setts": 468,
+   "path": 23708,
+   "grass": 62618,
+   "deckWood": 0,
+   "deckConcrete": 0
+  }
+ },
+ "groundTriangles": 94295,
+ "curbs": 17152,
+ "seawallRuns": 1,
+ "decks": 24,
+ "piles": 851,
+ "floats": 15,
+ "waterArea": 5124857,
+ "cordonGaps": 35,
+ "cordonGapLength": 1167,
+ "furniture": {
+  "tree": 210,
+  "bench": 286,
+  "bollard": 9,
+  "hydrant": 41,
+  "bin": 67,
+  "bikes": 11,
+  "statue": 18,
+  "entrance": 9,
+  "signal": 82,
+  "fountain": 7,
+  "lampOsm": 60,
+  "lamp": 2273
+ },
+ "bytes": {
+  "json": 145585,
+  "bin": 4608652
+ }
+}

@@ -111,6 +111,8 @@ html, body {
   .dlg { padding: 16px 34px 18px; border-radius: 36px; }
 }
 
+/* ?debug=stats */
+.stats { position: fixed; right: 10px; top: 10px; z-index: 50; padding: 4px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.55); color: #cfe0c8; font: 11px/1.4 ui-monospace, Menlo, monospace; pointer-events: none; white-space: nowrap; }
 /* floating action menu (actions.ts), on the same glass as the dialogue box */
 .actions { position: absolute; right: calc(clamp(16px, 4vw, 56px) + env(safe-area-inset-right)); top: 50%; z-index: 21; min-width: 210px; padding: 10px; border-radius: 22px;
   background: rgba(8, 10, 14, 0.6); color: #f6f5f0; font: 500 16px var(--sans); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
