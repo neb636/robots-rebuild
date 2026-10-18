@@ -12,7 +12,9 @@ import { rowhouse, poster, graffiti, placeAABB, AABB } from './buildings';
 import { pbrMat, gasLamp, hangingLantern, barrelFire, wreckedCar, drone, stringLights, balustrade, rubble, trashBags, crate, FogLight, flickerUpdate, ironMat } from './props';
 import { skyDome, skyline, SkySettings } from './sky';
 import { Character, CONVERTED, blobShadow } from './character';
-import type { Grade, FogSettings } from './post';
+import type { Grade, FogSettings, Post } from './post';
+import type { Interactable, Dialogue } from './dialogue';
+import type { CamMode } from './settings';
 
 export const TERRACE_Y = 3.2;
 const STAIR = { x0: 3.1, x1: 6.5, zTop: -12, zBot: -3, steps: 16 };
@@ -83,6 +85,22 @@ export const MOODS: Record<string, Mood> = {
   },
 };
 
+/** One cinematic camera move: the camera glides from `from` to `to` while its aim drifts. */
+export interface CineShot { from: THREE.Vector3; to: THREE.Vector3; lookFrom: THREE.Vector3; lookTo: THREE.Vector3 }
+
+/** What an area gets from the shell once the shared actors (hero, weather, fill light) are in it. */
+export interface AttachContext {
+  gl: THREE.WebGLRenderer;
+  post: Post;
+  camera: THREE.PerspectiveCamera;
+  /** the camera fill light that follows the hero */
+  fill: THREE.PointLight;
+  /** the hero's model */
+  hero: THREE.Object3D;
+  /** the dialogue box, for the area's own interactions */
+  dlg: Dialogue;
+}
+
 /** A playable level: the street (outdoors, with moods) or an interior with its own fixed lighting. */
 export interface Built {
   kind: 'street' | 'interior';
@@ -96,8 +114,9 @@ export interface Built {
   wetMats: { m: THREE.MeshStandardMaterial; rough: number; color: THREE.Color }[];
   puddles: THREE.Object3D;
   update: (dt: number, t: number, cam: THREE.Camera, player: THREE.Vector3) => void;
-  /** walkable ground height, or NaN where the hero can't stand */
-  heightAt: (x: number, z: number) => number;
+  /** walkable ground height, or NaN where the hero can't stand. Called unbound (a closure, not a
+   *  method); `nearY` picks between stacked surfaces (a deck over a quay, a stair over a street). */
+  heightAt: (x: number, z: number, nearY?: number) => number;
   spawn: { x: number; z: number; heading: number };
   /** area title card: [name, subtitle] */
   card: [string, string];
@@ -110,6 +129,70 @@ export interface Built {
   normalHidden?: THREE.Object3D[];
   lanternPivots?: THREE.Group[];
   pois?: THREE.Vector3[];
+
+  // ---- optional hooks, so the shell doesn't need to know any one area
+  /** a hero of radius r standing at (x, z) would hit something (default: the AABB colliders) */
+  blocked?: (x: number, z: number, r: number) => boolean;
+  /** fraction (0..1) of the way from `from` to `to` before the view is blocked (1 = clear) */
+  cameraBlock?: (from: THREE.Vector3, to: THREE.Vector3) => number;
+  /** keep the outdoor camera inside the area (moves `pos` in place) */
+  clampCamera?: (pos: THREE.Vector3, hero: THREE.Vector3, mode: CamMode) => void;
+  /** lowest the outdoor follow camera may sit at (x, z) (default: the ground + 0.5) */
+  cameraFloor?: (x: number, z: number) => number;
+  /** camera clip planes (default 0.1 / 1500) */
+  camera?: { near: number; far: number };
+  /** the moon's shadow camera rides `lift` metres up the light from the hero (default 60) */
+  shadow?: { lift: number };
+  /** overrides on the mood's fog for this area (e.g. a big area that should see further) */
+  fog?: Partial<FogSettings>;
+  /** low fog cards (none: no banks) */
+  fogBanks?: { x: number; y: number; z: number; s: number }[];
+  /** rain and ash follow the hero up and down: the band spans [hero.y - below, hero.y + above]
+   *  (default: a fixed band around y = 0) */
+  fxBand?: { below: number; above: number };
+  /** the Cinematic camera's shots, and where the hero waits while they play (none: no Cinematic) */
+  cine?: { shots: CineShot[]; pose: { x: number; z: number; heading: number } };
+  /** named places to start at (`?at=name`) */
+  spots?: Record<string, { x: number; z: number; heading: number }>;
+  /** HUD subtitle */
+  brand?: string;
+  /** things to walk up to and use (outside the prologue) */
+  items?: Interactable[];
+  /** the drone whose searchlight and compliance scan are live right now (default: `drone`) */
+  activeDrone?: () => ReturnType<typeof drone> | undefined;
+  /** the shared actors are in the scene: grab what the area needs from the shell */
+  onAttach?: (ctx: AttachContext) => void;
+  /** a mood was just applied */
+  applyMood?: (m: Mood) => void;
+  /** every frame, right before the post stack renders the scene (extra render passes go here) */
+  beforeRender?: (gl: THREE.WebGLRenderer, cam: THREE.PerspectiveCamera) => void;
+  /** free GPU resources the shell doesn't know about (render targets, array textures) */
+  dispose?: () => void;
+}
+
+// Acorn Lane's camera: cinematic shots ([from, to] camera positions and look targets) and the
+// limits that keep the follow and diorama cameras inside the lane.
+const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const LANE_CINE: CineShot[] = [
+  { from: v3(0.9, 1.0, 3.2), to: v3(0.7, 1.6, 0.6), lookFrom: v3(0.2, 1.5, -8), lookTo: v3(0.2, 1.8, -14) },
+  { from: v3(-0.6, 1.25, -4.3), to: v3(0.0, 1.35, -3.9), lookFrom: v3(0.55, 1.35, -1.5), lookTo: v3(0.6, 1.4, -1.5) },
+  { from: v3(-1.2, 0.7, -2.2), to: v3(0.3, 0.9, -1.9), lookFrom: v3(1.5, 1.2, -4.6), lookTo: v3(1.5, 1.4, -4.6) },
+  { from: v3(-0.6, 1.1, -11.5), to: v3(0.4, 1.3, -13.5), lookFrom: v3(0.4, 1.4, -26), lookTo: v3(0.5, 1.5, -26) },
+  { from: v3(5.6, 4.6, 2), to: v3(5.0, 5.4, -4), lookFrom: v3(-2, 2, -14), lookTo: v3(-1, 6, -17) },
+  { from: v3(4.3, 4.5, -14.6), to: v3(4.6, 4.5, -16.8), lookFrom: v3(6.6, 4.3, -21), lookTo: v3(6.6, 4.4, -21) },
+];
+/** where the hero stands while the lane's cinematic plays */
+const LANE_CINE_POSE = { x: 0.6, z: -1.5, heading: Math.PI };
+const LANE_FOG_BANKS = [{ x: -1, y: 1.2, z: -24, s: 9 }, { x: 1.5, y: 0.9, z: -30, s: 10 }, { x: -2, y: 3.2, z: -40, s: 14 }, { x: 6, y: 4.2, z: -22, s: 8 }, { x: 0, y: 4, z: -52, s: 18 }];
+function laneCamera(pos: THREE.Vector3, hero: THREE.Vector3, mode: CamMode) {
+  if (mode === 'follow') {
+    // keep the camera inside the street
+    pos.x = THREE.MathUtils.clamp(pos.x, -5.4, hero.y > 1.5 ? 7.4 : 6.2);
+    pos.z = Math.min(pos.z, 9.2);
+  } else {
+    // diorama camera: stay in front of the terrace houses and inside the block
+    pos.x = Math.min(pos.x, 11.4); pos.z = Math.min(pos.z, 9.0);
+  }
 }
 
 export function buildScene(quality: 'high' | 'low'): Built {
@@ -414,6 +497,10 @@ export function buildScene(quality: 'high' | 'low'): Built {
     card: ['ACORN LANE', 'Beacon Hill · two years after'],
     music: 'static', ambience: 'wind',
     emberOrigin: fire.emberOrigin,
+    clampCamera: laneCamera,
+    shadow: { lift: 60 },
+    fogBanks: LANE_FOG_BANKS,
+    cine: { shots: LANE_CINE, pose: LANE_CINE_POSE },
     update(dt, t, cam, player) {
       for (const u of updaters) u(dt, t, cam, player);
       lights.forEach((l, i) => flickerUpdate(l, t, i * 3.1));

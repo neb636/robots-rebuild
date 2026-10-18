@@ -143,6 +143,8 @@ export class FogEffect extends Effect {
         }
 
         vec3 col = inputColor.rgb * T + scat + glow * halo + beam;
+        // one NaN or Inf pixel would spread through the bloom and black out the whole frame
+        if (!(all(greaterThanEqual(col, vec3(-6e4))) && all(lessThanEqual(col, vec3(6e4))))) col = vec3(0.0);
         outputColor = vec4(col, inputColor.a);
       }
     `, {

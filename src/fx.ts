@@ -4,6 +4,10 @@ import * as THREE from 'three';
 import { fogTex } from './textures';
 import { rng } from './noise';
 
+// default vertical bands (world y), sized for a street at y = 0
+const ASH_Y0 = -1, ASH_SPAN = 16;
+const RAIN_Y0 = -0.5, RAIN_SPAN = 14;
+
 /** Ash / snow-like flakes drifting down and swirling, wrapped in a box around the focus point. */
 export function ash(count: number) {
   const R = rng(4);
@@ -17,19 +21,20 @@ export function ash(count: number) {
   g.setAttribute('rnd', new THREE.BufferAttribute(rnd, 4));
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
-    uniforms: { t: { value: 0 }, focus: { value: new THREE.Vector3() }, color: { value: new THREE.Color('#b8b0a8') }, opacity: { value: 0.8 }, fall: { value: 0.45 }, size: { value: 1 } },
+    uniforms: { t: { value: 0 }, focus: { value: new THREE.Vector3() }, color: { value: new THREE.Color('#b8b0a8') }, opacity: { value: 0.8 }, fall: { value: 0.45 }, size: { value: 1 }, y0: { value: ASH_Y0 }, span: { value: ASH_SPAN } },
     vertexShader: /* glsl */`
-      attribute vec4 rnd; uniform float t; uniform vec3 focus; uniform float fall; uniform float size;
+      attribute vec4 rnd; uniform float t; uniform vec3 focus; uniform float fall; uniform float size; uniform float y0; uniform float span;
       varying float vA; varying float vSpin;
       void main(){
         vec3 p = position;
         p.y -= t * fall * (0.6 + rnd.x * 0.8);
         p.x += sin(t * (0.3 + rnd.y * 0.5) + rnd.z * 6.28) * 0.9 + t * 0.25;
         p.z += cos(t * (0.25 + rnd.w * 0.4) + rnd.x * 6.28) * 0.7;
-        // wrap into a 40 x 16 x 40 box centred on the focus
+        // wrap into a 40 x span x 40 box centred on the focus, from y0 up (flakes keep their place in
+        // the world as the band moves, they only wrap at its edges)
         p.x = mod(p.x - focus.x + 20.0, 40.0) - 20.0 + focus.x;
         p.z = mod(p.z - focus.z + 20.0, 40.0) - 20.0 + focus.z;
-        p.y = mod(p.y, 16.0) - 1.0;
+        p.y = mod(p.y - y0 + ${ASH_Y0.toFixed(1)}, span) + y0;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
         gl_PointSize = size * (3.0 + rnd.y * 5.0) * (10.0 / -mv.z);
@@ -50,7 +55,12 @@ export function ash(count: number) {
       }`,
   });
   const pts = new THREE.Points(g, mat); pts.frustumCulled = false;
-  return { obj: pts, mat, update(t: number, focus: THREE.Vector3) { mat.uniforms.t.value = t; mat.uniforms.focus.value.copy(focus); } };
+  return {
+    obj: pts, mat,
+    update(t: number, focus: THREE.Vector3) { mat.uniforms.t.value = t; mat.uniforms.focus.value.copy(focus); },
+    /** vertical band [y0, y0 + span] (default: a fixed band from y = -1) */
+    band(y0 = ASH_Y0, span = ASH_SPAN) { mat.uniforms.y0.value = y0; mat.uniforms.span.value = span; },
+  };
 }
 
 /** Embers rising from a fire, flickering and cooling as they climb. */
@@ -106,9 +116,9 @@ export function rain(count: number) {
   g.setAttribute('tip', new THREE.BufferAttribute(end, 1));
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
-    uniforms: { t: { value: 0 }, focus: { value: new THREE.Vector3() }, color: { value: new THREE.Color('#8a96a8') }, opacity: { value: 0.35 } },
+    uniforms: { t: { value: 0 }, focus: { value: new THREE.Vector3() }, color: { value: new THREE.Color('#8a96a8') }, opacity: { value: 0.35 }, y0: { value: RAIN_Y0 }, span: { value: RAIN_SPAN } },
     vertexShader: /* glsl */`
-      attribute float rnd; attribute float tip; uniform float t; uniform vec3 focus; varying float vA;
+      attribute float rnd; attribute float tip; uniform float t; uniform vec3 focus; uniform float y0; uniform float span; varying float vA;
       void main(){
         vec3 p = position;
         float sp = 11.0 + rnd * 5.0;
@@ -116,7 +126,7 @@ export function rain(count: number) {
         p.x -= t * 1.6;
         p.x = mod(p.x - focus.x + 18.0, 36.0) - 18.0 + focus.x;
         p.z = mod(p.z - focus.z + 18.0, 36.0) - 18.0 + focus.z;
-        p.y = mod(p.y, 14.0) - 0.5;
+        p.y = mod(p.y - y0 + ${RAIN_Y0.toFixed(1)}, span) + y0;
         p += vec3(0.05, 0.38, 0.0) * tip;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
@@ -125,7 +135,12 @@ export function rain(count: number) {
     fragmentShader: /* glsl */`uniform vec3 color; uniform float opacity; varying float vA; void main(){ gl_FragColor = vec4(color, vA * opacity); }`,
   });
   const lines = new THREE.LineSegments(g, mat); lines.frustumCulled = false;
-  return { obj: lines, mat, update(t: number, focus: THREE.Vector3) { mat.uniforms.t.value = t; mat.uniforms.focus.value.copy(focus); } };
+  return {
+    obj: lines, mat,
+    update(t: number, focus: THREE.Vector3) { mat.uniforms.t.value = t; mat.uniforms.focus.value.copy(focus); },
+    /** vertical band [y0, y0 + span] (default: a fixed band from y = -0.5) */
+    band(y0 = RAIN_Y0, span = RAIN_SPAN) { mat.uniforms.y0.value = y0; mat.uniforms.span.value = span; },
+  };
 }
 
 /** Low, slow fog banks: big soft cards hugging the ground for layered depth in the far street. */
