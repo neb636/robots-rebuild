@@ -50,10 +50,13 @@ const OLD = new Set(['brickTenement', 'brickCommercial', 'graniteWarehouse', 'ma
 
 export function buildBuildings(d: HarborData, list: Part[], parent: THREE.Object3D, collide: CollisionGrid, skip: (p: Part) => boolean, quality: 'high' | 'low'): Chunk[] {
   const spans = spansByPart(d);
-  const near = new ChunkBuilder(64), far = new ChunkBuilder(256);
+  const near = new ChunkBuilder(128, 'buildings'), far = new ChunkBuilder(256, 'backdrop');
   const wallNear = facadeMaterial(d.h.styles, quality), wallFar = facadeMaterial(d.h.styles, quality, true);
-  const roofMat = pbrMat('tar', '#9a968e'), slateMat = pbrMat('tar', '#4c5056', { normalScale: 1.4 });
-  const corniceMetal = pbrMat('metal', '#3a3430', { metalness: 0.4 }), corniceStone = pbrMat('ashlar', '#c8c0b0');
+  // one material each for roofs (tar and slate) and cornices (stone and painted metal), told apart by
+  // vertex colour, so a tile costs three draws instead of five
+  const roofMat = pbrMat('tar', '#ffffff', { vertexColors: true }), corniceMat = pbrMat('ashlar', '#ffffff', { vertexColors: true, metalness: 0.15 });
+  const TAR = new THREE.Color('#9a968e'), SLATE = new THREE.Color('#4c5056'), STONE = new THREE.Color('#c8c0b0'), PAINTED = new THREE.Color('#3a3430');
+  const paint = (acc: MeshAcc, from: number, c: THREE.Color) => { for (let k = from; k < acc.count; k++) acc.color(c.r, c.g, c.b); };
   for (const p of list) {
     if (skip(p)) {
       // a landmark builds this part, but its footprint still stops the camera (a roof over open ground doesn't)
@@ -110,14 +113,15 @@ export function buildBuildings(d: HarborData, list: Part[], parent: THREE.Object
         if (p.tier <= 1) collide.addSeg(ax, az, bx, bz, p.top);
         // a projecting cornice along the street faces of the older buildings
         if (p.tier <= 1 && ri === 0 && (ef & 2) && OLD.has(p.style) && H > 6 && L > 2 && !p.landmark && !ridge) {
-          const m = p.style === 'masonryOffice' || p.style === 'civic' || p.style === 'graniteWarehouse' ? corniceStone : corniceMetal;
-          const acc = cb.at(m, cx, cz, { cast: true });
+          const stone = p.style === 'masonryOffice' || p.style === 'civic' || p.style === 'graniteWarehouse';
+          const acc = cb.at(corniceMat, cx, cz, { cast: true }), n0 = acc.count;
           ledge(acc, ax, az, bx, bz, nx, nz, p.top - 0.55, p.top, 0.5);
           ledge(acc, ax, az, bx, bz, nx, nz, p.top - 0.85, p.top - 0.55, 0.22);
+          paint(acc, n0, stone ? STONE : PAINTED);
         }
       }
     });
-    if (ridge && rise > 0.05) { pitched(cb.at(slateMat, cx, cz, { cast: true }), p.outer, ridge, roofAt, rise / ridge.half); continue; }
+    if (ridge && rise > 0.05) { const acc = cb.at(roofMat, cx, cz, { cast: true }), n0 = acc.count; pitched(acc, p.outer, ridge, roofAt, rise / ridge.half); paint(acc, n0, SLATE); continue; }
     // flat roof
     const flat: number[] = [], holes: number[] = [];
     for (const [x, z] of p.outer) flat.push(x, z);
@@ -125,7 +129,7 @@ export function buildBuildings(d: HarborData, list: Part[], parent: THREE.Object
     const tri = earcut(flat, holes.length ? holes : undefined, 2);
     const roof = cb.at(roofMat, cx, cz, { cast: true });
     const base = roof.count;
-    for (let k = 0; k < flat.length; k += 2) { roof.v(flat[k], p.top, flat[k + 1], 0, 1, 0); roof.texcoord(flat[k] * 0.25, flat[k + 1] * 0.25); }
+    for (let k = 0; k < flat.length; k += 2) { roof.v(flat[k], p.top, flat[k + 1], 0, 1, 0); roof.texcoord(flat[k] * 0.25, flat[k + 1] * 0.25); roof.color(TAR.r, TAR.g, TAR.b); }
     for (let k = 0; k < tri.length; k += 3) {
       const a = tri[k], b = tri[k + 1], c = tri[k + 2];
       const ax = flat[a * 2], az = flat[a * 2 + 1], bx = flat[b * 2], bz = flat[b * 2 + 1], cx2 = flat[c * 2], cz2 = flat[c * 2 + 1];

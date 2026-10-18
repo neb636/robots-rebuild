@@ -36,7 +36,7 @@ const groundOf = (ctx: LandmarkCtx) => (x: number, z: number) => { const h = ctx
 
 function finish(name: string, b: Batch, extra: THREE.Object3D[] = []): LandmarkResult {
   const group = new THREE.Group(); group.name = 'landmark:' + name;
-  b.flush(group, 16);
+  b.flush(group, 64);
   for (const o of extra) group.add(o);
   group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && !(m as THREE.InstancedMesh).isInstancedMesh) { m.matrixAutoUpdate = false; m.updateMatrix(); } });
   return { group };

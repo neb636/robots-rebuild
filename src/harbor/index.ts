@@ -100,7 +100,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   if (station) root.add(station.group);
 
   progress(0.8, 'Lighting the lamps…'); await nextFrame();
-  const lampChunks = new ChunkBuilder(64);
+  const lampChunks = new ChunkBuilder(128, 'lamps');
   const lamps = buildLamps(d, lampChunks, collide, (x, z) => walk.heightAt(x, z), quality);
   chunks.push(...lampChunks.flush(root));
   root.add(lamps.group);
@@ -116,9 +116,15 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   chunks.push(...street.chunks);
   console.info('harbor streetscape', JSON.stringify(street.counts));
 
+  // name what isn't a chunk or a landmark, so the stats and profiles can tell it apart
+  const label = (o: THREE.Object3D, name: string) => o.traverse((m) => { if ((m as THREE.Mesh).isMesh && !m.name) m.name = name; });
+  label(sky.mesh, 'sky'); label(lamps.group, 'lampHeads'); for (const f of wf.floats) label(f, 'floats'); for (const b of boats) label(b.group, 'boats');
+  for (const o of [cordon.buoys, cordon.lamps, cordon.eyes]) label(o, 'cordonMarks');
+  if (station) label(station.group, 'station');
+
   // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets)
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
-  const streets = new Set(groundChunks);
+  const streets = new Set([...groundChunks, ...street.chunks]);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
   for (const o of [sky.mesh, cordon.buoys, cordon.lamps, cordon.eyes, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
 
@@ -174,14 +180,32 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   ];
 
   // ---------------------------------------------------------------- distance culling
+  // tiles by their bounds; landmarks, water tiles, boats, the station and the street's regional sets
+  // (trees, leaves, cars) likewise (a landmark can be a hundred metres across): all past where the fog has swallowed them
+  // (a landmark's meshes are hidden, never the group: a lamp light inside it must stay in the light count)
+  // how far something carries: the height fog swallows the street by ~250 m, towers poke out of it
+  // further (Low, which has fewer draws to spare, lets things go sooner)
+  for (const b of boats) b.group.position.set(b.x, d.h.waterY, b.z); // (they're placed per frame; bound them where they ride)
+  const lo = quality === 'low', farOf = (top: number) => (lo ? 170 : 250) + Math.max(0, top) * (lo ? 3.5 : 5);
+  const boxed = [...landmarkObjs, ...street.regional, ...water.map((c) => c.mesh), ...boats.map((b) => b.group), ...wf.floats, ...(station ? [station.group] : [])].map((o) => {
+    const box = new THREE.Box3().setFromObject(o), meshes: THREE.Object3D[] = [];
+    o.traverse((m) => { if ((m as THREE.Mesh).isMesh) meshes.push(m); });
+    return { meshes, box, far: o.name === 'water' ? 420 : farOf(box.max.y) };
+  });
   const cull = (cam: THREE.Camera) => {
     const p = cam.position;
     for (const c of chunks) {
-      const far = 300 + Math.max(0, c.reach) * 7;
-      c.mesh.visible = (c.cx - p.x) ** 2 + (c.cz - p.z) ** 2 < far * far;
+      const far = c.far ?? farOf(c.reach), dx = Math.max(Math.abs(c.cx - p.x) - c.half, 0), dz = Math.max(Math.abs(c.cz - p.z) - c.half, 0);
+      c.mesh.visible = dx * dx + dz * dz < far * far;
+    }
+    for (const b of boxed) {
+      const dx = Math.max(b.box.min.x - p.x, 0, p.x - b.box.max.x), dz = Math.max(b.box.min.z - p.z, 0, p.z - b.box.max.z);
+      const on = dx * dx + dz * dz < b.far * b.far;
+      for (const m of b.meshes) m.visible = on;
     }
   };
-  let cullT = 0;
+  // the first frames (drawn behind the loader to compile every shader) see the whole district
+  let cullT = 0.25, warm = 2;
 
   // the Persistence's lantern always gets a halo: a light out on the black water to swim toward
   const beacon: FogLight = { obj: boats[0].light!, color: new THREE.Color('#ffb060'), radius: 0.45, base: 3.2, flicker: 0.15, priority: 0 };
@@ -203,6 +227,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     music: 'static', ambience: 'harbor',
     brand: 'Prologue · The Harbor',
     blocked, cameraBlock: collide.cameraBlock, cameraFloor,
+    normalHidden: street.normalHidden,
     camera: { near: 0.25, far: 2000 },
     shadow: { lift: 250 },
     fxBand: { below: 3, above: 16 },
@@ -223,9 +248,22 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
       if (post) for (const k of fogU) { const v = post.fog.uniforms.get(k)!.value; const w = waterUniforms[k]; if (w.value instanceof THREE.Color) w.value.copy(v); else (w as { value: number }).value = v; }
       // mirror only when some water is in view, and only what's within reach of it
       const fr = frustumOf(cam);
-      const seen = refl && water.some((c) => c.mesh.visible && c.mesh.geometry.boundingBox!.distanceToPoint(cam.position) < 120 && fr.intersectsObject(c.mesh));
+      const seen = refl && (warm-- > 0 || water.some((c) => c.mesh.visible && c.mesh.geometry.boundingBox!.distanceToPoint(cam.position) < 120 && fr.intersectsObject(c.mesh)));
       const hidden: THREE.Object3D[] = [];
-      if (seen) for (const c of chunks) if (c.mesh.visible && (c.cx - cam.position.x) ** 2 + (c.cz - cam.position.z) ** 2 > 260 * 260 && c.reach < 40) { c.mesh.visible = false; hidden.push(c.mesh); }
+      if (seen) {
+        const p = cam.position;
+        // the mirror only needs what stands tall or close: low things far off are lost in its blur and fog
+        for (const c of chunks) {
+          if (!c.mesh.visible || c.reach >= 60) continue;
+          const dx = Math.max(Math.abs(c.cx - p.x) - c.half, 0), dz = Math.max(Math.abs(c.cz - p.z) - c.half, 0), r = c.reach < 25 ? 90 : 150;
+          if (dx * dx + dz * dz > r * r) { c.mesh.visible = false; hidden.push(c.mesh); }
+        }
+        for (const b of boxed) {
+          if (b.box.max.y > 30 || !b.meshes[0]?.visible) continue;
+          const dx = Math.max(b.box.min.x - p.x, 0, p.x - b.box.max.x), dz = Math.max(b.box.min.z - p.z, 0, p.z - b.box.max.z);
+          if (dx * dx + dz * dz > 110 * 110) for (const m of b.meshes) if (m.visible) { m.visible = false; hidden.push(m); }
+        }
+      }
       const drew = seen && refl!.render(gl, scene, cam, water.map((c) => c.mesh));
       for (const o of hidden) o.visible = true;
       if (drew) {

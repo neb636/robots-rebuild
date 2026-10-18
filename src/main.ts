@@ -80,7 +80,11 @@ async function boot() {
     // a big area: compile without blocking, then draw a couple of frames behind the loader so the
     // shadow, normal-pass and reflection variants exist before the first real frame
     await gl.compileAsync(built.scene, app3.camera);
+    // with frustum culling off, so every mesh's variants compile now, not when the camera first turns to it
+    const culled: THREE.Object3D[] = [];
+    built.scene.traverse((o) => { if (o.frustumCulled && (o as THREE.Mesh).isMesh) { o.frustumCulled = false; culled.push(o); } });
     for (let i = 0; i < 2; i++) { app3.frame(1 / 60); await nextFrame(); }
+    for (const o of culled) o.frustumCulled = true;
   } else gl.compile(built.scene, app3.camera);
   loader.classList.add('done');
   setTimeout(() => loader.remove(), 1200);

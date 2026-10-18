@@ -70,7 +70,7 @@ function graffitiTex(text: string, color: string) {
 
 export function buildCordon(d: HarborData, parent: THREE.Object3D, collide: CollisionGrid, heightAt: (x: number, z: number) => number) {
   const R = rng(66);
-  const cb = new ChunkBuilder(64);
+  const cb = new ChunkBuilder(128, 'cordon');
   const body = wallMaterial();
   const eyeMat = new THREE.MeshStandardMaterial({ color: '#000000', emissive: '#ff2a1a', emissiveIntensity: 5 });
   const warnMat = new THREE.MeshStandardMaterial({ map: warningTex(), transparent: true, emissive: '#bfe4ff', emissiveMap: null, emissiveIntensity: 0.0, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });

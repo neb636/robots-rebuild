@@ -74,6 +74,14 @@ function instanced(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE
   return im;
 }
 
+/** split instances into square regions (so each set can be frustum- and distance-culled on its own) */
+const REGION = 256;
+function byRegion<T>(items: T[], at: (t: T) => [number, number]) {
+  const out = new Map<string, T[]>();
+  for (const it of items) { const [x, z] = at(it); const k = `${Math.floor(x / REGION)},${Math.floor(z / REGION)}`; let l = out.get(k); if (!l) out.set(k, (l = [])); l.push(it); }
+  return [...out.values()];
+}
+
 /** building walls and curbs, to turn benches and bins the way the street runs */
 class Segs {
   private grid = new Map<number, number[]>();
@@ -214,18 +222,18 @@ const CARS = [
 function carKit(k: number) {
   const c = CARS[k], g: THREE.BufferGeometry[] = [];
   const by = c.y + c.h / 2, cy = c.y + c.h + c.ch / 2 - 0.05, glass = '#0b0d10';
-  g.push(tint(at(new RoundedBoxGeometry(c.w, c.h, c.l, 3, 0.16), 0, by, 0), '#ffffff'));
-  g.push(tint(at(new RoundedBoxGeometry(c.cw, c.ch, c.cl, 3, 0.18), 0, cy, c.cz), '#ffffff'));
+  g.push(tint(at(new RoundedBoxGeometry(c.w, c.h, c.l, 2, 0.16), 0, by, 0), '#ffffff'));
+  g.push(tint(at(new RoundedBoxGeometry(c.cw, c.ch, c.cl, 2, 0.18), 0, cy, c.cz), '#ffffff'));
   g.push(tint(at(new THREE.PlaneGeometry(c.cl - 0.32, c.ch - 0.16), c.cw / 2 + 0.006, cy, c.cz, 0, Math.PI / 2), glass));
   g.push(tint(at(new THREE.PlaneGeometry(c.cl - 0.32, c.ch - 0.16), -c.cw / 2 - 0.006, cy, c.cz, 0, -Math.PI / 2), glass));
   g.push(tint(at(new THREE.PlaneGeometry(c.cw - 0.22, c.ch - 0.1), 0, cy, c.cz + c.cl / 2 + 0.006, -0.3), glass));
   g.push(tint(at(new THREE.PlaneGeometry(c.cw - 0.22, c.ch - 0.12), 0, cy, c.cz - c.cl / 2 - 0.006, -0.3, Math.PI), glass));
   for (const s of [-1, 1]) {
-    g.push(tint(at(new RoundedBoxGeometry(c.w + 0.04, 0.16, 0.14, 2, 0.05), 0, c.y + 0.12, s * (c.l / 2 + 0.02)), '#262626'));
+    g.push(tint(at(new RoundedBoxGeometry(c.w + 0.04, 0.16, 0.14, 1, 0.05), 0, c.y + 0.12, s * (c.l / 2 + 0.02)), '#262626'));
     for (const x of [-1, 1]) g.push(tint(at(new THREE.PlaneGeometry(0.32, 0.12), x * (c.w / 2 - 0.25), by + 0.1, s * (c.l / 2 + 0.006), 0, s > 0 ? 0 : Math.PI), s > 0 ? '#d8d4c4' : '#6a1410'));
   }
   for (const [x, z, flat] of [[1, 1, 1], [-1, 1, 0], [1, -1, 1], [-1, -1, 0]]) {
-    const w = new THREE.CylinderGeometry(0.33, 0.33, 0.24, 14).rotateZ(Math.PI / 2);
+    const w = new THREE.CylinderGeometry(0.33, 0.33, 0.24, 10).rotateZ(Math.PI / 2);
     if (flat) w.scale(1, 0.76, 1);
     g.push(tint(at(w, x * (c.w / 2 - 0.08), flat ? 0.33 * 0.76 : 0.33, z * (c.l / 2 - 0.85)), '#141414'));
   }
@@ -277,7 +285,7 @@ class WeedPatch {
   private x: number[] = []; private z: number[] = []; private k: number[] = []; private m: number[] = []; private c: number[] = [];
   private mf: Float32Array | null = null; private cf: Float32Array | null = null;
   private cells = new Map<number, number[]>();
-  private meshes: THREE.InstancedMesh[];
+  meshes: THREE.InstancedMesh[];
   private last = new THREE.Vector2(1e9, 1e9);
   private order: [number, number][];
   constructor(parent: THREE.Object3D, private radius: number, crack: number, meadow: number, seed: number) {
@@ -286,7 +294,7 @@ class WeedPatch {
     const caps = [crack / 3, crack / 3, crack / 3, meadow / 2, meadow / 2].map(Math.ceil);
     this.meshes = geos.map((g, i) => {
       const im = new THREE.InstancedMesh(g, getGrassMat(), caps[i]);
-      im.count = 0; im.frustumCulled = false; im.castShadow = false; im.receiveShadow = true;
+      im.count = 0; im.frustumCulled = false; im.castShadow = false; im.receiveShadow = true; im.name = 'weeds';
       im.setColorAt(0, new THREE.Color(1, 1, 1));
       parent.add(im);
       return im;
@@ -334,7 +342,7 @@ class WeedPatch {
 export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide: CollisionGrid, walk: WalkMesh, parts: Part[], quality: 'high' | 'low') {
   const R = rng(1771);
   const group = new THREE.Group(); parent.add(group);
-  const cb = new ChunkBuilder(64);
+  const cb = new ChunkBuilder(128, 'street');
   const cls = d.get<Uint8Array>('gTriClass');
   const classAt = (x: number, z: number) => { const t = walk.triAt(x, z); return t < 0 ? -1 : cls[t]; };
   const ground = (x: number, z: number) => walk.heightAt(x, z);
@@ -342,7 +350,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   const segs = new Segs();
   for (const p of parts) if (p.tier <= 1) for (let e = 0; e < p.outer.length; e++) { const a = p.outer[e], b = p.outer[(e + 1) % p.outer.length]; segs.add(a[0], a[1], b[0], b[1]); }
   for (const line of curbs) for (let i = 0; i < line.length - 1; i++) segs.add(line[i][0], line[i][2], line[i + 1][0], line[i + 1][2]);
-  const weeds = new WeedPatch(group, quality === 'high' ? 42 : 28, quality === 'high' ? 7500 : 3000, quality === 'high' ? 6000 : 2200, 77);
+  const weeds = new WeedPatch(group, quality === 'high' ? 36 : 24, quality === 'high' ? 5500 : 2000, quality === 'high' ? 4000 : 1200, 77);
   const counts: Record<string, number> = {};
   const landmark = landmarkGround(d, parts);
 
@@ -383,11 +391,11 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     plant(p.x, p.z, y, false);
     if (SIDEWALK.has(classAt(p.x, p.z))) {
       const n = segs.nearest(p.x, p.z), ux = n ? n.ux : 1, uz = n ? n.uz : 0, vx = -uz, vz = ux, h = 0.72;
-      const acc = cb.at(dirt, p.x, p.z, { cast: false });
+      const acc = cb.at(dirt, p.x, p.z, { cast: false, far: 140 });
       const c = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => acc.v(p.x + (ux * a + vx * b) * h, y + 0.012, p.z + (uz * a + vz * b) * h, 0, 1, 0));
       [[0, 0], [1, 0], [1, 1], [0, 1]].forEach(([a, b]) => acc.texcoord(a * 1.4, b * 1.4));
       acc.tri(c[0], c[2], c[1]); acc.tri(c[0], c[3], c[2]);
-      const ed = cb.at(edging, p.x, p.z, { cast: false });
+      const ed = cb.at(edging, p.x, p.z, { cast: false, far: 140 });
       for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0]]) {
         const [ax, az] = [[-1, -1], [1, -1], [1, 1], [-1, 1]][a], [bx, bz] = [[-1, -1], [1, -1], [1, 1], [-1, 1]][b];
         const x0 = p.x + (ux * ax + vx * az) * h, z0 = p.z + (uz * ax + vz * az) * h, x1 = p.x + (ux * bx + vx * bz) * h, z1 = p.z + (uz * bx + vz * bz) * h;
@@ -423,9 +431,14 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
       grove++;
     }
   }
-  kits.forEach((kit, i) => instanced(group, kit.bark, getBarkMat(), perKit[i]));
-  leafCards(group, leaves[0], 'leaf', '#56603a', 31);
-  leafCards(group, leaves[1], 'leaf', '#7a7034', 32);
+  // trees and their leaves in regions: each set culls on its own, instead of the whole district's
+  // canopy drawing in every pass wherever the camera looks
+  const regional: THREE.Object3D[] = [];
+  kits.forEach((kit, i) => { for (const xf of byRegion(perKit[i], (m) => [m.elements[12], m.elements[14]])) { const im = instanced(group, kit.bark, getBarkMat(), xf); if (im) { im.name = 'bark'; regional.push(im); } } });
+  leaves.forEach((set, i) => byRegion(set, (c) => [c.x, c.z]).forEach((cards, j) => {
+    const im = leafCards(group, cards, 'leaf', i ? '#7a7034' : '#56603a', 31 + i + j * 7);
+    if (im) { im.frustumCulled = true; im.computeBoundingSphere(); im.name = 'leaves'; regional.push(im); }
+  }));
   counts.trees = perKit.reduce((a, l) => a + l.length, 0);
 
   /** turn something to face away from the nearest wall or curb (its back to it), else anyhow */
@@ -549,7 +562,13 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     if (fits(x, z, yaw, k)) { leave(x, z, yaw, k); left++; }
   }
   const carMat = pbrMat('metal', '#ffffff', { vertexColors: true, metalness: 0.4 });
-  CARS.forEach((_, k) => instanced(group, carKit(k), carMat, carXf[k], carCol[k]));
+  CARS.forEach((_, k) => {
+    const geo = carKit(k), idx = carXf[k].map((_, i) => i);
+    for (const ids of byRegion(idx, (i) => [carXf[k][i].elements[12], carXf[k][i].elements[14]])) {
+      const im = instanced(group, geo, carMat, ids.map((i) => carXf[k][i]), ids.map((i) => carCol[k][i]));
+      if (im) { im.name = 'cars'; regional.push(im); }
+    }
+  });
   counts.cars = parked.length;
 
   // ---- weeds: in the gutters, along the curb tops, in the lawns nobody mows and the cracked lots
@@ -586,7 +605,9 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   const chunks: Chunk[] = cb.flush(group);
   const k = new THREE.Color();
   return {
-    group, chunks, counts,
+    group, chunks, counts, regional,
+    /** what the normal pass (SSAO) can skip: alpha-cut cards it would draw as solid squares */
+    normalHidden: [...regional.filter((o) => o.name === 'leaves'), ...weeds.meshes],
     /** where things ended up (for tests and screenshots) */
     debug: { cars: parked, trees: perKit.flatMap((l) => l.map((m) => [m.elements[12], m.elements[14]])), signals: poles.map((m) => [m.elements[12], m.elements[14]]) },
     update(t: number, hero: THREE.Vector3) {

@@ -9,7 +9,7 @@ const SEABED = -9;
 
 export function buildWaterfront(d: HarborData, parent: THREE.Object3D, quality: 'high' | 'low') {
   const W = d.h.waterY;
-  const cb = new ChunkBuilder(64);
+  const cb = new ChunkBuilder(128, 'waterfront');
   const granite = new THREE.MeshStandardMaterial({ color: '#7e7a72', roughness: 0.85 });
   // the tide's marks: dark and weedy below the high-water line, slick just above the water
   granite.onBeforeCompile = (sh) => {
