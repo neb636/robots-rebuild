@@ -25,6 +25,7 @@ import { PlanarReflection, REFLECT_LAYER } from './water/reflection';
 import { swell, swellSlope } from './water/waves';
 import type { Post } from '../post';
 import { flickerUpdate, type FogLight } from '../props';
+import { audio } from '../audio';
 
 /** What the harbor offers beyond the shell's Built (for the swim, the boat, tests). */
 export interface HarborHooks {
@@ -210,6 +211,37 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   // the first frames (drawn behind the loader to compile every shader) see the whole district
   let cullT = 0.25, warm = 2;
 
+  // ---------------------------------------------------------------- sound: how near the hero is to each source
+  const wallSegs: [number, number, number, number][] = d.h.cordon.gaps.flatMap((g) => g.pts.slice(1).map((b, i) => [g.pts[i][0], g.pts[i][1], b[0], b[1]] as [number, number, number, number]));
+  const buoyPts = cordon.buoyPts, right = new THREE.Vector3();
+  const near01 = (dist: number, full: number, none: number) => 1 - smoothstep(full, none, dist);
+  // the shore field measures out from the land: from the hero's side, look outward in rings for water
+  const toWater = (x: number, z: number) => {
+    if (shore.distAt(x, z) > 0.3) return 0;
+    for (const r of [2, 4, 7, 11, 16, 23, 32]) for (const [cx, cz] of r8) if (shore.distAt(x + cx * r, z + cz * r) > 0.3) return r;
+    return 99;
+  };
+  const soundField = (dt: number, cam: THREE.Camera, p: THREE.Vector3) => {
+    right.setFromMatrixColumn(cam.matrixWorld, 0);
+    let wd = Infinity, wx = 0, wz = 0;
+    for (const [ax, az, bx, bz] of wallSegs) {
+      const ex = bx - ax, ez = bz - az, l2 = ex * ex + ez * ez, t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - ax) * ex + (p.z - az) * ez) / l2)) : 0;
+      const qx = ax + ex * t, qz = az + ez * t, dd = (qx - p.x) ** 2 + (qz - p.z) ** 2;
+      if (dd < wd) { wd = dd; wx = qx; wz = qz; }
+    }
+    wd = Math.sqrt(wd);
+    const side = (x: number, z: number, dist: number) => (dist > 0.01 ? ((x - p.x) * right.x + (z - p.z) * right.z) / dist : 0);
+    const dr = cordon.drones.reduce((m, g) => Math.min(m, g.position.distanceTo(p)), Infinity);
+    const dg = cordon.drones.find((g) => g.position.distanceTo(p) === dr);
+    const bd = Math.sqrt(buoyPts.reduce((m, [x, z]) => Math.min(m, (x - p.x) ** 2 + (z - p.z) ** 2), Infinity));
+    const bo = boats.reduce((m, b) => Math.min(m, Math.hypot(b.x - p.x, b.z - p.z)), Infinity);
+    audio.harbor({
+      dt, shore: near01(toWater(p.x, p.z), 2, 30), wall: near01(wd, 3, 45), wallPan: side(wx, wz, wd),
+      drone: near01(dr, 6, 50), dronePan: dg ? side(dg.position.x, dg.position.z, Math.hypot(dg.position.x - p.x, dg.position.z - p.z)) : 0,
+      buoy: near01(bd, 25, 260), boat: near01(bo, 5, 40),
+    });
+  };
+
   // the Persistence's lantern always gets a halo: a light out on the black water to swim toward
   const beacon: FogLight = { obj: boats[0].light!, color: new THREE.Color('#ffb060'), radius: 0.45, base: 3.2, flicker: 0.15, priority: 0 };
   let post: Post | null = null;
@@ -310,6 +342,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
       });
       cordon.buoys.instanceMatrix.needsUpdate = true; cordon.lamps.instanceMatrix.needsUpdate = true;
       cordon.update(t, dt, player);
+      soundField(dt, cam, player);
       tower.update(t);
       // the cordon buoys blink together
       (cordon.lamps.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(t * 2.2) > 0.4 ? 7 : 0.6;

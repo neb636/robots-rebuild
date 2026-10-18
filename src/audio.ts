@@ -226,6 +226,10 @@ const TALK: Record<string, Talk> = {
   tv: { wave: 'square', hz: 220, spread: 0, dur: 0.07, vol: 0.17, filter: 2400, buzz: 48 },
 };
 
+/** how close the hero is to each of the harbor's sound sources (0 far .. 1 on top of it), and which
+ *  side the wall and the drone are on (-1 left .. 1 right) */
+export interface HarborField { dt: number; shore: number; wall: number; wallPan: number; drone: number; dronePan: number; buoy: number; boat: number }
+
 // ---------------------------------------------------------------- engine
 class AudioEngine {
   ctx!: AudioContext;
@@ -250,6 +254,7 @@ class AudioEngine {
   private songOnce = false;
   private songT0 = 0;
   private ambNodes: { stop: () => void } | null = null;
+  private field: ((l: HarborField) => void) | null = null;
   private ambName: string | null = null;
   private clips = new Map<string, Promise<AudioBuffer | null>>();
   private voiceSrc: { src: AudioBufferSourceNode; g: GainNode } | null = null;
@@ -653,6 +658,7 @@ class AudioEngine {
     if (!this.ready || name === this.ambName) return;
     if (this.ambNodes) { this.ambNodes.stop(); this.ambNodes = null; }
     this.ambName = name;
+    this.field = null;
     if (!name) return;
     const c = this.ctx;
     const g = c.createGain(); g.gain.setValueAtTime(0, c.currentTime); g.gain.linearRampToValueAtTime(1, c.currentTime + 2);
@@ -673,6 +679,7 @@ class AudioEngine {
         const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400;
         const wv = c.createGain(); wv.gain.value = 0.15; src().connect(lp).connect(wv).connect(g); lfo(0.12, 0.13, wv.gain);
         timer = window.setInterval(() => { if (Math.random() < 0.15) this.sfx('foghorn'); }, 6000);
+        this.field = this.harborField(g, src, lfo, nodes);
       }
     } else if (name === 'tunnel') {
       const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 120;
@@ -700,6 +707,87 @@ class AudioEngine {
         setTimeout(() => { nodes.forEach((n) => { try { n.stop(); } catch { /* */ } }); g.disconnect(); }, 1800);
       },
     };
+  }
+
+  /** the harbor's positional beds, driven every frame by `harbor(levels)` */
+  harbor(l: HarborField) { this.field?.(l); }
+
+  /**
+   * Water lapping at the quays (louder the nearer the edge), the cordon's hum and its drones' whine
+   * (panned to their side), a bell buoy tolling out on the line, and rigging creaking and halyards
+   * ticking against masts near the boats.
+   */
+  private harborField(out: GainNode, src: () => AudioBufferSourceNode, lfo: (f: number, d: number, p: AudioParam) => void, nodes: AudioScheduledSourceNode[]) {
+    const c = this.ctx;
+    const gain = (v = 0) => { const g = c.createGain(); g.gain.value = v; return g; };
+    const pan = () => c.createStereoPanner();
+    // lapping: band-limited noise, its level swelling and falling irregularly
+    const lapBp = c.createBiquadFilter(); lapBp.type = 'bandpass'; lapBp.frequency.value = 520; lapBp.Q.value = 0.8;
+    const lapLp = c.createBiquadFilter(); lapLp.type = 'lowpass'; lapLp.frequency.value = 1300;
+    const lapMod = gain(0.5), lapG = gain();
+    src().connect(lapBp).connect(lapLp).connect(lapMod).connect(lapG).connect(out);
+    lfo(0.23, 0.25, lapMod.gain); lfo(0.41, 0.2, lapMod.gain);
+    // the hum: two detuned saws under a low lowpass, a thin whine above
+    const humLp = c.createBiquadFilter(); humLp.type = 'lowpass'; humLp.frequency.value = 240;
+    const humG = gain(), whineG = gain(), humPan = pan();
+    for (const f of [55, 55.6]) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(humLp); o.start(); nodes.push(o); }
+    const whine = c.createOscillator(); whine.frequency.value = 3150; whine.connect(whineG); whine.start(); nodes.push(whine);
+    humLp.connect(humG).connect(humPan); whineG.connect(humPan); humPan.connect(out);
+    lfo(0.07, 0.15, humLp.frequency);
+    // the drones: rotor buzz and a breathy wash
+    const drG = gain(), drPan = pan(), drBp = c.createBiquadFilter(); drBp.type = 'bandpass'; drBp.frequency.value = 900; drBp.Q.value = 1.4;
+    const buzz = c.createOscillator(); buzz.type = 'sawtooth'; buzz.frequency.value = 168; buzz.start(); nodes.push(buzz);
+    const buzzLp = c.createBiquadFilter(); buzzLp.type = 'lowpass'; buzzLp.frequency.value = 700;
+    const buzzG = gain(0.35); buzz.connect(buzzLp).connect(buzzG).connect(drG);
+    src().connect(drBp).connect(drG); drG.connect(drPan).connect(out);
+    lfo(5.5, 6, buzz.frequency);
+    const T = 0.25; // a quarter-second glide, so levels follow the hero without zipper noise
+    return (l: HarborField) => {
+      const now = c.currentTime;
+      lapG.gain.setTargetAtTime(0.03 + l.shore * 0.3, now, T);
+      humG.gain.setTargetAtTime(l.wall * 0.11, now, T); whineG.gain.setTargetAtTime(l.wall * l.wall * 0.004, now, T);
+      humPan.pan.setTargetAtTime(l.wallPan * 0.8, now, T);
+      drG.gain.setTargetAtTime(l.drone * 0.07, now, T); drPan.pan.setTargetAtTime(l.dronePan * 0.9, now, T);
+      // one-off sounds, as often as their sources are near
+      if (Math.random() < l.dt * l.shore * 0.9) this.harborHit(out, 'lap', 0.5 + l.shore * 0.5);
+      if (Math.random() < l.dt * (0.04 + l.buoy * 0.12)) this.harborHit(out, 'bell', 0.25 + l.buoy * 0.75);
+      if (Math.random() < l.dt * l.boat * 0.3) this.harborHit(out, 'creak', l.boat);
+      if (Math.random() < l.dt * l.boat * 0.5) this.harborHit(out, 'tink', l.boat);
+    };
+  }
+
+  private harborHit(out: GainNode, kind: 'lap' | 'bell' | 'creak' | 'tink', vol: number) {
+    const c = this.ctx, t = c.currentTime, g = c.createGain(), p = c.createStereoPanner();
+    p.pan.value = (Math.random() - 0.5) * 1.2;
+    g.connect(p).connect(out);
+    const env = (peak: number, a: number, dec: number) => { g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak * vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + dec); };
+    if (kind === 'lap') {
+      // a wave slapping stone: a burst of noise, its band sliding down
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf; s.start(t, Math.random()); s.stop(t + 0.8);
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1; bp.frequency.setValueAtTime(900, t); bp.frequency.exponentialRampToValueAtTime(260, t + 0.6);
+      s.connect(bp).connect(g); env(0.16, 0.06, 0.6);
+    } else if (kind === 'bell') {
+      // a bell buoy: inharmonic partials, long ring, mostly reverb
+      const f = 410 + Math.random() * 30;
+      for (const [k, a] of [[1, 0.5], [2.76, 0.3], [5.4, 0.15], [8.93, 0.07]]) {
+        const o = c.createOscillator(); o.frequency.value = f * k; const og = c.createGain(); og.gain.value = a;
+        o.connect(og).connect(g); o.start(t); o.stop(t + 4.6);
+      }
+      g.connect(this.reverbSend); env(0.05, 0.004, 4.4);
+    } else if (kind === 'creak') {
+      // rigging and fenders working: a slow, grainy groan
+      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(95 + Math.random() * 30, t); o.frequency.linearRampToValueAtTime(70 + Math.random() * 20, t + 0.7);
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 5;
+      const grain = c.createOscillator(); grain.type = 'square'; grain.frequency.value = 22 + Math.random() * 10;
+      const gg = c.createGain(); gg.gain.value = 0.5; grain.connect(gg.gain);
+      o.connect(bp).connect(gg).connect(g); o.start(t); o.stop(t + 0.9); grain.start(t); grain.stop(t + 0.9);
+      env(0.06, 0.15, 0.7);
+    } else {
+      // a halyard ticking against an aluminium mast
+      for (const f of [2350, 3720]) { const o = c.createOscillator(); o.frequency.value = f * (0.97 + Math.random() * 0.06); o.connect(g); o.start(t); o.stop(t + 0.3); }
+      env(0.02, 0.002, 0.25);
+    }
+    setTimeout(() => { try { g.disconnect(); p.disconnect(); } catch { /* gone */ } }, 6000);
   }
 
   // ------------------------------------------------ sfx
