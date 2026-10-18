@@ -20,6 +20,29 @@ const SIDEWALK = new Set([4, 5, 6, 7, 8]);
 const ROAD = new Set([0, 2]);
 const UP = new THREE.Vector3(0, 1, 0);
 
+/** the landmarks' ground: their outlines and every part they build (the canopies, the carousel's ring),
+ *  where nothing grows, stands or parks; `inside(x, z, m)` is true within m metres of one too */
+function landmarkGround(d: HarborData, parts: Part[]) {
+  const rings = [...d.h.landmarks.flatMap((l) => l.outline), ...parts.filter((p) => p.landmark).map((p) => p.outer)].map((r) => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of r) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
+    return { r, x0, z0, x1, z1 };
+  });
+  return (x: number, z: number, m = 0) => rings.some(({ r, x0, z0, x1, z1 }) => {
+    if (x < x0 - m || x > x1 + m || z < z0 - m || z > z1 + m) return false;
+    let c = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const [xi, zi] = r[i], [xj, zj] = r[j];
+      if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c;
+      if (m > 0) {
+        const ex = xi - xj, ez = zi - zj, l2 = ex * ex + ez * ez, t = l2 > 0 ? Math.max(0, Math.min(1, ((x - xj) * ex + (z - zj) * ez) / l2)) : 0;
+        if ((xj + ex * t - x) ** 2 + (zj + ez * t - z) ** 2 < m * m) return true;
+      }
+    }
+    return c;
+  });
+}
+
 /** non-indexed, with a flat vertex colour (multiplied by the instance's colour where there is one) */
 function tint(g: THREE.BufferGeometry, color: string) {
   const n = g.index ? g.toNonIndexed() : g;
@@ -314,6 +337,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   for (const line of curbs) for (let i = 0; i < line.length - 1; i++) segs.add(line[i][0], line[i][2], line[i + 1][0], line[i + 1][2]);
   const weeds = new WeedPatch(group, quality === 'high' ? 42 : 28, quality === 'high' ? 7500 : 3000, quality === 'high' ? 6000 : 2200, 77);
   const counts: Record<string, number> = {};
+  const landmark = landmarkGround(d, parts);
 
   // ---- trees: OSM's, in their pits where they stand in the sidewalk; then, since OSM maps only some of
   // the parks' trees, a sparse grove on the lawns wherever none is mapped
@@ -348,7 +372,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   };
   for (const p of d.h.furniture.tree) {
     const y = ground(p.x, p.z);
-    if (Number.isNaN(y) || collide.blocked(p.x, p.z, 0.3)) continue;
+    if (Number.isNaN(y) || collide.blocked(p.x, p.z, 0.3) || landmark(p.x, p.z)) continue;
     plant(p.x, p.z, y, false);
     if (SIDEWALK.has(classAt(p.x, p.z))) {
       const n = segs.nearest(p.x, p.z), ux = n ? n.ux : 1, uz = n ? n.uz : 0, vx = -uz, vz = ux, h = 0.72;
@@ -385,7 +409,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
       const x = gv[a] + (gv[b] - gv[a]) * u + (gv[e] - gv[a]) * w, z = gv[a + 2] + (gv[b + 2] - gv[a + 2]) * u + (gv[e + 2] - gv[a + 2]) * w;
       // well inside the lawn (not over a path), clear of other trunks and anything solid
       if ([[2.6, 0], [-2.6, 0], [0, 2.6], [0, -2.6]].some(([dx, dz]) => classAt(x + dx, z + dz) !== 9)) continue;
-      if (nearTrunk(x, z, 10.5) || collide.blocked(x, z, 0.8)) continue;
+      if (nearTrunk(x, z, 10.5) || collide.blocked(x, z, 0.8) || landmark(x, z, 2)) continue;
       const y = ground(x, z);
       if (Number.isNaN(y)) continue;
       plant(x, z, y, true);
@@ -413,7 +437,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     // pull a bench that the data puts against a wall out to where it can stand
     if (n && n.d < 0.45) { x = n.px + ((x - n.px) / n.d) * 0.45; z = n.pz + ((z - n.pz) / n.d) * 0.45; }
     const y = ground(x, z);
-    if (Number.isNaN(y) || collide.blocked(x, z, 0.3)) continue;
+    if (Number.isNaN(y) || collide.blocked(x, z, 0.3) || landmark(x, z)) continue;
     (R() < 0.25 ? bB : bA).push(xform(x, y, z, yaw));
     const ux = Math.cos(yaw), uz = -Math.sin(yaw);
     collide.addSeg(x - ux * 0.9, z - uz * 0.9, x + ux * 0.9, z + uz * 0.9, y + 0.8);
@@ -428,7 +452,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     const out: THREE.Matrix4[] = [];
     for (const p of pts) {
       const y = ground(p.x, p.z);
-      if (Number.isNaN(y) || collide.blocked(p.x, p.z, r)) continue;
+      if (Number.isNaN(y) || collide.blocked(p.x, p.z, r) || landmark(p.x, p.z)) continue;
       // a bin's front looks at the street: away from the wall, or the curb behind it
       const yaw = turn ? facing(p.x, p.z, 5).yaw : R() * Math.PI * 2;
       out.push(xform(p.x, y, p.z, yaw));
@@ -482,6 +506,8 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     const { l, w } = CARS[k], ux = Math.sin(yaw), uz = Math.cos(yaw), vx = Math.cos(yaw), vz = -Math.sin(yaw);
     for (const [a, b] of [[0, 0], [1, 1], [1, -1], [-1, 1], [-1, -1], [0.5, 0], [-0.5, 0]]) if (!ROAD.has(classAt(x + (ux * a * l) / 2 + (vx * b * w) / 2, z + (uz * a * l) / 2 + (vz * b * w) / 2))) return false;
     if (collide.blocked(x, z, w / 2) || collide.blocked(x + (ux * l) / 3, z + (uz * l) / 3, w / 2) || collide.blocked(x - (ux * l) / 3, z - (uz * l) / 3, w / 2)) return false;
+    // not nosed up against a landmark (the market canopies' glass, the aquarium's plaza)
+    if (landmark(x, z, w / 2 + 1.2) || landmark(x + (ux * l) / 2, z + (uz * l) / 2, 1.2) || landmark(x - (ux * l) / 2, z - (uz * l) / 2, 1.2)) return false;
     return !parked.some(([qx, qz]) => (qx - x) ** 2 + (qz - z) ** 2 < 6.2 ** 2);
   };
   const leave = (x: number, z: number, yaw: number, k: number) => {
@@ -543,6 +569,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
       if (u + w > 1) { u = 1 - u; w = 1 - w; }
       const x = gv[a] + (gv[b] - gv[a]) * u + (gv[e] - gv[a]) * w, z = gv[a + 2] + (gv[b + 2] - gv[a + 2]) * u + (gv[e + 2] - gv[a + 2]) * w;
       const y = gv[a + 1] + (gv[b + 1] - gv[a + 1]) * u + (gv[e + 1] - gv[a + 1]) * w;
+      if (landmark(x, z)) continue;
       if (c === 9) weeds.add(x, y, z, 1 + R() * 0.55, R, WeedPatch.MEADOW);
       else weeds.add(x, y, z, 0.7 + R() * 0.6, R);
     }

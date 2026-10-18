@@ -9,13 +9,14 @@ import type { CollisionGrid } from './collide';
 import { facadeMaterial } from './facade';
 import { pbrMat } from '../props';
 
-export interface Part { i: number; outer: number[][]; holes: number[][][]; base: number; top: number; style: string; styleId: number; tier: number; seed: number; landmark: string | null; edges: number[][] }
+export interface Part { i: number; outer: number[][]; holes: number[][][]; base: number; top: number; style: string; styleId: number; tier: number; seed: number; landmark: string | null; edges: number[][]; /** a roof over open ground: walkable underneath */ overhead: boolean }
 
 /** Unpack the baked parts. */
 export function parts(d: HarborData): Part[] {
   const vert = d.get('bVert'), ring = d.get<Uint32Array>('bRing'), part = d.get<Uint32Array>('bPart');
   const base = d.get('bBase'), top = d.get('bTop'), style = d.get<Uint8Array>('bStyle'), tier = d.get<Uint8Array>('bTier'), seed = d.get<Uint32Array>('bSeed'), lm = d.get<Uint8Array>('bLandmark');
   const edge = d.get<Uint8Array>('bEdge');
+  const flag = d.h.blobs.bFlag ? d.get<Uint8Array>('bFlag') : null;
   const ringPts = (r: number) => { const out: number[][] = []; for (let k = 0; k < ring[r * 2 + 1]; k++) { const o = (ring[r * 2] + k) * 2; out.push([vert[o], vert[o + 1]]); } return out; };
   const ringFlags = (r: number) => Array.from(edge.subarray(ring[r * 2], ring[r * 2] + ring[r * 2 + 1]));
   const out: Part[] = [];
@@ -25,6 +26,7 @@ export function parts(d: HarborData): Part[] {
       i, outer: ringPts(r0), holes: Array.from({ length: n - 1 }, (_, k) => ringPts(r0 + 1 + k)), base: base[i], top: top[i],
       style: d.h.styles[style[i]], styleId: style[i], tier: tier[i], seed: seed[i], landmark: lm[i] ? d.h.landmarks[lm[i] - 1].key : null,
       edges: Array.from({ length: n }, (_, k) => ringFlags(r0 + k)),
+      overhead: !!flag && (flag[i] & 1) === 1,
     });
   }
   return out;
@@ -54,8 +56,8 @@ export function buildBuildings(d: HarborData, list: Part[], parent: THREE.Object
   const corniceMetal = pbrMat('metal', '#3a3430', { metalness: 0.4 }), corniceStone = pbrMat('ashlar', '#c8c0b0');
   for (const p of list) {
     if (skip(p)) {
-      // a landmark builds this part, but its footprint still stops the camera
-      if (p.tier <= 1) for (const r of [p.outer, ...p.holes]) for (let e = 0; e < r.length; e++) { const a = r[e], b = r[(e + 1) % r.length]; collide.addSeg(a[0], a[1], b[0], b[1], p.top); }
+      // a landmark builds this part, but its footprint still stops the camera (a roof over open ground doesn't)
+      if (p.tier <= 1 && !p.overhead) for (const r of [p.outer, ...p.holes]) for (let e = 0; e < r.length; e++) { const a = r[e], b = r[(e + 1) % r.length]; collide.addSeg(a[0], a[1], b[0], b[1], p.top); }
       continue;
     }
     const cb = p.tier <= 1 ? near : far;

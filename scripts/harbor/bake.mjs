@@ -107,7 +107,10 @@ log(`  ${terr.nx}x${terr.nz} @ ${TERRAIN_CELL} m, ${terr.known} land samples`);
 // ------------------------------------------------------------------ buildings
 log('buildings');
 const osmById = new Map(osm.polys.map((p) => [p.id, p]));
-const landmarks = Object.entries(landmarkDefs).filter(([k]) => !k.startsWith('_')).map(([key, d]) => ({ key, name: d.name, rings: d.osm.map((id) => osmById.get(id)?.outer).filter(Boolean) }));
+const landmarks = Object.entries(landmarkDefs).filter(([k]) => !k.startsWith('_')).map(([key, d]) => {
+  const rings = (ids) => (ids ?? []).map((id) => osmById.get(id)?.outer ?? log(`  warning: landmark ${key}: ${id} isn't in the snapshot`)).filter(Boolean);
+  return { key, name: d.name, rings: rings(d.osm), extra: rings(d.extra), overhead: rings(d.overhead), near: d.near ?? 0 };
+});
 for (const lm of landmarks) if (!lm.rings.length) log(`  warning: landmark ${lm.key} has no OSM outline in the snapshot`);
 const parts = buildParts({ features: bpda, farFeatures: bpdaFar, osm, terrainAt: tAt, play, edgeZone, landmarks, window });
 const tierCount = TIERS.map((_, i) => parts.filter((p) => p.tier === i).length);
@@ -117,7 +120,8 @@ log(`  ${parts.length} parts: ${TIERS.map((t, i) => `${t} ${tierCount[i]}`).join
   const d = parts.filter((p) => p.tier <= 1 && p.props.GRND_ELEV_2010 > 0).map((p) => p.props.GRND_ELEV_2010 * 0.3048 - DATUM - tAt(p.cx, p.cz)).sort((a, b) => a - b);
   if (d.length) log(`  BPDA ground minus terrain: median ${d[d.length >> 1].toFixed(2)} m (p10 ${d[Math.floor(d.length * 0.1)].toFixed(2)}, p90 ${d[Math.floor(d.length * 0.9)].toFixed(2)})`);
 }
-const footprints = G.union(G.polysToPaths(parts.filter((p) => p.tier <= 2).map((p) => ({ outer: p.outer, holes: p.holes }))));
+// (a roof over open ground isn't a footprint: the ground runs on under it)
+const footprints = G.union(G.polysToPaths(parts.filter((p) => p.tier <= 2 && !p.overhead).map((p) => ({ outer: p.outer, holes: p.holes }))));
 log(`  footprints: ${footprints.length} paths`);
 
 // ------------------------------------------------------------------ ground
@@ -205,6 +209,8 @@ const bw = new BlobWriter();
   bw.add('bSeed', Uint32Array.from(parts, (p) => p.seed));
   const lmKeys = landmarks.map((l) => l.key);
   bw.add('bLandmark', Uint8Array.from(parts, (p) => (p.landmark ? lmKeys.indexOf(p.landmark) + 1 : 0)));
+  // per part: 1 = a roof over open ground (walkable underneath)
+  bw.add('bFlag', Uint8Array.from(parts, (p) => (p.overhead ? 1 : 0)));
   // one byte per ring vertex: flags for the edge that starts there (2 = faces the street, 4 = the water)
   bw.add('bEdge', Uint8Array.from(parts.flatMap((p) => (p.edgeFlags ?? [p.outer, ...p.holes].map((r) => r.map(() => 0))).flat())));
   const spans = [];
