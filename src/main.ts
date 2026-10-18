@@ -609,8 +609,11 @@ class App {
   frame(dt: number) {
     this.t += dt;
     wind.value += dt;
-    const run = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || Math.hypot(this.stick.x, this.stick.y) > 0.95;
-    const mv0 = this.readMove();
+    let mv0 = this.readMove();
+    // an area's autopilot steers in world space (at a run): turn it into stick input in the camera's frame
+    const auto = mv0.lengthSq() < 0.001 ? this.built.steer?.(this.pos, this.t) : null;
+    if (auto) mv0 = new THREE.Vector2(auto.x * Math.cos(this.yaw) - auto.z * Math.sin(this.yaw), -auto.x * Math.sin(this.yaw) - auto.z * Math.cos(this.yaw));
+    const run = !!auto || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || Math.hypot(this.stick.x, this.stick.y) > 0.95;
     const mv = (state.cam === 'cinematic' && !this.interior) || this.frozen ? new THREE.Vector2() : mv0;
     const heightAt = this.built.heightAt;
     let speed = 0;

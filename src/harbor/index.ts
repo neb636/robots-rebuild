@@ -9,7 +9,8 @@ import { CollisionGrid } from './collide';
 import { buildGround } from './ground';
 import { buildBuildings, parts, type Part } from './buildings';
 import { LANDMARKS } from './landmarks';
-import { buildWaterfront } from './waterfront';
+import { buildWaterfront, buildLadders, type Ladder } from './waterfront';
+import { debugMap, autopilot } from './debug';
 import { buildCordon } from './cordon';
 import { ChunkBuilder, type Chunk } from './chunks';
 import { buildLamps } from './lights';
@@ -39,6 +40,8 @@ export interface HarborHooks {
   escapeBoat: THREE.Object3D;
   /** open water inside the cordon's buoy line (where a swimmer may go) */
   inSwim(x: number, z: number): boolean;
+  /** the iron ladders up the quay faces: the ways out of the water */
+  ladders: Ladder[];
 }
 
 /** the texture sets this area uses (generated behind the loader before the build) */
@@ -173,6 +176,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const spots = Object.fromEntries(Object.entries(d.h.spots).map(([k, sp]) => { const [x, z] = nearestWalkable(sp.x, sp.z); return [k, { x, z, heading: sp.heading }]; }));
   const spawn = spots[d.h.spawn];
   const s = (n: string, dy: number, ax = 0, az = 0) => new THREE.Vector3(spots[n].x + ax, (heightAt(spots[n].x, spots[n].z) || 0) + dy, spots[n].z + az);
+  const at = (x: number, dy: number, z: number) => { const h = heightAt(x, z); return new THREE.Vector3(x, (Number.isNaN(h) ? d.terrainAt(x, z) : h) + dy, z); };
   const shot = (from: THREE.Vector3, to: THREE.Vector3, lookFrom: THREE.Vector3, lookTo: THREE.Vector3): CineShot => ({ from, to, lookFrom, lookTo });
   const cine: CineShot[] = [
     shot(s('state', 1.6, 2, -6), s('state', 2.2, 18, -6), s('customhouse', 12), s('customhouse', 30)),
@@ -181,6 +185,18 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     shot(s('longwharf', 2.5, -60, 18), s('longwharf', 2.5, -20, 16), s('longwharf', 2, 80, -10), s('longwharf', 2, 120, -14)),
     shot(s('aquarium', 6, -40, -40), s('aquarium', 9, 0, -60), s('aquarium', 2, 40, 30), s('aquarium', 2, 60, 20)),
     shot(s('columbus', 3, -20, 20), s('columbus', 4, 10, 30), s('longwharf', 6, 0, 0), s('longwharf', 6, 40, 0)),
+    // the spire across the water from the end of Long Wharf, the buoy line between
+    shot(at(560, 3, -30), at(562, 4.5, -48), at(1150, 140, -620), at(1150, 165, -620)),
+    // the Custom House tower, tilting up from India Street
+    shot(at(10, 2, 75), at(13, 2.2, 71), at(35, 30, 105), at(35, 80, 105)),
+    // Rowes Wharf's arch from Atlantic Avenue
+    shot(at(262, 2, 360), at(268, 2.5, 372), at(305, 9, 392), at(305, 11, 392)),
+    // the Holocaust Memorial, walking up through the towers
+    shot(at(-282, 1.7, -172), at(-276, 1.8, -158), at(-266, 6, -130), at(-264, 9, -125)),
+    // under the Columbus Park trellis
+    shot(at(136, 1.7, -104), at(140, 1.8, -92), at(146, 2.6, -78), at(156, 2.6, -64)),
+    // the checkpoint where State Street meets the Congress Street wall
+    shot(at(-205, 3, 125), at(-209, 4, 128), at(-226, 6, 142), at(-226, 8, 142)),
   ];
 
   // ---------------------------------------------------------------- distance culling
@@ -247,10 +263,23 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   let post: Post | null = null;
   const fogU = ['fogColor', 'density', 'falloff', 'fogBase', 'skyDist'] as const;
   const inBoundary = (x: number, z: number) => { const r = d.h.boundary; let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, zi] = r[i], [xj, zj] = r[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
+  const inSwim = (x: number, z: number) => inBoundary(x, z) && shore.distAt(x, z) > 0.4 && Number.isNaN(walk.heightAt(x, z));
+  // ladders where there's quay to step onto and open water inside the line below
+  const lad = buildLadders(d, root, (x, z, nx, nz) => (!blocked(x - nx * 0.8, z - nz * 0.8, 0.3) && inSwim(x + nx * 2.5, z + nz * 2.5) && inSwim(x + nx * 6, z + nz * 6) ? heightAt(x - nx * 0.8, z - nz * 0.8) : NaN));
+  chunks.push(...lad.chunks);
+  for (const c of lad.chunks) reflect(c.mesh);
   const harbor: HarborHooks = {
     waterHeight, shoreDistance: shore.distAt, waterY: d.h.waterY, boundary: d.h.boundary, escapeBoat: boats[0].group,
-    inSwim: (x, z) => inBoundary(x, z) && shore.distAt(x, z) > 0.4 && Number.isNaN(walk.heightAt(x, z)),
+    inSwim, ladders: lad.ladders,
   };
+  // fog lying on the water along the buoy line
+  const fogBanks = cordon.buoyPts.filter((_, i) => i % 3 === 0).map(([x, z], i) => ({ x, y: d.h.waterY + 2.5 + (i % 3), z, s: 22 + (i % 4) * 6 }));
+
+  // ---------------------------------------------------------------- tools (?debug=map, ?walk=)
+  const params = new URLSearchParams(location.search), walkArg = params.get('walk');
+  const pilot = walkArg ? autopilot(walkArg === 'tour' ? Object.keys(spots) : walkArg.split(','), spots, heightAt, blocked) : null;
+  const map = params.get('debug') === 'map' ? debugMap(d, collide, (i) => (flags[i] & 1) === 1) : null;
+  let mapT = 0;
 
   progress(1, 'Lighting the lamps…');
   return {
@@ -262,7 +291,8 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     music: 'static', ambience: 'harbor',
     brand: 'Prologue · The Harbor',
     blocked, cameraBlock: collide.cameraBlock, cameraFloor,
-    activeDrone: cordon.activeDrone,
+    activeDrone: cordon.activeDrone, fogBanks,
+    steer: pilot ? (pos, t) => pilot.steer(pos, t) : undefined,
     normalHidden: street.normalHidden,
     camera: { near: 0.25, far: 2000 },
     shadow: { lift: 250 },
@@ -317,6 +347,10 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
       flickerUpdate(beacon, t, 91);
       waterUniforms.uTime.value = t;
       if ((cullT -= dt) <= 0) { cullT = 0.25; cull(cam); }
+      if (map && (mapT -= dt) <= 0) {
+        mapT = 0.25;
+        map.draw({ hero: player, heading: Math.atan2(cam.position.x - player.x, cam.position.z - player.z) + Math.PI, chunks, lamps: lamps.pool.filter((l) => (l.k ?? 1) > 0.05).map((l) => l.obj.getWorldPosition(new THREE.Vector3())), drones: cordon.drones.map((g) => g.position), route: pilot?.route ?? [] });
+      }
       // the floats and buoys ride the swell
       for (const f of wf.floats) {
         const p = f.position;
@@ -347,7 +381,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
       // the cordon buoys blink together
       (cordon.lamps.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(t * 2.2) > 0.4 ? 7 : 0.6;
     },
-    dispose() { refl?.dispose(); },
+    dispose() { refl?.dispose(); map?.dispose(); },
     ...({ harbor, __water: waterUniforms } as object),
   };
 }
