@@ -1,7 +1,7 @@
 // Bakes the harbor district from the raw snapshots in art/source/boston/raw/ (see fetch.mjs) and the
 // hand-made inputs beside them (boundary.geojson, landmarks.json) into what the game loads:
 //   src/harbor/data/harbor.json   header: spots, cordon, street furniture, names, blob index
-//   src/harbor/data/harbor.bin    typed arrays: buildings, ground triangles, curbs, seawalls, piers,
+//   src/harbor/data/harbor.bin.gz typed arrays (gzipped): buildings, ground triangles, curbs, seawalls, piers,
 //                                 water cells, land outlines, terrain
 //   src/harbor/data/stats.json    counts and areas, so data changes show up in review
 //   art/source/boston/preview.svg a top-down picture of all of it
@@ -60,6 +60,7 @@ for (const f of boundaryFc.features) {
 const holes = boundaryFc.features.filter((f) => f.properties.kind === 'hole').map((f) => ({ name: f.properties.name, ring: G.openRing(f.geometry.coordinates[0].map(([lon, lat]) => project(lon, lat))) }));
 const window = winArg ? (() => { const [n, r] = winArg.split(':'); return { x: spots[n].x, z: spots[n].z, r: Number(r) }; })() : null;
 const landmarkDefs = readJson(new URL('landmarks.json', SRC_DIR));
+const roofDefs = readJson(new URL('roofs.json', SRC_DIR));
 
 log('reading snapshots');
 const osm = parseOsm(readJsonGz(raw('osm-detail.json.gz')).elements);
@@ -109,10 +110,11 @@ log('buildings');
 const osmById = new Map(osm.polys.map((p) => [p.id, p]));
 const landmarks = Object.entries(landmarkDefs).filter(([k]) => !k.startsWith('_')).map(([key, d]) => {
   const rings = (ids) => (ids ?? []).map((id) => osmById.get(id)?.outer ?? log(`  warning: landmark ${key}: ${id} isn't in the snapshot`)).filter(Boolean);
-  return { key, name: d.name, rings: rings(d.osm), extra: rings(d.extra), overhead: rings(d.overhead), near: d.near ?? 0 };
+  const path = d.path ? osm.lines.find((l) => l.id === d.path)?.pts ?? log(`  warning: landmark ${key}: ${d.path} isn't in the snapshot`) : undefined;
+  return { key, name: d.name, rings: rings(d.osm), extra: rings(d.extra), overhead: rings(d.overhead), near: d.near ?? 0, path };
 });
-for (const lm of landmarks) if (!lm.rings.length) log(`  warning: landmark ${lm.key} has no OSM outline in the snapshot`);
-const parts = buildParts({ features: bpda, farFeatures: bpdaFar, osm, terrainAt: tAt, play, edgeZone, landmarks, window });
+for (const lm of landmarks) if (!lm.rings.length && !lm.path) log(`  warning: landmark ${lm.key} has no OSM outline in the snapshot`);
+const parts = buildParts({ features: bpda, farFeatures: bpdaFar, osm, terrainAt: tAt, play, edgeZone, landmarks, roofs: roofDefs, window });
 const tierCount = TIERS.map((_, i) => parts.filter((p) => p.tier === i).length);
 log(`  ${parts.length} parts: ${TIERS.map((t, i) => `${t} ${tierCount[i]}`).join(', ')}`);
 // BPDA's own ground elevations against our terrain (they should agree; both are NAVD88)
@@ -251,7 +253,7 @@ const header = {
   styles: STYLES, roofs: ROOFS, tiers: TIERS,
   ground: GROUND.map((g) => ({ name: g.name, off: g.off, raised: !!g.raised })),
   curbHeight: CURB_H,
-  landmarks: landmarks.map((l) => ({ key: l.key, name: l.name, outline: l.rings.map((r) => r.map(([x, z]) => [G.round2(x), G.round2(z)])) })),
+  landmarks: landmarks.map((l) => ({ key: l.key, name: l.name, outline: l.rings.map((r) => r.map(([x, z]) => [G.round2(x), G.round2(z)])), path: l.path?.map(([x, z]) => [G.round2(x), G.round2(z)]) })),
   names: Object.fromEntries(parts.map((p, i) => [i, p.name]).filter(([, n]) => n)),
   water: { fine: water.fine, coarse: water.coarse, box: coastBox },
   terrain: { x0: detail.x0, z0: detail.z0, cell: TERRAIN_OUT, nx: onx, nz: onz },
@@ -261,6 +263,8 @@ const header = {
 };
 const json = JSON.stringify(header);
 const bin = bw.buffer();
+// gzipped here, since static hosts like Pages don't compress binary files (the loader inflates it)
+const binGz = zlib.gzipSync(bin, { level: 9 });
 const stats = {
   parts: Object.fromEntries(TIERS.map((t, i) => [t, tierCount[i]])),
   styles: Object.fromEntries(STYLES.map((s, i) => [s, parts.filter((p) => p.tier <= 1 && p.style === i).length])),
@@ -273,11 +277,11 @@ const stats = {
   waterArea: water.area,
   cordonGaps: cord.gaps.length, cordonGapLength: Math.round(cord.gaps.reduce((s, g) => s + g.length, 0)),
   furniture: Object.fromEntries(Object.entries(furniture).map(([k, v]) => [k, v.length])),
-  bytes: { json: json.length, bin: bin.length },
+  bytes: { json: json.length, bin: bin.length, binGz: binGz.length },
 };
 const svg = previewSvg({ bounds: G.pathsBounds(groundZone), water: waterPaths, ground: GROUND, classes: painted.classes, parts: parts.filter((p) => p.tier <= 2), boundary: playRing, cordon: cord, curbs: curbs.map((c) => c.map(([x, , z]) => [x, z])), points: furniture, spots, floats: floats.map((p) => p.outer) });
 
-const outs = [[new URL('harbor.json', OUT_DIR), json], [new URL('harbor.bin', OUT_DIR), bin], [new URL('stats.json', OUT_DIR), JSON.stringify(stats, null, 1) + '\n'], [new URL('preview.svg', SRC_DIR), svg]];
+const outs = [[new URL('harbor.json', OUT_DIR), json], [new URL('harbor.bin.gz', OUT_DIR), binGz], [new URL('stats.json', OUT_DIR), JSON.stringify(stats, null, 1) + '\n'], [new URL('preview.svg', SRC_DIR), svg]];
 if (CHECK) {
   const changed = outs.filter(([u, d]) => !fs.existsSync(u) || !Buffer.from(d).equals(fs.readFileSync(u)));
   if (changed.length) { console.error('bake output would change: ' + changed.map(([u]) => u.pathname.split('/').pop()).join(', ')); process.exit(1); }
@@ -285,6 +289,7 @@ if (CHECK) {
 } else {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   for (const [u, d] of outs) fs.writeFileSync(u, d);
-  log(`wrote harbor.json ${(json.length / 1024).toFixed(0)} KB, harbor.bin ${(bin.length / 1024).toFixed(0)} KB`);
+  fs.rmSync(new URL('harbor.bin', OUT_DIR), { force: true }); // the uncompressed file older bakes wrote
+  log(`wrote harbor.json ${(json.length / 1024).toFixed(0)} KB, harbor.bin.gz ${(binGz.length / 1024).toFixed(0)} KB (${(bin.length / 1024).toFixed(0)} KB inflated)`);
 }
 console.log(JSON.stringify(stats, null, 1));

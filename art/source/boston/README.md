@@ -8,6 +8,7 @@ data. This folder holds everything the bake reads, so the game data can be rebui
 | `raw/` | snapshots fetched by `npm run harbor:fetch` (see `raw/manifest.json` for each file's source, query, licence, date and checksum) |
 | `boundary.geojson` | hand-made: the play area (the machine cordon's line), and the named spots (`?at=name`), one of them the spawn |
 | `landmarks.json` | hand-made: which buildings the game models by hand, by their OpenStreetMap outline |
+| `roofs.json` | hand-made: pitched roofs OpenStreetMap doesn't tag (the Commercial and Lewis Wharf warehouses) |
 | `preview.svg` | written by the bake: a top-down picture of everything it produced, to check against the real map |
 
 ```bash

@@ -1,7 +1,7 @@
 // The baked harbor district (scripts/harbor/bake.mjs): a JSON header plus one binary file of typed
 // arrays, fetched on demand and viewed in place.
 import jsonUrl from './data/harbor.json?url';
-import binUrl from './data/harbor.bin?url';
+import binUrl from './data/harbor.bin.gz?url';
 
 export interface Spot { x: number; z: number; heading: number }
 export interface Gap { pts: [number, number][]; length: number; kind: 'alley' | 'street' | 'avenue' | 'plaza' | 'park' }
@@ -20,8 +20,9 @@ export interface Header {
   styles: string[]; roofs: string[]; tiers: string[];
   ground: { name: string; off: number | null; raised: boolean }[];
   curbHeight: number;
-  /** hand-built landmarks: key, name, and their OpenStreetMap outline rings (local metres) */
-  landmarks: { key: string; name: string; outline: [number, number][][] }[];
+  /** hand-built landmarks: key, name, their OpenStreetMap outline rings (local metres), and for one that
+   *  follows a way rather than filling an outline (Columbus Park's trellis), that way's points */
+  landmarks: { key: string; name: string; outline: [number, number][][]; path?: [number, number][] }[];
   names: Record<string, string>;
   water: { fine: number; coarse: number; box: { x0: number; z0: number; x1: number; z1: number } };
   terrain: { x0: number; z0: number; cell: number; nx: number; nz: number };
@@ -64,10 +65,17 @@ export class HarborData {
   }
 }
 
+/** the binary ships gzipped; inflate it here, unless the server already did (gzip's magic bytes are gone) */
+async function inflate(r: Response): Promise<ArrayBuffer> {
+  const buf = await r.arrayBuffer(), head = new Uint8Array(buf, 0, 2);
+  if (head[0] !== 0x1f || head[1] !== 0x8b) return buf;
+  return new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+}
+
 export async function loadHarbor(): Promise<HarborData> {
   const [h, bin] = await Promise.all([
     fetch(jsonUrl).then((r) => { if (!r.ok) throw new Error(`harbor.json: ${r.status}`); return r.json() as Promise<Header>; }),
-    fetch(binUrl).then((r) => { if (!r.ok) throw new Error(`harbor.bin: ${r.status}`); return r.arrayBuffer(); }),
+    fetch(binUrl).then((r) => { if (!r.ok) throw new Error(`harbor.bin.gz: ${r.status}`); return inflate(r); }),
   ]);
   return new HarborData(h, bin);
 }

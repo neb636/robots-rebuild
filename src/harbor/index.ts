@@ -74,9 +74,10 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     const make = LANDMARKS[lm.key];
     if (!make) continue;
     try {
-      const res = make({ d, key: lm.key, parts: byKey.get(lm.key) ?? [], outline: lm.outline, heightAt: walk.heightAt, terrainAt: (x, z) => d.terrainAt(x, z), quality, collide });
+      const res = make({ d, key: lm.key, parts: byKey.get(lm.key) ?? [], outline: lm.outline, path: lm.path, heightAt: walk.heightAt, terrainAt: (x, z) => d.terrainAt(x, z), quality, collide });
       if (!res) continue;
-      landmarkDone.add(lm.key); root.add(res.group); landmarkObjs.push(res.group);
+      if (!res.keepWalls) landmarkDone.add(lm.key);
+      root.add(res.group); landmarkObjs.push(res.group);
       if (res.lights) landmarkLights.push(...res.lights);
       if (res.update) landmarkUpdates.push(res.update);
     } catch (e) { console.error(`landmark ${lm.key} failed; using the generic facade`, e); }

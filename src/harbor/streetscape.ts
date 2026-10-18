@@ -20,15 +20,22 @@ const SIDEWALK = new Set([4, 5, 6, 7, 8]);
 const ROAD = new Set([0, 2]);
 const UP = new THREE.Vector3(0, 1, 0);
 
-/** the landmarks' ground: their outlines and every part they build (the canopies, the carousel's ring),
- *  where nothing grows, stands or parks; `inside(x, z, m)` is true within m metres of one too */
+/** the landmarks' ground: their outlines, every part they build (the canopies, the carousel's ring) and
+ *  a few metres either side of the ways they follow (the trellis), where nothing grows, stands or parks;
+ *  `inside(x, z, m)` is true within m metres of one too */
 function landmarkGround(d: HarborData, parts: Part[]) {
   const rings = [...d.h.landmarks.flatMap((l) => l.outline), ...parts.filter((p) => p.landmark).map((p) => p.outer)].map((r) => {
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const [x, z] of r) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
     return { r, x0, z0, x1, z1 };
   });
-  return (x: number, z: number, m = 0) => rings.some(({ r, x0, z0, x1, z1 }) => {
+  const paths = d.h.landmarks.flatMap((l) => (l.path ? [l.path] : []));
+  const nearPath = (x: number, z: number, m: number) => paths.some((p) => p.some((a, i) => {
+    if (i === p.length - 1) return false;
+    const b = p[i + 1], ex = b[0] - a[0], ez = b[1] - a[1], l2 = ex * ex + ez * ez, t = l2 > 0 ? Math.max(0, Math.min(1, ((x - a[0]) * ex + (z - a[1]) * ez) / l2)) : 0;
+    return (a[0] + ex * t - x) ** 2 + (a[1] + ez * t - z) ** 2 < (3.4 + m) ** 2;
+  }));
+  return (x: number, z: number, m = 0) => nearPath(x, z, m) || rings.some(({ r, x0, z0, x1, z1 }) => {
     if (x < x0 - m || x > x1 + m || z < z0 - m || z > z1 + m) return false;
     let c = false;
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) {

@@ -34,7 +34,7 @@ function orient(p) {
  * play: Paths64 of the play polygon; edgeZone: Paths64 (play inflated);
  * landmarks: [{ key, rings, extra, overhead, near }] (see landmarkParts)
  */
-export function buildParts({ features, farFeatures, osm, terrainAt, play, edgeZone, landmarks, window }) {
+export function buildParts({ features, farFeatures, osm, terrainAt, play, edgeZone, landmarks, roofs, window }) {
   // OSM buildings and parts, indexed
   const osmB = [], osmP = [];
   for (const p of osm.polys) {
@@ -89,7 +89,7 @@ export function buildParts({ features, farFeatures, osm, terrainAt, play, edgeZo
     p.top = Math.max(tc + h, groundMax + 2.5);
     p.seed = hash32(p.id);
     p.style = classify(p);
-    p.roof = roofShape(p);
+    p.roof = roofShape(p, roofs?.[p.osmBuilding]);
   }
 
   for (const lm of landmarks ?? []) landmarkParts(lm, parts);
@@ -145,10 +145,11 @@ function classify(p) {
   return r < 0.55 ? S.brickCommercial : r < 0.78 ? S.masonryOffice : r < 0.92 ? S.graniteWarehouse : S.modernBrick;
 }
 
-function roofShape(p) {
-  const s = String(p.tags['roof:shape'] ?? 'flat').toLowerCase();
+/** `forced`: a shape from roofs.json, which pitches any footprint (the runtime ridges it along its long axis) */
+function roofShape(p, forced) {
+  const s = String(forced ?? p.tags['roof:shape'] ?? 'flat').toLowerCase();
   // pitched roofs only where the footprint is a plain quadrilateral we can put a ridge on
-  if (['gabled', 'hipped', 'mansard', 'pyramidal', 'skillion', 'half-hipped', 'gambrel'].includes(s) && p.outer.length === 4 && !p.holes.length) {
+  if (['gabled', 'hipped', 'mansard', 'pyramidal', 'skillion', 'half-hipped', 'gambrel'].includes(s) && (forced || p.outer.length === 4) && !p.holes.length) {
     return ROOFS.indexOf(s === 'half-hipped' ? 'hipped' : s === 'gambrel' ? 'mansard' : s);
   }
   if (s === 'dome' || s === 'onion') return ROOFS.indexOf('dome');

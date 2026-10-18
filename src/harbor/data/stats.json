@@ -31,7 +31,12 @@
   "paulRevere": 1,
   "carousel": 0,
   "oldStateHouse": 1,
-  "cityHall": 10
+  "cityHall": 10,
+  "holocaustMemorial": 0,
+  "armenianPark": 0,
+  "ringsFountain": 0,
+  "unionOysterHouse": 0,
+  "columbusTrellis": 0
  },
  "ground": {
   "landArea": 476365,
@@ -74,7 +79,8 @@
   "lamp": 2273
  },
  "bytes": {
-  "json": 145640,
-  "bin": 4584128
+  "json": 147406,
+  "bin": 4584128,
+  "binGz": 2005815
  }
 }
