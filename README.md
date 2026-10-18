@@ -17,6 +17,7 @@ falls, a strip of cloth streams from the wrist, and one indicator light breathes
 built after **New Game**, and the street is built during the fade to black.
 
 **Play it:** https://neb636.github.io/robots-rebuild/
+**Quicklink to the harbor district:** https://neb636.github.io/robots-rebuild/?start=harbor
 
 ```bash
 npm install
