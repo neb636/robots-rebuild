@@ -1,7 +1,7 @@
 // Bakes the harbor district from the raw snapshots in art/source/boston/raw/ (see fetch.mjs) and the
 // hand-made inputs beside them (boundary.geojson, landmarks.json) into what the game loads:
 //   src/harbor/data/harbor.json   header: spots, cordon, street furniture, names, blob index
-//   src/harbor/data/harbor.bin    typed arrays: buildings, ground triangles, curbs, seawalls, piers,
+//   src/harbor/data/harbor.bin.gz typed arrays (gzipped): buildings, ground triangles, curbs, seawalls, piers,
 //                                 water cells, land outlines, terrain
 //   src/harbor/data/stats.json    counts and areas, so data changes show up in review
 //   art/source/boston/preview.svg a top-down picture of all of it
@@ -60,6 +60,7 @@ for (const f of boundaryFc.features) {
 const holes = boundaryFc.features.filter((f) => f.properties.kind === 'hole').map((f) => ({ name: f.properties.name, ring: G.openRing(f.geometry.coordinates[0].map(([lon, lat]) => project(lon, lat))) }));
 const window = winArg ? (() => { const [n, r] = winArg.split(':'); return { x: spots[n].x, z: spots[n].z, r: Number(r) }; })() : null;
 const landmarkDefs = readJson(new URL('landmarks.json', SRC_DIR));
+const roofDefs = readJson(new URL('roofs.json', SRC_DIR));
 
 log('reading snapshots');
 const osm = parseOsm(readJsonGz(raw('osm-detail.json.gz')).elements);
@@ -107,9 +108,13 @@ log(`  ${terr.nx}x${terr.nz} @ ${TERRAIN_CELL} m, ${terr.known} land samples`);
 // ------------------------------------------------------------------ buildings
 log('buildings');
 const osmById = new Map(osm.polys.map((p) => [p.id, p]));
-const landmarks = Object.entries(landmarkDefs).filter(([k]) => !k.startsWith('_')).map(([key, d]) => ({ key, name: d.name, rings: d.osm.map((id) => osmById.get(id)?.outer).filter(Boolean) }));
-for (const lm of landmarks) if (!lm.rings.length) log(`  warning: landmark ${lm.key} has no OSM outline in the snapshot`);
-const parts = buildParts({ features: bpda, farFeatures: bpdaFar, osm, terrainAt: tAt, play, edgeZone, landmarks, window });
+const landmarks = Object.entries(landmarkDefs).filter(([k]) => !k.startsWith('_')).map(([key, d]) => {
+  const rings = (ids) => (ids ?? []).map((id) => osmById.get(id)?.outer ?? log(`  warning: landmark ${key}: ${id} isn't in the snapshot`)).filter(Boolean);
+  const path = d.path ? osm.lines.find((l) => l.id === d.path)?.pts ?? log(`  warning: landmark ${key}: ${d.path} isn't in the snapshot`) : undefined;
+  return { key, name: d.name, rings: rings(d.osm), extra: rings(d.extra), overhead: rings(d.overhead), near: d.near ?? 0, path };
+});
+for (const lm of landmarks) if (!lm.rings.length && !lm.path) log(`  warning: landmark ${lm.key} has no OSM outline in the snapshot`);
+const parts = buildParts({ features: bpda, farFeatures: bpdaFar, osm, terrainAt: tAt, play, edgeZone, landmarks, roofs: roofDefs, window });
 const tierCount = TIERS.map((_, i) => parts.filter((p) => p.tier === i).length);
 log(`  ${parts.length} parts: ${TIERS.map((t, i) => `${t} ${tierCount[i]}`).join(', ')}`);
 // BPDA's own ground elevations against our terrain (they should agree; both are NAVD88)
@@ -117,7 +122,8 @@ log(`  ${parts.length} parts: ${TIERS.map((t, i) => `${t} ${tierCount[i]}`).join
   const d = parts.filter((p) => p.tier <= 1 && p.props.GRND_ELEV_2010 > 0).map((p) => p.props.GRND_ELEV_2010 * 0.3048 - DATUM - tAt(p.cx, p.cz)).sort((a, b) => a - b);
   if (d.length) log(`  BPDA ground minus terrain: median ${d[d.length >> 1].toFixed(2)} m (p10 ${d[Math.floor(d.length * 0.1)].toFixed(2)}, p90 ${d[Math.floor(d.length * 0.9)].toFixed(2)})`);
 }
-const footprints = G.union(G.polysToPaths(parts.filter((p) => p.tier <= 2).map((p) => ({ outer: p.outer, holes: p.holes }))));
+// (a roof over open ground isn't a footprint: the ground runs on under it)
+const footprints = G.union(G.polysToPaths(parts.filter((p) => p.tier <= 2 && !p.overhead).map((p) => ({ outer: p.outer, holes: p.holes }))));
 log(`  footprints: ${footprints.length} paths`);
 
 // ------------------------------------------------------------------ ground
@@ -180,8 +186,13 @@ const classPolys = painted.classes.map((c) => G.pathsToPolys(c));
 const classAt = (x, z) => { for (let c = 0; c < GROUND.length; c++) if (classPolys[c].some((p) => G.inPoly(x, z, p))) return GROUND[c].name; return null; };
 const openGround = G.difference(G.union([...land, ...decks]), footprints);
 const waterPaths = G.difference(G.polysToPaths([{ outer: [[coastBox.x0, coastBox.z0], [coastBox.x1, coastBox.z0], [coastBox.x1, coastBox.z1], [coastBox.x0, coastBox.z1]], holes: [] }]), land);
-const cord = cordon(playRing, openGround, waterPaths, classAt);
+// the through roads (not the expressway or its tunnels) get gates where they cross the line
+const GATE_ROADS = { primary: 14, secondary: 11 };
+const gateRoads = osm.lines.filter((l) => GATE_ROADS[l.tags.highway] && l.tags.name && !['yes', 'building_passage'].includes(l.tags.tunnel) && !(Number(l.tags.layer) < 0))
+  .map((l) => ({ pts: l.pts, name: l.tags.name, width: GATE_ROADS[l.tags.highway] }));
+const cord = cordon(playRing, openGround, waterPaths, classAt, gateRoads);
 log(`  ${cord.gaps.length} gaps (${cord.gaps.map((g) => g.kind[0] + Math.round(g.length)).join(' ')}), ${cord.buoys.length} buoy runs`);
+log(`  ${cord.gates.length} gates: ${cord.gates.map((g) => g.street).join(', ')}`);
 
 // ------------------------------------------------------------------ street furniture
 const zoneRings = groundZone.map(G.fromPath);
@@ -205,6 +216,8 @@ const bw = new BlobWriter();
   bw.add('bSeed', Uint32Array.from(parts, (p) => p.seed));
   const lmKeys = landmarks.map((l) => l.key);
   bw.add('bLandmark', Uint8Array.from(parts, (p) => (p.landmark ? lmKeys.indexOf(p.landmark) + 1 : 0)));
+  // per part: 1 = a roof over open ground (walkable underneath)
+  bw.add('bFlag', Uint8Array.from(parts, (p) => (p.overhead ? 1 : 0)));
   // one byte per ring vertex: flags for the edge that starts there (2 = faces the street, 4 = the water)
   bw.add('bEdge', Uint8Array.from(parts.flatMap((p) => (p.edgeFlags ?? [p.outer, ...p.holes].map((r) => r.map(() => 0))).flat())));
   const spans = [];
@@ -245,7 +258,7 @@ const header = {
   styles: STYLES, roofs: ROOFS, tiers: TIERS,
   ground: GROUND.map((g) => ({ name: g.name, off: g.off, raised: !!g.raised })),
   curbHeight: CURB_H,
-  landmarks: landmarks.map((l) => ({ key: l.key, name: l.name, outline: l.rings.map((r) => r.map(([x, z]) => [G.round2(x), G.round2(z)])) })),
+  landmarks: landmarks.map((l) => ({ key: l.key, name: l.name, outline: l.rings.map((r) => r.map(([x, z]) => [G.round2(x), G.round2(z)])), path: l.path?.map(([x, z]) => [G.round2(x), G.round2(z)]) })),
   names: Object.fromEntries(parts.map((p, i) => [i, p.name]).filter(([, n]) => n)),
   water: { fine: water.fine, coarse: water.coarse, box: coastBox },
   terrain: { x0: detail.x0, z0: detail.z0, cell: TERRAIN_OUT, nx: onx, nz: onz },
@@ -255,6 +268,8 @@ const header = {
 };
 const json = JSON.stringify(header);
 const bin = bw.buffer();
+// gzipped here, since static hosts like Pages don't compress binary files (the loader inflates it)
+const binGz = zlib.gzipSync(bin, { level: 9 });
 const stats = {
   parts: Object.fromEntries(TIERS.map((t, i) => [t, tierCount[i]])),
   styles: Object.fromEntries(STYLES.map((s, i) => [s, parts.filter((p) => p.tier <= 1 && p.style === i).length])),
@@ -265,13 +280,13 @@ const stats = {
   seawallRuns: walls.length,
   decks: deckRings.length, piles: piles.length / 2, floats: floats.length,
   waterArea: water.area,
-  cordonGaps: cord.gaps.length, cordonGapLength: Math.round(cord.gaps.reduce((s, g) => s + g.length, 0)),
+  cordonGaps: cord.gaps.length, cordonGates: cord.gates.length, cordonGapLength: Math.round(cord.gaps.reduce((s, g) => s + g.length, 0)),
   furniture: Object.fromEntries(Object.entries(furniture).map(([k, v]) => [k, v.length])),
-  bytes: { json: json.length, bin: bin.length },
+  bytes: { json: json.length, bin: bin.length, binGz: binGz.length },
 };
 const svg = previewSvg({ bounds: G.pathsBounds(groundZone), water: waterPaths, ground: GROUND, classes: painted.classes, parts: parts.filter((p) => p.tier <= 2), boundary: playRing, cordon: cord, curbs: curbs.map((c) => c.map(([x, , z]) => [x, z])), points: furniture, spots, floats: floats.map((p) => p.outer) });
 
-const outs = [[new URL('harbor.json', OUT_DIR), json], [new URL('harbor.bin', OUT_DIR), bin], [new URL('stats.json', OUT_DIR), JSON.stringify(stats, null, 1) + '\n'], [new URL('preview.svg', SRC_DIR), svg]];
+const outs = [[new URL('harbor.json', OUT_DIR), json], [new URL('harbor.bin.gz', OUT_DIR), binGz], [new URL('stats.json', OUT_DIR), JSON.stringify(stats, null, 1) + '\n'], [new URL('preview.svg', SRC_DIR), svg]];
 if (CHECK) {
   const changed = outs.filter(([u, d]) => !fs.existsSync(u) || !Buffer.from(d).equals(fs.readFileSync(u)));
   if (changed.length) { console.error('bake output would change: ' + changed.map(([u]) => u.pathname.split('/').pop()).join(', ')); process.exit(1); }
@@ -279,6 +294,7 @@ if (CHECK) {
 } else {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   for (const [u, d] of outs) fs.writeFileSync(u, d);
-  log(`wrote harbor.json ${(json.length / 1024).toFixed(0)} KB, harbor.bin ${(bin.length / 1024).toFixed(0)} KB`);
+  fs.rmSync(new URL('harbor.bin', OUT_DIR), { force: true }); // the uncompressed file older bakes wrote
+  log(`wrote harbor.json ${(json.length / 1024).toFixed(0)} KB, harbor.bin.gz ${(binGz.length / 1024).toFixed(0)} KB (${(bin.length / 1024).toFixed(0)} KB inflated)`);
 }
 console.log(JSON.stringify(stats, null, 1));

@@ -60,6 +60,27 @@ URL params override the saved settings without changing them, for sharing a spec
 `?mood=curfew&cam=jrpg&q=low&audio=web&ui=0&card=0`. `?menu=0` skips the title screen and goes
 straight into the game. `?start=street` skips Day Zero and starts on Acorn Lane. `?debug` exposes `window.__THREE` and the game as `window.__app` (and `window.__title` on the title screen).
 
+## The harbor district
+
+`?start=harbor` (or `?menu=0&card=0&start=harbor`) starts in a walkable recreation of Boston's
+downtown waterfront two years on: from the State station stairs and the Congress Street cordon out
+to the end of Long Wharf, Faneuil Hall and Quincy Market, the Greenway, Columbus Park, the Aquarium,
+Harbor Towers, Rowes Wharf and the southern North End. It's built at load time from real map data,
+baked into `src/harbor/data/` by `scripts/harbor/` (see `art/source/boston/README.md` for the
+pipeline and its inputs), with the landmarks modelled by hand in `src/harbor/landmarks/`.
+
+- `?at=<spot>` starts at a named place: state, faneuil, quincy, longwharf, aquarium, columbus,
+  customhouse, harbortowers, rowes, northsquare, blackstone.
+- `?debug=stats` shows what a frame costs (draws and triangles summed over every pass) and warns if
+  a shader compiles after warm-up; `?debug=map` adds a top-down map of the walk mesh, colliders,
+  the cordon, the tiles drawn, the lit lamps, the drones and the hero.
+- `?walk=state,faneuil,…` (or `?walk=tour`) walks the hero through those spots on autopilot, with
+  the real movement code, and logs `walk:leg` / `walk:stuck` / `walk:done` to the console.
+
+Its map data is © OpenStreetMap contributors (ODbL), with City of Boston / BPDA building footprints
+(PDDL) and USGS 3DEP terrain (public domain); the baked database is ODbL
+(`src/harbor/data/LICENSE.md`).
+
 ## Frame rate and browser testing
 
 The loop is capped at **60 fps**, so 120 Hz screens (ProMotion iPhones and Macs) don't render twice
@@ -189,6 +210,9 @@ src/
   noisetex.ts    lattice textures that make GPU value noise one texture fetch per octave
   shaderpatches.ts  three.js shader patch: skip lights that can't reach a pixel
   noise.ts       value / fbm / cellular noise and small math helpers
+  harbor/        the harbor district (?start=harbor): the baked data and its loader, ground, buildings
+                 and their facade shader, water and reflections, the waterfront, streetscape, lamps,
+                 the cordon, the station, tools (debug.ts), and landmarks/ (one module per landmark)
   audio.ts       WebAudio synth, step sequencer, songs, ambience, SFX, talk blips; voice-over and recorded clips
   speech.ts      browser text-to-speech for dialogue (Audio: Web), a voice profile per speaker
   spoken.json    how on-screen text should be read aloud (shared with scripts/voice.mjs)
@@ -203,6 +227,8 @@ public/audio/
   vo/            Day Zero voice-over clips (generated)
   sfx/           recorded effects (Biscuit)
 scripts/
+  harbor/        the harbor district's data: fetch.mjs (public map data into art/source/boston/raw/)
+                 and bake.mjs (npm run harbor:bake: raw + hand-made inputs -> src/harbor/data/)
   voice.mjs      voice-over generator (ElevenLabs)
 planning/
   game_outline.md

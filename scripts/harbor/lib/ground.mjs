@@ -83,6 +83,8 @@ export function paintGround({ zone, land, buildings, sidewalks, parcels, osm, lo
   const brick = union(polysToPaths(sw.BR)), conc = union(polysToPaths(sw.other));
   take(G.sidewalkBrick, union([...brick, ...intersect(toFacade, inflate(brick, 0.8))]));
   take(G.sidewalkConcrete, union([...conc, ...intersect(toFacade, inflate(conc, 0.8))]));
+  // the wharves' public plazas (MassGIS open space, mapped as commons): brick, not lawn
+  take(G.sidewalkBrick, polys((t) => t.leisure === 'common'));
   // 3. pedestrian squares and streets
   const sett = (t) => /sett|cobble|unhewn/.test(t.surface ?? '');
   const pedA = osm.polys.filter((p) => (p.tags.highway === 'pedestrian' || p.tags['area:highway'] === 'pedestrian' || p.tags.place === 'square' || p.tags.amenity === 'marketplace'));
@@ -95,7 +97,7 @@ export function paintGround({ zone, land, buildings, sidewalks, parcels, osm, lo
   for (const l of paths) { const w = Math.min(6, Math.max(1.5, metres(l.tags.width) ?? (l.tags.highway === 'cycleway' ? 3 : 2.4))); const k = Math.round(w * 2) / 2; if (!pathW.has(k)) pathW.set(k, []); pathW.get(k).push(l.pts); }
   take(G.path, union([...pathW].flatMap(([w, ls]) => bufferLines(ls, w, true))));
   // 5. lawns and planting
-  take(G.grass, polys((t) => ['park', 'garden', 'playground', 'pitch', 'dog_park', 'common'].includes(t.leisure) || ['grass', 'flowerbed', 'village_green', 'meadow', 'forest', 'recreation_ground', 'cemetery'].includes(t.landuse) || t.natural === 'scrub' || t.natural === 'wood' || t.natural === 'grassland'));
+  take(G.grass, polys((t) => ['park', 'garden', 'playground', 'pitch', 'dog_park'].includes(t.leisure) || ['grass', 'flowerbed', 'village_green', 'meadow', 'forest', 'recreation_ground', 'cemetery'].includes(t.landuse) || t.natural === 'scrub' || t.natural === 'wood' || t.natural === 'grassland'));
   // 6. car parks
   take(G.parking, polys((t) => t.amenity === 'parking' && t.parking !== 'underground' && t.parking !== 'multi-storey'));
   // 7. carriageway

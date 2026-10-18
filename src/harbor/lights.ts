@@ -77,7 +77,7 @@ export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGr
 
 /** a Boston pedestrian lamp: tapered fluted post, collar, a lantern with a cap and finial */
 function post(cb: ChunkBuilder, iron: THREE.Material, glass: THREE.Material, l: Lamp, R: () => number) {
-  const acc = cb.at(iron, l.x, l.z), gacc = cb.at(glass, l.x, l.z, { cast: false });
+  const acc = cb.at(iron, l.x, l.z, { far: 220 }), gacc = cb.at(glass, l.x, l.z, { cast: false, far: 220 });
   const tilt = R() < 0.08 ? (R() - 0.5) * 0.12 : 0;
   const lean = (y: number) => [l.x + Math.sin(tilt) * y, l.z];
   // tapered octagonal post

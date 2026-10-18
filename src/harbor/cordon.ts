@@ -1,12 +1,14 @@
 // The machine cordon: Superintelligence Inc.'s wall across every street out of the harbor district.
 // Seamless obsidian panels, the joints faintly lit, a scanner band crawling up them, red emitter eyes
-// along the top, stencilled warnings; on the near side, what people threw at it. Out on the water,
-// the line continues as buoys.
+// along the top, stencilled warnings; on the near side, what people threw at it. Where a through road met
+// it, a sealed gate: pylons, a lintel, a door with a scanner bar sweeping it; the alleys got a low
+// panel or were plugged with rubble. Patrol drones work the long runs, one searchlight between them.
+// Out on the water, the line continues as buoys.
 import * as THREE from 'three';
 import type { HarborData } from './data';
 import { ChunkBuilder, type Chunk, type MeshAcc } from './chunks';
 import type { CollisionGrid } from './collide';
-import { pbrMat } from '../props';
+import { pbrMat, drone } from '../props';
 import { rng } from '../noise';
 import type { LightSource } from './lights';
 
@@ -42,6 +44,19 @@ function wallMaterial() {
   return m;
 }
 
+function gateTex() {
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
+  const c = cv.getContext('2d')!;
+  c.clearRect(0, 0, 512, 256);
+  c.fillStyle = 'rgba(255,60,40,0.95)'; c.font = 'bold 64px Helvetica, Arial, sans-serif'; c.textAlign = 'center';
+  c.fillText('CHECKPOINT', 256, 92);
+  c.fillStyle = 'rgba(200,230,255,0.9)'; c.font = '28px Helvetica, Arial, sans-serif';
+  c.fillText('SEALED UNTIL FURTHER NOTICE', 256, 160);
+  c.fillText('STAND CLEAR · YOU ARE BEING SCANNED', 256, 214);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
 function warningTex() {
   const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 256;
   const c = cv.getContext('2d')!;
@@ -70,7 +85,7 @@ function graffitiTex(text: string, color: string) {
 
 export function buildCordon(d: HarborData, parent: THREE.Object3D, collide: CollisionGrid, heightAt: (x: number, z: number) => number) {
   const R = rng(66);
-  const cb = new ChunkBuilder(64);
+  const cb = new ChunkBuilder(128, 'cordon');
   const body = wallMaterial();
   const eyeMat = new THREE.MeshStandardMaterial({ color: '#000000', emissive: '#ff2a1a', emissiveIntensity: 5 });
   const warnMat = new THREE.MeshStandardMaterial({ map: warningTex(), transparent: true, emissive: '#bfe4ff', emissiveMap: null, emissiveIntensity: 0.0, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
@@ -128,16 +143,20 @@ export function buildCordon(d: HarborData, parent: THREE.Object3D, collide: Coll
     return c;
   };
   let gi = 0, ui = 0;
-  for (const gap of d.h.cordon.gaps) {
+  d.h.cordon.gaps.forEach((gap, gapIndex) => {
+    // the alleys: every other one a low panel, the rest plugged with rubble (no eyes, no floods)
+    const alley = gap.kind === 'alley', plug = alley && gapIndex % 2 === 1, wallH = alley ? 3.2 : WALL_H;
     for (let i = 0; i < gap.pts.length - 1; i++) {
       const [ax, az] = gap.pts[i], [bx, bz] = gap.pts[i + 1];
       const L = Math.hypot(bx - ax, bz - az);
       if (L < 0.05) continue;
       const y0 = Math.min(d.terrainAt(ax, az), d.terrainAt(bx, bz)) - 0.5;
       const mx = (ax + bx) / 2, mz = (az + bz) / 2;
-      box(cb.at(body, mx, mz), ax, az, bx, bz, y0, y0 + 0.5 + WALL_H, WALL_T, ui);
+      collide.addSeg(ax, az, bx, bz, y0 + wallH);
+      if (plug) { rubblePlug(ax, az, bx, bz); continue; }
+      box(cb.at(body, mx, mz), ax, az, bx, bz, y0, y0 + 0.5 + wallH, WALL_T, ui);
       ui += L;
-      collide.addSeg(ax, az, bx, bz, y0 + WALL_H);
+      if (alley) continue;
       // emitter eyes along the top
       for (let s = 2; s < L; s += 8) eyes.push(new THREE.Vector3(ax + ((bx - ax) * s) / L, y0 + 0.5 + WALL_H + 0.18, az + ((bz - az) * s) / L));
       // the face that looks into the district (the walls sit on the boundary ring)
@@ -193,7 +212,61 @@ export function buildCordon(d: HarborData, parent: THREE.Object3D, collide: Coll
         }
       }
     }
+  });
+
+  /** an alley filled to above head height with broken concrete, brick and timber */
+  function rubblePlug(ax: number, az: number, bx: number, bz: number) {
+    const L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L;
+    const n = Math.max(14, Math.round(L * 14));
+    for (let k = 0; k < n; k++) {
+      const s = -0.4 + R() * (L + 0.8), off = (R() - 0.5) * 3.2, x = ax + ux * s + uz * off, z = az + uz * s - ux * off;
+      const hump = 2.4 * Math.max(0, 1 - Math.abs(off) / 1.9), gy = groundAt(x, z), sz = 0.3 + R() * 0.6;
+      if (R() < 0.7) {
+        const g = new THREE.DodecahedronGeometry(1, 0).scale(sz * (0.9 + R()), sz * (0.5 + R() * 0.5), sz * (0.9 + R()));
+        g.rotateY(R() * 6).rotateX((R() - 0.5) * 0.8).translate(x, gy + hump * R(), z);
+        addGeom(rubbleMats[1 + Math.floor(R() * 2)], g, x, z, sz * 2);
+      } else {
+        const g = new THREE.BoxGeometry(1.4 + R() * 1.6, 0.06, 0.2).rotateZ((R() - 0.5) * 1.2).rotateY(R() * 6).translate(x, gy + hump * R(), z);
+        addGeom(rubbleMats[R() < 0.5 ? 3 : 0], g, x, z, 0.5);
+      }
+    }
   }
+
+  // ---- the gates: pylons and a lintel over the road, a sealed door, a scanner bar sweeping it
+  const gateSign = new THREE.MeshStandardMaterial({ map: gateTex(), transparent: true, emissive: '#ffffff', emissiveIntensity: 0, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+  gateSign.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * diffuseColor.a * 1.8;'); };
+  const strip = new THREE.MeshStandardMaterial({ color: '#000000', emissive: '#ff3020', emissiveIntensity: 3 });
+  /** each gate's scanner bar: its two ends at the bottom of the door, and how high it rides */
+  const bars: { a: THREE.Vector3; b: THREE.Vector3; rise: number }[] = [];
+  for (const g of d.h.cordon.gates ?? []) {
+    const inward = inside(g.x + g.uz * 3, g.z - g.ux * 3) ? 1 : -1, nx = g.uz * inward, nz = -g.ux * inward;
+    const hw = g.width / 2 + 0.8, y0 = groundAt(g.x, g.z) - 0.5, top = y0 + 0.5 + WALL_H + 3.5;
+    const at = (s: number, o: number): [number, number] => [g.x + g.ux * s + nx * o, g.z + g.uz * s + nz * o];
+    for (const s of [-hw - 0.9, hw + 0.9]) {
+      const a0 = at(s - 0.9, 0), a1 = at(s + 0.9, 0);
+      box(cb.at(body, g.x, g.z), a0[0], a0[1], a1[0], a1[1], y0, top, 2.2, s);
+      const e0 = at(s - 0.08, 1.12), e1 = at(s + 0.08, 1.12);
+      box(cb.at(strip, g.x, g.z), e0[0], e0[1], e1[0], e1[1], y0 + 1, top - 0.6, 0.06, 0);
+      const ep = at(s, 0); eyes.push(new THREE.Vector3(ep[0], top + 0.2, ep[1]));
+    }
+    // the lintel, and the door set a little proud of the wall on the district side
+    const l0 = at(-hw - 1.8, 0), l1 = at(hw + 1.8, 0);
+    box(cb.at(body, g.x, g.z), l0[0], l0[1], l1[0], l1[1], top - 2.4, top, 2.0, 0);
+    const d0 = at(-hw, 0.5), d1 = at(hw, 0.5);
+    box(cb.at(body, g.x, g.z), d0[0], d0[1], d1[0], d1[1], y0, top - 2.4, 0.5, 0);
+    const sw = Math.min(2 * hw - 0.4, 6);
+    const g0 = at(-hw, 0.47), g1 = at(hw, 0.47); // the decal stands its own 0.32 m off this line: just past the door
+    decal(gateSign, g0[0], g0[1], g1[0], g1[1], nx, nz, hw, top - 4, sw, sw / 2);
+    const s0 = at(-hw + 0.2, 0.82), s1 = at(hw - 0.2, 0.82);
+    bars.push({ a: new THREE.Vector3(s0[0], y0 + 1, s0[1]), b: new THREE.Vector3(s1[0], y0 + 1, s1[1]), rise: top - 3.6 - (y0 + 1) });
+    collide.addSeg(l0[0], l0[1], l1[0], l1[1], top);
+  }
+  const barMat = new THREE.MeshStandardMaterial({ color: '#000000', emissive: '#ff2a1a', emissiveIntensity: 9 });
+  const barMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.08, 0.08), barMat, Math.max(1, bars.length));
+  barMesh.count = bars.length; barMesh.frustumCulled = false; barMesh.castShadow = false; barMesh.name = 'gateScanners';
+  parent.add(barMesh);
+  const bm = new THREE.Matrix4(), bq = new THREE.Quaternion(), bs = new THREE.Vector3(), bp = new THREE.Vector3(), X = new THREE.Vector3(1, 0, 0), dv = new THREE.Vector3();
+
   const chunks: Chunk[] = cb.flush(parent);
   // the eyes: one instanced mesh
   const eyeG = new THREE.SphereGeometry(0.16, 10, 8);
@@ -218,11 +291,62 @@ export function buildCordon(d: HarborData, parent: THREE.Object3D, collide: Coll
   pts.forEach(([x, z], i) => { m.makeTranslation(x, d.h.waterY, z); buoys.setMatrixAt(i, m); lamps.setMatrixAt(i, m); });
   for (const im of [buoys, lamps]) { im.computeBoundingSphere(); parent.add(im); }
   buoys.castShadow = true;
+
+  // ---- patrol drones over the longest runs; one searchlight between them, handed to whichever is
+  // nearest the hero (the light count never changes, so nothing recompiles)
+  const runs = d.h.cordon.gaps.filter((g) => g.kind !== 'alley').sort((a, b) => b.length - a.length).slice(0, 4);
+  const along = (pts: [number, number][], s: number) => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az);
+      if (s <= L || i === pts.length - 2) { const t = Math.min(1, s / (L || 1)); return { x: ax + (bx - ax) * t, z: az + (bz - az) * t, ux: (bx - ax) / (L || 1), uz: (bz - az) / (L || 1) }; }
+      s -= L;
+    }
+    return { x: pts[0][0], z: pts[0][1], ux: 1, uz: 0 };
+  };
+  const patrols = runs.map((g, i) => {
+    const dr = drone(parent);
+    if (i > 0) dr.group.remove(dr.spot, dr.spot.target);
+    return { dr, g, s: R() * g.length, dir: R() < 0.5 ? 1 : -1, speed: 2.2 + R() * 1.2, phase: R() * 6 };
+  });
+  const spot = patrols[0]?.dr.spot;
+  let active: (typeof patrols)[number] | null = patrols[0] ?? null;
+  const tw = new THREE.Vector3();
   return {
     chunks, buoys, lamps, buoyPts: pts, eyes: eyeMesh, floods,
-    update(t: number) {
+    drones: patrols.map((p) => p.dr.group),
+    /** the drone whose searchlight (and compliance scan) is live: the nearest, if it's close */
+    activeDrone: () => (active && spot ? { ...active.dr, spot } : undefined),
+    update(t: number, dt: number, hero: THREE.Vector3) {
       cordonUniforms.uTime.value = t;
       eyeMat.emissiveIntensity = 2 + 4 * Math.max(0, Math.sin(t * 1.3));
+      // the scanner bars ride up and down their doors, out of step
+      bars.forEach((b, i) => {
+        const y = b.rise * (0.5 - 0.5 * Math.cos(t * 0.7 + i * 1.9));
+        dv.subVectors(b.b, b.a);
+        bm.compose(bp.copy(b.a).add(b.b).multiplyScalar(0.5).setY(b.a.y + y), bq.setFromUnitVectors(X, dv.clone().normalize()), bs.set(dv.length(), 1, 1));
+        barMesh.setMatrixAt(i, bm);
+      });
+      barMesh.instanceMatrix.needsUpdate = true;
+      // the patrols fly their runs end to end and back, a few metres in from the wall
+      let best = Infinity, near: typeof active = null;
+      for (const p of patrols) {
+        p.s += p.dir * p.speed * dt;
+        if (p.s < 0 || p.s > p.g.length) { p.dir *= -1; p.s = Math.max(0, Math.min(p.g.length, p.s)); }
+        const q = along(p.g.pts, p.s), inward = inside(q.x + q.uz * 3, q.z - q.ux * 3) ? 1 : -1, nx = q.uz * inward, nz = -q.ux * inward;
+        const x = q.x + nx * 3.5, z = q.z + nz * 3.5, y = groundAt(q.x, q.z) + WALL_H + 3.2 + Math.sin(t * 1.1 + p.phase) * 0.35;
+        p.dr.group.position.set(x, y, z);
+        p.dr.group.rotation.set(0.12, Math.atan2(nx * 0.6 + q.ux * p.dir, nz * 0.6 + q.uz * p.dir), 0);
+        for (const r of p.dr.rotors) r.rotation.y += dt * 40;
+        const dd = (x - hero.x) ** 2 + (z - hero.z) ** 2;
+        if (dd < best) { best = dd; near = p; }
+        // where its beam would fall: sweeping the strip in front of the wall
+        if (p === active && spot) {
+          tw.set(x + nx * (7 + 3 * Math.sin(t * 0.6 + p.phase)) + q.ux * 4 * Math.sin(t * 0.37), groundAt(x, z), z + nz * (7 + 3 * Math.sin(t * 0.6 + p.phase)) + q.uz * 4 * Math.sin(t * 0.37));
+          p.dr.group.updateMatrixWorld();
+          spot.target.position.copy(p.dr.group.worldToLocal(tw));
+        }
+      }
+      if (spot && near && near !== active) { active = near; near.dr.group.add(spot, spot.target); }
     },
   };
 }

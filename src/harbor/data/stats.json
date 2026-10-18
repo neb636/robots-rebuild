@@ -18,46 +18,52 @@
  },
  "landmarks": {
   "faneuil": 1,
-  "quincy": 5,
+  "quincy": 17,
   "northMarket": 25,
   "southMarket": 22,
   "marriott": 1,
   "customHouseBlock": 6,
   "chartHouse": 1,
-  "aquarium": 3,
+  "aquarium": 11,
   "customHouse": 5,
   "harborTowers": 4,
   "rowesWharf": 19,
   "paulRevere": 1,
   "carousel": 0,
   "oldStateHouse": 1,
-  "cityHall": 10
+  "cityHall": 10,
+  "holocaustMemorial": 0,
+  "armenianPark": 0,
+  "ringsFountain": 0,
+  "unionOysterHouse": 0,
+  "columbusTrellis": 0
  },
  "ground": {
-  "landArea": 476084,
+  "landArea": 476365,
   "classes": {
    "road": 163253,
    "crosswalk": 11451,
    "parking": 29968,
    "lot": 80312,
-   "sidewalkBrick": 42288,
+   "sidewalkBrick": 51557,
    "sidewalkConcrete": 47737,
    "pavers": 14294,
    "setts": 468,
-   "path": 23708,
-   "grass": 62618,
+   "path": 21529,
+   "grass": 55808,
    "deckWood": 0,
    "deckConcrete": 0
   }
  },
- "groundTriangles": 94295,
- "curbs": 17152,
+ "groundTriangles": 93451,
+ "curbs": 17161,
  "seawallRuns": 1,
  "decks": 24,
  "piles": 851,
  "floats": 15,
  "waterArea": 5124857,
  "cordonGaps": 35,
+ "cordonGates": 12,
  "cordonGapLength": 1167,
  "furniture": {
   "tree": 210,
@@ -74,7 +80,8 @@
   "lamp": 2273
  },
  "bytes": {
-  "json": 145585,
-  "bin": 4608652
+  "json": 148509,
+  "bin": 4584128,
+  "binGz": 2005815
  }
 }

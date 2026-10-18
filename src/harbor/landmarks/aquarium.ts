@@ -1235,7 +1235,8 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
 
   // ---------------------------------------------------------------- the West Wing's plaza canopy and glass lantern
   // (only when the bake hands this landmark the canopy's parts; otherwise they stay generic)
-  const floorAt = (x: number, z: number) => ctx.terrainAt(x, z) + 0.15;
+  // the bake marks the canopy overhead, so the plaza's brick runs on under it; this is for a bake that doesn't
+  const floorAt = (x: number, z: number) => { const h = ctx.heightAt(x, z); return Number.isNaN(h) ? ctx.terrainAt(x, z) + 0.15 : h; };
   /** a footprint paved at plaza level, with a curb face down to the ground around it */
   const pave = (r: Ring) => {
     FL.flat(r, floorAt);
@@ -1245,7 +1246,7 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
     }
   };
   if (by.canopy.length) {
-    for (const p of by.canopy) pave(tidy(ringOf(p.outer)));
+    for (const p of by.canopy) if (!p.overhead) pave(tidy(ringOf(p.outer)));
     // the roof: a folded steel plate, its tip flung up over the plaza, sloping down to the seal pool
     const per: P3[] = CANOPY_ROOF.map(([x, z, y]) => [x, y, z]);
     const cx = 337.6, cz = 87.3, cTop = 8.7, cBot = 6.3, th = 0.7;
@@ -1274,6 +1275,7 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
       const m = new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(lx, h, lz).normalize()));
       m.setPosition(x + lx / 2, y0 + h / 2, z + lz / 2);
       S.add(g, m);
+      ctx.collide.addCircle(x, z, 0.4, y0 + 2);
     }
     // the lantern: a tall glass box rising through the plate, its top raked toward the plaza
     const la = 0.05, ax: P2 = [Math.cos(la), Math.sin(la)], ay: P2 = [-Math.sin(la), Math.cos(la)];
@@ -1296,6 +1298,7 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
       FE.face([at3(E, 0, ltop(...E.a), 0.06), at3(E, E.L, ltop(...E.b), 0.06), at3(E, E.L, ltop(...E.b) - 0.25, 0.06), at3(E, 0, ltop(...E.a) - 0.25, 0.06)], [E.n[0], 0, E.n[1]]);
     }
     GL.face(lr.map(([x, z]) => [x, ltop(x, z), z] as P3), UP);
+    for (let i = 0; i < lr.length; i++) { const a = lr[i], b = lr[(i + 1) % lr.length]; ctx.collide.addSeg(a[0], a[1], b[0], b[1], ltop(a[0], a[1])); }
     room(IN, FL, edgeOf(lr[0], lr[1]), 0.15, hw * 2 - 0.15, lf, lf + 11, -hd * 2 + 0.15, -0.15, 't');
     // the ticket booth and the queue lines, stanchions tipped over
     const tb: P2 = [346.4, 90.9], tE: Edge = { a: [tb[0] - ax[0] * 1.8, tb[1] - ax[1] * 1.8], b: [tb[0] + ax[0] * 1.8, tb[1] + ax[1] * 1.8], L: 3.6, t: ax, n: [ax[1], -ax[0]] };
@@ -1306,6 +1309,7 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
       CL.face([p(k * 1.2, tf + 1.0), p(k * 1.2 + 1.2, tf + 1.0), p(k * 1.2 + 1.2, tf + 2.6), p(k * 1.2, tf + 2.6)], [tE.n[0] * d, 0, tE.n[1] * d], glassUV(paneKind(R(), 0.4)));
     }
     eBox(FE, tE, -0.1, 3.7, tf + 2.6, tf + 2.85, -1.2, 1.2);
+    { const c = [[-0.1, -1.2], [3.7, -1.2], [3.7, 1.2], [-0.1, 1.2]].map(([s, d]) => at2(tE, s, d)); for (let i = 0; i < 4; i++) ctx.collide.addSeg(c[i][0], c[i][1], c[(i + 1) % 4][0], c[(i + 1) % 4][1], tf + 2.85); }
     for (let row = 0; row < 3; row++) for (let k = 0; k < 7; k++) {
       const x = 326 + k * 2.6, z = 89.6 + row * 1.0 + k * 0.08, y = floorAt(x, z);
       if (!by.canopy.some((p) => inRing(x, z, ringOf(p.outer)))) continue;

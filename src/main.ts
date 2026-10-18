@@ -80,7 +80,11 @@ async function boot() {
     // a big area: compile without blocking, then draw a couple of frames behind the loader so the
     // shadow, normal-pass and reflection variants exist before the first real frame
     await gl.compileAsync(built.scene, app3.camera);
+    // with frustum culling off, so every mesh's variants compile now, not when the camera first turns to it
+    const culled: THREE.Object3D[] = [];
+    built.scene.traverse((o) => { if (o.frustumCulled && (o as THREE.Mesh).isMesh) { o.frustumCulled = false; culled.push(o); } });
     for (let i = 0; i < 2; i++) { app3.frame(1 / 60); await nextFrame(); }
+    for (const o of culled) o.frustumCulled = true;
   } else gl.compile(built.scene, app3.camera);
   loader.classList.add('done');
   setTimeout(() => loader.remove(), 1200);
@@ -605,8 +609,11 @@ class App {
   frame(dt: number) {
     this.t += dt;
     wind.value += dt;
-    const run = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || Math.hypot(this.stick.x, this.stick.y) > 0.95;
-    const mv0 = this.readMove();
+    let mv0 = this.readMove();
+    // an area's autopilot steers in world space (at a run): turn it into stick input in the camera's frame
+    const auto = mv0.lengthSq() < 0.001 ? this.built.steer?.(this.pos, this.t) : null;
+    if (auto) mv0 = new THREE.Vector2(auto.x * Math.cos(this.yaw) - auto.z * Math.sin(this.yaw), -auto.x * Math.sin(this.yaw) - auto.z * Math.cos(this.yaw));
+    const run = !!auto || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || Math.hypot(this.stick.x, this.stick.y) > 0.95;
     const mv = (state.cam === 'cinematic' && !this.interior) || this.frozen ? new THREE.Vector2() : mv0;
     const heightAt = this.built.heightAt;
     let speed = 0;
@@ -841,7 +848,7 @@ class StatsOverlay {
   end(gl: THREE.WebGLRenderer, fps: number) {
     const i = gl.info, n = i.programs?.length ?? 0, now = performance.now();
     if (n > this.programs) {
-      if (now - this.born > 5000) console.warn(`[stats] shader programs ${this.programs} -> ${n} after warm-up`);
+      if (this.programs > 0 && now - this.born > 5000) console.warn(`[stats] shader programs ${this.programs} -> ${n} after warm-up`);
       this.programs = n;
     }
     if (now - this.shown < 250) return;

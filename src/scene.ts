@@ -158,6 +158,9 @@ export interface Built {
   brand?: string;
   /** things to walk up to and use (outside the prologue) */
   items?: Interactable[];
+  /** an autopilot (the harbor's ?walk=): the world direction to walk in this frame, or null to leave
+   *  the hero to the player; it goes through the same movement and collision as a stick would */
+  steer?: (pos: THREE.Vector3, t: number) => { x: number; z: number } | null;
   /** the drone whose searchlight and compliance scan are live right now (default: `drone`) */
   activeDrone?: () => ReturnType<typeof drone> | undefined;
   /** the shared actors are in the scene: grab what the area needs from the shell */

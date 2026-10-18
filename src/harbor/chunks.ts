@@ -31,22 +31,23 @@ export class MeshAcc {
   }
 }
 
-export interface ChunkOpts { cast?: boolean; receive?: boolean; layers?: number[]; renderOrder?: number; name?: string }
+export interface ChunkOpts { cast?: boolean; receive?: boolean; layers?: number[]; renderOrder?: number; name?: string; /** a cull distance (m) for small things that matter less than their height suggests */ far?: number }
 
 /** A static chunk: its mesh, and how far it can be seen (tall things carry further in the height fog). */
-export interface Chunk { mesh: THREE.Mesh; cx: number; cz: number; reach: number }
+export interface Chunk { mesh: THREE.Mesh; cx: number; cz: number; reach: number; /** half the tile's size */ half: number; far?: number }
 
 export class ChunkBuilder {
   private map = new Map<string, { acc: MeshAcc; mat: THREE.Material; opts: ChunkOpts; i: number; j: number }>();
-  constructor(public tile = 64) {}
+  /** `label` names the meshes (for profiling and the debug map) unless a chunk's opts name it */
+  constructor(public tile = 64, private label = '') {}
   /** the accumulator for `mat` in the tile containing (x, z) */
   at(mat: THREE.Material, x: number, z: number, opts: ChunkOpts = {}): MeshAcc {
     const i = Math.floor(x / this.tile), j = Math.floor(z / this.tile);
     const k = `${mat.uuid}:${i}:${j}`;
     let e = this.map.get(k);
     if (!e) { e = { acc: new MeshAcc(), mat, opts, i, j }; this.map.set(k, e); }
-    // a chunk over 60k vertices starts a fresh one (keeps 16-bit indices)
-    if (e.acc.count > 60000) {
+    // a chunk over 400k vertices starts a fresh one (past 65k the indices go 32-bit, which WebGL2 takes)
+    if (e.acc.count > 400000) {
       const k2 = `${k}:${this.map.size}`;
       this.map.set(k2, e);
       e = { acc: new MeshAcc(), mat, opts, i, j };
@@ -62,12 +63,12 @@ export class ChunkBuilder {
       const m = new THREE.Mesh(g, e.mat);
       m.castShadow = e.opts.cast ?? true; m.receiveShadow = e.opts.receive ?? true;
       if (e.opts.renderOrder) m.renderOrder = e.opts.renderOrder;
-      if (e.opts.name) m.name = e.opts.name;
+      m.name = e.opts.name ?? this.label;
       for (const l of e.opts.layers ?? []) m.layers.enable(l);
       m.matrixAutoUpdate = false; m.updateMatrix();
       parent.add(m);
       const bb = g.boundingBox!;
-      out.push({ mesh: m, cx: (e.i + 0.5) * this.tile, cz: (e.j + 0.5) * this.tile, reach: bb.max.y });
+      out.push({ mesh: m, cx: (e.i + 0.5) * this.tile, cz: (e.j + 0.5) * this.tile, reach: bb.max.y, half: this.tile / 2, far: e.opts.far });
     }
     this.map.clear();
     return out;

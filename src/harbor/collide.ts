@@ -7,7 +7,7 @@ interface Circle { x: number; z: number; r: number; top: number }
 
 export class CollisionGrid {
   private segs = new Map<number, Seg[]>();
-  private circles = new Map<number, Circle[]>();
+  private rounds = new Map<number, Circle[]>();
   constructor(private cell = 8) {}
   private key(i: number, j: number) { return (i + 4096) * 8192 + (j + 4096); }
   private cells(x0: number, z0: number, x1: number, z1: number, f: (k: number) => void) {
@@ -20,8 +20,12 @@ export class CollisionGrid {
   }
   addCircle(x: number, z: number, r: number, top: number) {
     const c = { x, z, r, top };
-    this.cells(x - r, z - r, x + r, z + r, (k) => { let l = this.circles.get(k); if (!l) this.circles.set(k, (l = [])); l.push(c); });
+    this.cells(x - r, z - r, x + r, z + r, (k) => { let l = this.rounds.get(k); if (!l) this.rounds.set(k, (l = [])); l.push(c); });
   }
+
+  /** every segment and circle once (for the debug map) */
+  segments(): Seg[] { const s = new Set<Seg>(); for (const l of this.segs.values()) for (const x of l) s.add(x); return [...s]; }
+  circles(): Circle[] { const s = new Set<Circle>(); for (const l of this.rounds.values()) for (const x of l) s.add(x); return [...s]; }
 
   /** a circle of radius r at (x, z) touches something */
   blocked = (x: number, z: number, r: number): boolean => {
@@ -30,7 +34,7 @@ export class CollisionGrid {
     for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
       const kk = k + di * 8192 + dj;
       for (const s of this.segs.get(kk) ?? []) if (segDist2(x, z, s) < r * r) return true;
-      for (const c of this.circles.get(kk) ?? []) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (r + c.r) ** 2) return true;
+      for (const c of this.rounds.get(kk) ?? []) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (r + c.r) ** 2) return true;
     }
     return false;
   };

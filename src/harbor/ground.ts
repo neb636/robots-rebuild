@@ -9,7 +9,7 @@ import { pbrMat } from '../props';
 export function buildGround(d: HarborData, parent: THREE.Object3D, quality: 'high' | 'low') {
   const v = d.get('gVert'), t = d.get<Uint32Array>('gTri'), cls = d.get<Uint8Array>('gTriClass'), dir = d.get<Uint8Array>('gTriDir');
   const mat = groundMaterial(d.h.ground, quality);
-  const cb = new ChunkBuilder(64);
+  const cb = new ChunkBuilder(128, 'ground');
   // each chunk maps the bake's vertex indices to its own
   const local = new Map<object, Map<number, number>>();
   for (let i = 0; i < t.length / 3; i++) {

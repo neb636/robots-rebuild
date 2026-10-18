@@ -2,7 +2,7 @@
 // facade style, a tier (play / edge / backdrop), and per-edge "cover" spans where a neighbour's wall
 // hides part of this one (party walls in the North End, a tower rising out of its base).
 import { project } from '../config.mjs';
-import { openRing, simplifyRing, ringArea, absArea, centroid, ringBounds, Grid, inRing, hash32, segDist, polysToPaths, intersect, pathsArea, toPath } from './geom.mjs';
+import { openRing, simplifyRing, ringArea, absArea, centroid, ringBounds, Grid, inRing, hash32, segDist, polysToPaths, intersect, inflate, pathsArea, toPath } from './geom.mjs';
 import { metres } from './osm.mjs';
 
 const FT = 0.3048;
@@ -31,9 +31,10 @@ function orient(p) {
 
 /**
  * features: BPDA GeoJSON features; osm: parsed OSM ({ polys }); terrain(x, z) -> y;
- * play: Paths64 of the play polygon; edgeZone: Paths64 (play inflated); landmarks: [{ key, rings }]
+ * play: Paths64 of the play polygon; edgeZone: Paths64 (play inflated);
+ * landmarks: [{ key, rings, extra, overhead, near }] (see landmarkParts)
  */
-export function buildParts({ features, farFeatures, osm, terrainAt, play, edgeZone, landmarks, window }) {
+export function buildParts({ features, farFeatures, osm, terrainAt, play, edgeZone, landmarks, roofs, window }) {
   // OSM buildings and parts, indexed
   const osmB = [], osmP = [];
   for (const p of osm.polys) {
@@ -81,20 +82,42 @@ export function buildParts({ features, farFeatures, osm, terrainAt, play, edgeZo
     const tc = terrainAt(p.cx, p.cz);
     let h = Number(p.props.BLDG_HGT_2010) * FT;
     if (!(h > 1.5)) h = metres(p.tags.height) ?? (p.tags['building:levels'] ? Number(p.tags['building:levels']) * 3.3 + 1 : NaN);
-    if (!(h > 1.5)) h = 9;
+    // nothing measured: a glass roof (the market canopies) is a storey, a shed or a kiosk less than that
+    if (!(h > 1.5)) h = p.tags.building === 'roof' ? 4.5 : p.props.IEL_TYPE === 'OUTBLDG' || absArea(p.raw.outer) < 40 ? 3 : 9;
     p.height = h;
     p.base = Math.min(ground, tc) - 0.3;
     p.top = Math.max(tc + h, groundMax + 2.5);
     p.seed = hash32(p.id);
     p.style = classify(p);
-    p.roof = roofShape(p);
+    p.roof = roofShape(p, roofs?.[p.osmBuilding]);
   }
 
-  // landmarks: parts whose centroid falls inside a landmark's outline
-  for (const lm of landmarks ?? []) for (const p of parts) if (lm.rings.some((r) => inRing(p.cx, p.cz, r))) p.landmark = lm.key;
+  for (const lm of landmarks ?? []) landmarkParts(lm, parts);
 
   coverSpans(parts.filter((p) => p.tier <= 2));
   return parts;
+}
+
+/**
+ * A landmark takes the parts whose centroid falls inside its outline (`rings`) or one of its `extra`
+ * outlines (pieces that belong to it but aren't the building, like Quincy Market's canopies), and the
+ * parts lying almost wholly within `near` metres of its outline (areaways and slivers along a wall).
+ * Parts inside an `overhead` outline are roofs over open ground (the Aquarium's plaza canopy): the
+ * landmark builds them, but the ground runs on underneath.
+ */
+function landmarkParts(lm, parts) {
+  const nearPaths = lm.near > 0 ? inflate(polysToPaths(lm.rings.map((outer) => ({ outer, holes: [] }))), lm.near) : null;
+  const nb = nearPaths && lm.rings.map(ringBounds).reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), z0: Math.min(a.z0, b.z0), x1: Math.max(a.x1, b.x1), z1: Math.max(a.z1, b.z1) }));
+  const inAny = (p, rings) => rings.some((r) => inRing(p.cx, p.cz, r));
+  for (const p of parts) {
+    if (inAny(p, lm.overhead)) { p.landmark = lm.key; p.overhead = true; continue; }
+    if (inAny(p, lm.rings) || inAny(p, lm.extra)) { p.landmark = lm.key; continue; }
+    if (!nearPaths || p.landmark) continue;
+    const b = ringBounds(p.raw.outer);
+    if (b.x1 < nb.x0 - lm.near || b.x0 > nb.x1 + lm.near || b.z1 < nb.z0 - lm.near || b.z0 > nb.z1 + lm.near) continue;
+    const own = polysToPaths([p.raw]);
+    if (pathsArea(intersect(own, nearPaths)) > 0.9 * pathsArea(own)) p.landmark = lm.key;
+  }
 }
 
 /** Facade style from use, height, material and a little chance. */
@@ -122,10 +145,11 @@ function classify(p) {
   return r < 0.55 ? S.brickCommercial : r < 0.78 ? S.masonryOffice : r < 0.92 ? S.graniteWarehouse : S.modernBrick;
 }
 
-function roofShape(p) {
-  const s = String(p.tags['roof:shape'] ?? 'flat').toLowerCase();
+/** `forced`: a shape from roofs.json, which pitches any footprint (the runtime ridges it along its long axis) */
+function roofShape(p, forced) {
+  const s = String(forced ?? p.tags['roof:shape'] ?? 'flat').toLowerCase();
   // pitched roofs only where the footprint is a plain quadrilateral we can put a ridge on
-  if (['gabled', 'hipped', 'mansard', 'pyramidal', 'skillion', 'half-hipped', 'gambrel'].includes(s) && p.outer.length === 4 && !p.holes.length) {
+  if (['gabled', 'hipped', 'mansard', 'pyramidal', 'skillion', 'half-hipped', 'gambrel'].includes(s) && (forced || p.outer.length === 4) && !p.holes.length) {
     return ROOFS.indexOf(s === 'half-hipped' ? 'hipped' : s === 'gambrel' ? 'mansard' : s);
   }
   if (s === 'dome' || s === 'onion') return ROOFS.indexOf('dome');

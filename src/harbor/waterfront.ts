@@ -9,7 +9,7 @@ const SEABED = -9;
 
 export function buildWaterfront(d: HarborData, parent: THREE.Object3D, quality: 'high' | 'low') {
   const W = d.h.waterY;
-  const cb = new ChunkBuilder(64);
+  const cb = new ChunkBuilder(128, 'waterfront');
   const granite = new THREE.MeshStandardMaterial({ color: '#7e7a72', roughness: 0.85 });
   // the tide's marks: dark and weedy below the high-water line, slick just above the water
   granite.onBeforeCompile = (sh) => {
@@ -102,3 +102,60 @@ export function buildWaterfront(d: HarborData, parent: THREE.Object3D, quality: 
 }
 
 function signedArea(r: number[][]) { let a = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1]); return a / 2; }
+
+/** a ladder down a quay face, for climbing out of the water: where it meets the top, and which way
+ *  the water is */
+export interface Ladder { x: number; z: number; top: number; nx: number; nz: number }
+
+/**
+ * Iron ladders down the seawalls and deck edges, every ~80 m along the open water inside the cordon
+ * (the way out for a swimmer). `standAt(x, z, nx, nz)` is the height of the quay to step onto behind a
+ * spot, or NaN where it won't do (no ground there, or no open water inside the line in front).
+ */
+export function buildLadders(d: HarborData, parent: THREE.Object3D, standAt: (x: number, z: number, nx: number, nz: number) => number): { ladders: Ladder[]; chunks: ReturnType<ChunkBuilder['flush']> } {
+  const W = d.h.waterY, cb = new ChunkBuilder(128, 'ladders');
+  const iron = new THREE.MeshStandardMaterial({ color: '#3a2c24', roughness: 0.6, metalness: 0.55 });
+  const edges: { a: number[]; b: number[]; nx: number; nz: number }[] = [];
+  for (const line of d.lines('wallVert', 'wallIdx', 3)) for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i + 1], L = Math.hypot(b[0] - a[0], b[2] - a[2]);
+    if (L > 0.5) edges.push({ a, b, nx: (b[2] - a[2]) / L, nz: -(b[0] - a[0]) / L });
+  }
+  for (const ring of d.lines('deckVert', 'deckIdx', 3)) {
+    let area = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += (ring[j][0] - ring[i][0]) * (ring[j][2] + ring[i][2]);
+    const sgn = area > 0 ? 1 : -1;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length], L = Math.hypot(b[0] - a[0], b[2] - a[2]);
+      if (L > 0.5) edges.push({ a, b, nx: (sgn * (b[2] - a[2])) / L, nz: (-sgn * (b[0] - a[0])) / L });
+    }
+  }
+  const ladders: Ladder[] = [];
+  const box = (acc: MeshAcc, cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, yaw: number) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz).rotateY(yaw).translate(cx, cy, cz);
+    const p = g.attributes.position as THREE.BufferAttribute, n = g.attributes.normal as THREE.BufferAttribute, base = acc.count;
+    for (let k = 0; k < p.count; k++) acc.v(p.getX(k), p.getY(k), p.getZ(k), n.getX(k), n.getY(k), n.getZ(k));
+    const ix = g.index!;
+    for (let k = 0; k < ix.count; k += 3) acc.tri(base + ix.getX(k), base + ix.getX(k + 1), base + ix.getX(k + 2));
+  };
+  for (const e of edges) {
+    const L = Math.hypot(e.b[0] - e.a[0], e.b[2] - e.a[2]);
+    for (let s = 1; s < L - 1; s += 2) {
+      const t = s / L, x = e.a[0] + (e.b[0] - e.a[0]) * t, z = e.a[2] + (e.b[2] - e.a[2]) * t;
+      if (ladders.some((l) => Math.hypot(l.x - x, l.z - z) < 80)) continue;
+      const top = standAt(x, z, e.nx, e.nz);
+      if (Number.isNaN(top) || top < W + 0.4) continue;
+      ladders.push({ x, z, top, nx: e.nx, nz: e.nz });
+      // two stiles from below the water up over the edge into grab hoops, rungs every 0.3 m
+      const yaw = Math.atan2(e.nx, e.nz), ux = Math.cos(yaw), uz = -Math.sin(yaw), ox = x + e.nx * 0.14, oz = z + e.nz * 0.14;
+      const acc = cb.at(iron, x, z), bottom = W - 1.4;
+      for (const side of [-0.24, 0.24]) {
+        box(acc, ox + ux * side, (bottom + top) / 2, oz + uz * side, 0.05, top - bottom, 0.05, yaw);
+        // over the coping and down onto the quay
+        box(acc, x + ux * side - e.nx * 0.12, top + 0.45, z + uz * side - e.nz * 0.12, 0.05, 0.9, 0.05, yaw);
+        box(acc, x + ux * side, top + 0.9, z + uz * side, 0.05, 0.05, 0.36, yaw);
+      }
+      for (let y = bottom + 0.2; y < top - 0.05; y += 0.3) box(acc, ox, y, oz, 0.5, 0.04, 0.04, yaw);
+    }
+  }
+  return { ladders, chunks: cb.flush(parent) };
+}

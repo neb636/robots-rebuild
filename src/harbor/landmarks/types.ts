@@ -15,6 +15,8 @@ export interface LandmarkCtx {
   parts: Part[];
   /** the landmark's OpenStreetMap outline rings (local x/z metres) */
   outline: [number, number][][];
+  /** the OpenStreetMap way it follows, for one built along a line instead (local x/z metres) */
+  path?: [number, number][];
   /** walkable ground height at (x, z); NaN inside footprints, over water, past the cordon */
   heightAt(x: number, z: number): number;
   /** smoothed terrain height anywhere (use for the ground under the building) */
@@ -29,6 +31,8 @@ export interface LandmarkResult {
   /** lamps or lanterns that should glow in the fog */
   lights?: FogLight[];
   update?(dt: number, t: number): void;
+  /** it only dresses the building (a sign, a lamp): its parts keep their generic walls */
+  keepWalls?: boolean;
 }
 
 /** Returns null to fall back to the generic facade. */
