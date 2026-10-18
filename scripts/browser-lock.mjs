@@ -11,7 +11,8 @@
 //
 // The hooks pass their JSON on stdin. The owner is the session plus the subagent (agent_id), so parallel
 // subagents of one session queue too. A lock nobody has used for STALE_MS is taken over (the holder crashed
-// or forgot to close), closing its browser first.
+// or forgot to close), closing its browser first, and so is one held for EMPTY_MS with no browser open at
+// all (a command that only mentioned playwright-cli, or a holder that never fires SubagentStop).
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -22,6 +23,8 @@ const OWNER_FILE = join(LOCK, 'owner.json');
 const STALE_MS = 10 * 60_000;
 const WAIT_MS = 9 * 60_000; // under the hook's 600 s timeout
 const POLL_MS = 2_000;
+const EMPTY_MS = 60_000;
+const EMPTY_CHECK_MS = 15_000; // how often a waiter asks playwright-cli whether any browser is open
 
 // Subcommands that don't touch a browser, or only shut one down, never wait
 const NO_LOCK = new Set(['list', 'close', 'close-all', 'kill-all', 'install', 'install-browser', 'help']);
@@ -84,6 +87,24 @@ function closeBrowser(info) {
   }
 }
 
+function anyBrowserOpen(cwd) {
+  try {
+    const out = execFileSync('playwright-cli', ['--json', 'list'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20_000 });
+    return JSON.parse(out.slice(out.indexOf('{'))).browsers.some((b) => b.status === 'open');
+  } catch {
+    return true; // can't tell, so don't take it
+  }
+}
+
+let lastEmptyCheck = 0;
+
+// Held long enough to have opened a browser, yet none is open
+function heldEmpty(info, now) {
+  if (!info || now - info.acquiredAt < EMPTY_MS || now - lastEmptyCheck < EMPTY_CHECK_MS) return false;
+  lastEmptyCheck = now;
+  return !anyBrowserOpen(info.cwd);
+}
+
 // Take the lock if it's free, ours, or stale. True when we hold it afterwards.
 function tryAcquire(session) {
   const now = Date.now();
@@ -100,7 +121,7 @@ function tryAcquire(session) {
     writeOwner({ ...info, session: session ?? info.session, lastUsed: now });
     return true;
   }
-  if (now - lastUsed(info) > STALE_MS) {
+  if (now - lastUsed(info) > STALE_MS || heldEmpty(info, now)) {
     // Rename first so only one waiter wins the takeover
     const dead = `${LOCK}.stale-${process.pid}-${now}`;
     try {

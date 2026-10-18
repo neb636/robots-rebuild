@@ -28,7 +28,7 @@ Hooks in `.claude/settings.json` run `scripts/browser-lock.mjs`: an agent's firs
 waits until the browser is free, `playwright-cli close` frees it, and a browser left open is closed
 when its agent stops. `node scripts/browser-lock.mjs status` shows who holds it, and
 `node scripts/browser-lock.mjs release --force` clears a stuck lock by hand. A lock idle for 10
-minutes is taken over automatically.
+minutes, or held for a minute with no browser open, is taken over automatically.
 
 When splitting a feature across subagents, have implementation subagents finish with
 `npm run typecheck` and leave the browser alone. Then run the `playtester` once over the combined
