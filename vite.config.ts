@@ -11,6 +11,10 @@ export default defineConfig({
     target: 'es2022',
     chunkSizeWarningLimit: 2000,
     // stage.html is the character stage (src/stage.ts), shipped so previews can show it too
-    rollupOptions: { input: { main: 'index.html', stage: 'stage.html' } },
+    rollupOptions: {
+      input: { main: 'index.html', stage: 'stage.html' },
+      // the harbor district loads on demand (its own chunk, from src/harbor/index.ts): name it for itself
+      output: { chunkFileNames: (c) => (c.facadeModuleId?.endsWith('/src/harbor/index.ts') ? 'assets/harbor-[hash].js' : 'assets/[name]-[hash].js') },
+    },
   },
 });

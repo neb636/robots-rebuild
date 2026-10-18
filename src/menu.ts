@@ -115,6 +115,8 @@ export class Menu {
           info('Voices', 'Your browser · ElevenLabs (Audio: Generated)'),
           info('Engine', 'Three.js · postprocessing · Vite'),
           info('Type', 'Cormorant Garamond'),
+          info('Map data', '© OpenStreetMap contributors (ODbL)'),
+          info('Buildings & terrain', 'City of Boston / BPDA (PDDL) · USGS 3DEP'),
           { ...back, desc: () => 'Thank you for playing.' },
         ],
       },
