@@ -845,7 +845,7 @@ class StatsOverlay {
   end(gl: THREE.WebGLRenderer, fps: number) {
     const i = gl.info, n = i.programs?.length ?? 0, now = performance.now();
     if (n > this.programs) {
-      if (now - this.born > 5000) console.warn(`[stats] shader programs ${this.programs} -> ${n} after warm-up`);
+      if (this.programs > 0 && now - this.born > 5000) console.warn(`[stats] shader programs ${this.programs} -> ${n} after warm-up`);
       this.programs = n;
     }
     if (now - this.shown < 250) return;

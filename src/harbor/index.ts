@@ -2,7 +2,7 @@
 // the end of Long Wharf. Built from real map data (scripts/harbor/), loaded on demand.
 import * as THREE from 'three';
 import type { Built, CineShot } from '../scene';
-import { skyDome } from '../sky';
+import { skyDome, spire } from '../sky';
 import { loadHarbor } from './data';
 import { WalkMesh } from './walk';
 import { CollisionGrid } from './collide';
@@ -55,6 +55,9 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const scene = new THREE.Scene();
   const root = new THREE.Group(); scene.add(root);
   const sky = skyDome(); scene.add(sky.mesh);
+  // the Superintelligence spire across the harbour on the East Boston waterfront (the bearing Acorn
+  // Lane's skyline gives it), where the water can mirror it
+  const tower = spire(scene, 1150, 1, -620);
   const collide = new CollisionGrid(8);
   const chunks: Chunk[] = [];
 
@@ -126,7 +129,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
   const streets = new Set([...groundChunks, ...street.chunks]);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
-  for (const o of [sky.mesh, cordon.buoys, cordon.lamps, cordon.eyes, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
+  for (const o of [sky.mesh, tower.group, cordon.buoys, cordon.lamps, cordon.eyes, ...cordon.drones, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
 
   // ---------------------------------------------------------------- light
   const moon = new THREE.DirectionalLight('#ffffff', 1);
@@ -227,6 +230,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     music: 'static', ambience: 'harbor',
     brand: 'Prologue · The Harbor',
     blocked, cameraBlock: collide.cameraBlock, cameraFloor,
+    activeDrone: cordon.activeDrone,
     normalHidden: street.normalHidden,
     camera: { near: 0.25, far: 2000 },
     shadow: { lift: 250 },
@@ -305,7 +309,8 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
         cordon.buoys.setMatrixAt(i, m4); cordon.lamps.setMatrixAt(i, m4);
       });
       cordon.buoys.instanceMatrix.needsUpdate = true; cordon.lamps.instanceMatrix.needsUpdate = true;
-      cordon.update(t);
+      cordon.update(t, dt, player);
+      tower.update(t);
       // the cordon buoys blink together
       (cordon.lamps.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(t * 2.2) > 0.4 ? 7 : 0.6;
     },

@@ -5,6 +5,8 @@ import binUrl from './data/harbor.bin.gz?url';
 
 export interface Spot { x: number; z: number; heading: number }
 export interface Gap { pts: [number, number][]; length: number; kind: 'alley' | 'street' | 'avenue' | 'plaza' | 'park' }
+/** a sealed gate where a through road crosses the cordon: its centre, the wall's direction, the road's width */
+export interface Gate { x: number; z: number; ux: number; uz: number; width: number; street: string; gap: number }
 export interface Furniture { x: number; z: number; id: string; name?: string }
 
 export interface Header {
@@ -26,7 +28,7 @@ export interface Header {
   names: Record<string, string>;
   water: { fine: number; coarse: number; box: { x0: number; z0: number; x1: number; z1: number } };
   terrain: { x0: number; z0: number; cell: number; nx: number; nz: number };
-  cordon: { gaps: Gap[]; buoys: [number, number][][] };
+  cordon: { gaps: Gap[]; buoys: [number, number][][]; gates?: Gate[] };
   furniture: Record<string, Furniture[]>;
   blobs: Record<string, { type: string; offset: number; length: number }>;
 }

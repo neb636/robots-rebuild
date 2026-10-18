@@ -63,6 +63,7 @@
  "floats": 15,
  "waterArea": 5124857,
  "cordonGaps": 35,
+ "cordonGates": 12,
  "cordonGapLength": 1167,
  "furniture": {
   "tree": 210,
@@ -79,7 +80,7 @@
   "lamp": 2273
  },
  "bytes": {
-  "json": 147406,
+  "json": 148509,
   "bin": 4584128,
   "binGz": 2005815
  }

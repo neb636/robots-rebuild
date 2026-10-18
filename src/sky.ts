@@ -122,8 +122,15 @@ export function skyline(parent: THREE.Object3D, b: Batch, lights: FogLight[]) {
   add(new THREE.CylinderGeometry(1.2, 1.4, 2.6, 16), gold, 2.2, 16.6, -1.5).rotation.z = 0.35;
   mergeStatic(sh);
 
-  // ---- The Superintelligence Inc. spire: a black monolith that has no business being here
-  const spire = new THREE.Group(); spire.position.set(70, 0, -340); parent.add(spire);
+  const sp = spire(parent, 70, 0, -340);
+  void lights;
+  return { update: sp.update };
+}
+
+/** The Superintelligence Inc. spire: a black monolith that has no business being here (300 m of it,
+ *  seams lit, red rings turning near the top, a beacon and a beam into the cloud) */
+export function spire(parent: THREE.Object3D, x: number, y: number, z: number) {
+  const spire = new THREE.Group(); spire.position.set(x, y, z); parent.add(spire);
   const obsidian = new THREE.MeshStandardMaterial({ color: '#07080a', roughness: 0.18, metalness: 0.8 });
   const body = new THREE.Mesh(new THREE.CylinderGeometry(7, 16, 300, 4, 1), obsidian); body.position.y = 150; body.rotation.y = Math.PI / 4; spire.add(body);
   const seam = glowMat('#d8f0ff', 2.2);
@@ -139,8 +146,8 @@ export function skyline(parent: THREE.Object3D, b: Batch, lights: FogLight[]) {
   beam.position.y = 500; spire.add(beam);
   // a soft red bloom around the crown; drawn as a sprite rather than a fog light so it stays in the sky
   const crown = glowSprite('#ff3020', 140, 0.5); crown.position.y = 240; spire.add(crown);
-  void lights;
   return {
+    group: spire,
     update(t: number) {
       ring.rotation.z = t * 0.08; ring2.rotation.z = -t * 0.05;
       const blink = Math.sin(t * 1.4) > 0.6 ? 1 : 0.15;

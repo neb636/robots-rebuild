@@ -186,8 +186,13 @@ const classPolys = painted.classes.map((c) => G.pathsToPolys(c));
 const classAt = (x, z) => { for (let c = 0; c < GROUND.length; c++) if (classPolys[c].some((p) => G.inPoly(x, z, p))) return GROUND[c].name; return null; };
 const openGround = G.difference(G.union([...land, ...decks]), footprints);
 const waterPaths = G.difference(G.polysToPaths([{ outer: [[coastBox.x0, coastBox.z0], [coastBox.x1, coastBox.z0], [coastBox.x1, coastBox.z1], [coastBox.x0, coastBox.z1]], holes: [] }]), land);
-const cord = cordon(playRing, openGround, waterPaths, classAt);
+// the through roads (not the expressway or its tunnels) get gates where they cross the line
+const GATE_ROADS = { primary: 14, secondary: 11 };
+const gateRoads = osm.lines.filter((l) => GATE_ROADS[l.tags.highway] && l.tags.name && !['yes', 'building_passage'].includes(l.tags.tunnel) && !(Number(l.tags.layer) < 0))
+  .map((l) => ({ pts: l.pts, name: l.tags.name, width: GATE_ROADS[l.tags.highway] }));
+const cord = cordon(playRing, openGround, waterPaths, classAt, gateRoads);
 log(`  ${cord.gaps.length} gaps (${cord.gaps.map((g) => g.kind[0] + Math.round(g.length)).join(' ')}), ${cord.buoys.length} buoy runs`);
+log(`  ${cord.gates.length} gates: ${cord.gates.map((g) => g.street).join(', ')}`);
 
 // ------------------------------------------------------------------ street furniture
 const zoneRings = groundZone.map(G.fromPath);
@@ -275,7 +280,7 @@ const stats = {
   seawallRuns: walls.length,
   decks: deckRings.length, piles: piles.length / 2, floats: floats.length,
   waterArea: water.area,
-  cordonGaps: cord.gaps.length, cordonGapLength: Math.round(cord.gaps.reduce((s, g) => s + g.length, 0)),
+  cordonGaps: cord.gaps.length, cordonGates: cord.gates.length, cordonGapLength: Math.round(cord.gaps.reduce((s, g) => s + g.length, 0)),
   furniture: Object.fromEntries(Object.entries(furniture).map(([k, v]) => [k, v.length])),
   bytes: { json: json.length, bin: bin.length, binGz: binGz.length },
 };
