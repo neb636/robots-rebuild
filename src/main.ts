@@ -75,7 +75,7 @@ async function boot() {
   const theo = await loadTheo(state.quality);
   setLoad(0.9, outdoors ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
   const app3 = new App(gl, built, theo);
-  if (params.has('debug')) (window as any).__app = app3;
+  if (params.has('debug')) { (window as any).__app = app3; (window as any).__perf = perf; }
   setLoad(1, ''); await nextFrame();
   // compile shaders up front so the first frames don't hitch
   if (harbor) {
@@ -262,7 +262,8 @@ class App {
     let last = performance.now();
     frameLoop((now) => {
       const real = (now - last) / 1000; last = now;
-      this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
+      // (not counting the interval after a frame the profiler serialized: ?debug=stats)
+      if (!perf.serialized) this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
       this.frame(Math.min(0.05, real), real * 1000);
       this.benchTick?.(real * 1000);
     });
@@ -875,6 +876,7 @@ class StatsOverlay {
   private programs = 0;
   private born = performance.now();
   private shown = 0;
+  private size = new THREE.Vector2();
   show(gl: THREE.WebGLRenderer, fps: number) {
     const i = gl.info, n = i.programs?.length ?? 0, now = performance.now();
     if (n > this.programs) {
@@ -884,8 +886,9 @@ class StatsOverlay {
     if (now - this.shown < 250) return;
     this.shown = now;
     const cpu = [...perf.cpu.m].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ');
+    const px = gl.getDrawingBufferSize(this.size);
     this.el.textContent = [
-      `${fps.toFixed(0)} fps · ${perf.timed ? `GPU ${perf.gpuTotal.toFixed(1)} ms (${perf.mode}) · ` : ''}${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`,
+      `${fps.toFixed(0)} fps · ${state.quality === 'high' ? 'High' : 'Low'} ${px.x}x${px.y} · ${perf.timed ? (perf.mode === 'sync' && perf.sampleMs ? `GPU ${perf.gpuTotal.toFixed(1)} ms when stalled (1 frame/s) · ` : `GPU ${perf.gpuTotal.toFixed(1)} ms (${perf.mode}) · `) : ''}${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`,
       `CPU ms: ${cpu}`,
       ...perf.table(),
     ].join('\n');

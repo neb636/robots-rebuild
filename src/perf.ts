@@ -12,7 +12,9 @@
 //   can: Chrome's only waits for the commands to be issued), so each section's time is its CPU
 //   submission plus its GPU work, minus the readback's own cost (measured once). It stops the CPU and
 //   GPU overlapping, so a frame takes longer than it would in play, but the split is exact in any
-//   browser. ?bench uses it; ?perf=timer|sync picks for ?debug=stats.
+//   browser. ?bench syncs every frame. ?debug=stats (where there's no usable timer) syncs one frame a
+//   second (`sampleMs`), so the frame rate it shows stays close to the real one; ?perf=sync syncs every
+//   frame there too, and ?perf=timer|none picks the others.
 // Without detail (no ?debug=stats or ?bench) there's at most one timer query per frame (the total).
 import * as THREE from 'three';
 
@@ -32,6 +34,11 @@ export interface FrameRecord { gpu: Record<string, number>; gpuTotal: number }
 class Perf {
   detail = false;
   mode: GpuMode = 'none';
+  /** 'sync' only: serialize one frame in this many ms (0: every frame) */
+  sampleMs = 0;
+  /** this frame is being serialized ('sync'), and the one before was */
+  private on = false; private wasOn = false;
+  private lastSample = -Infinity;
   /** a trustworthy GPU timer query exists (not Safari, not ANGLE on Metal) */
   timerOk = false;
   private ctx: WebGL2RenderingContext | null = null;
@@ -63,6 +70,8 @@ class Perf {
   private longLog = 0;
 
   get timed() { return this.mode !== 'none'; }
+  /** the last frame was serialized, so the interval up to the next one runs long */
+  get serialized() { return this.on; }
 
   init(gl: THREE.WebGLRenderer, detail: boolean, want?: GpuMode) {
     this.detail = detail;
@@ -76,6 +85,7 @@ class Perf {
     this.mode = want ?? (this.timerOk ? 'timer' : detail ? 'sync' : 'none');
     if (this.mode === 'timer' && !this.timerOk) this.mode = detail ? 'sync' : 'none';
     if (this.mode !== 'timer') this.ext = null;
+    if (this.mode === 'sync' && !want) this.sampleMs = 1000;
     if (detail) {
       this.syncRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
       // the readback's own cost: the second of two back-to-back syncs
@@ -99,6 +109,10 @@ class Perf {
     if (this.detail && this.info) { this.info.reset(); this.calls = 0; this.tris = 0; this.draws.clear(); this.triangles.clear(); }
     this.cpuNow.clear();
     this.synced = {};
+    this.wasOn = this.on;
+    const now = performance.now();
+    this.on = this.mode === 'sync' && (this.sampleMs === 0 || now - this.lastSample >= this.sampleMs);
+    if (this.on) this.lastSample = now;
     this.start(this.detail ? 'other' : 'frame');
   }
 
@@ -107,11 +121,11 @@ class Perf {
     this.stop();
     this.stack.length = 0;
     if (this.segs.length) { this.inflight.push(this.segs); this.segs = []; }
-    if (this.mode === 'sync') this.record(this.synced);
+    if (this.on) this.record(this.synced);
     for (const [k, v] of this.cpuNow) this.cpu.add(k, v);
     const last = this.lastCpu; this.lastCpu = this.cpuNow; this.cpuNow = last;
-    // (serialized 'sync' frames are long by design: no hitch reports while they run)
-    if (!this.detail || interval <= 0 || this.mode === 'sync') return;
+    // (a serialized frame is long by design: no hitch report for the interval after one)
+    if (!this.detail || interval <= 0 || this.wasOn) return;
     const iv = this.intervals; iv.push(interval); if (iv.length > 120) iv.shift();
     const med = [...iv].sort((a, b) => a - b)[iv.length >> 1];
     // a frame twice as long as usual (and long in absolute terms): say what the frame before it ran
@@ -148,7 +162,7 @@ class Perf {
     if (this.ctx && this.ext) {
       const q = this.pool.pop() ?? this.ctx.createQuery();
       if (q) { this.ctx.beginQuery(this.ext.TIME_ELAPSED_EXT, q); this.open = { label, q }; }
-    } else if (this.mode === 'sync') {
+    } else if (this.on) {
       this.sync(); this.openT = performance.now();
     }
     if (this.detail && this.info) { this.calls = this.info.render.calls; this.tris = this.info.render.triangles; }
@@ -159,7 +173,7 @@ class Perf {
       this.ctx.endQuery(this.ext.TIME_ELAPSED_EXT);
       this.segs.push(this.open);
       this.open = null;
-    } else if (this.mode === 'sync' && this.openLabel) {
+    } else if (this.on && this.openLabel) {
       this.sync();
       this.synced[this.openLabel] = (this.synced[this.openLabel] ?? 0) + Math.max(0, performance.now() - this.openT - this.syncCost);
     }
@@ -181,9 +195,10 @@ class Perf {
   }
 
   private record(sums: Record<string, number>) {
-    let total = 0;
-    for (const k in sums) { this.gpu.add(k, sums[k]); total += sums[k]; }
-    this.gpuTotal += (total - this.gpuTotal) * 0.1;
+    // (sampled once a second, each reading counts for more)
+    let total = 0; const a = this.sampleMs > 0 && this.mode === 'sync' ? 0.3 : 0.1;
+    for (const k in sums) { this.gpu.add(k, sums[k], a); total += sums[k]; }
+    this.gpuTotal += (total - this.gpuTotal) * a;
     this.onFrame?.({ gpu: sums, gpuTotal: total });
   }
 

@@ -44,7 +44,7 @@ async function measure(host: BenchHost, ms: number) {
 
 /** one view: pass costs with every pass serialized (perf 'sync'), then the real frame intervals */
 async function hold(host: BenchHost) {
-  perf.mode = 'sync';
+  perf.mode = 'sync'; perf.sampleMs = 0;
   await wait(1200);
   const passes = await measure(host, 2000);
   perf.mode = 'none';
