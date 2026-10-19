@@ -135,3 +135,48 @@ function ring(acc: ReturnType<ChunkBuilder['at']>, l: Lamp, y0: number, r0: numb
   }
   for (let i = 0; i < n; i++) { const a = base + i * 2; acc.tri(a, a + 1, a + 3); acc.tri(a, a + 3, a + 2); }
 }
+
+/**
+ * Light LOD for the area's own point lights (landmark lanterns, the station, the trawler's lantern):
+ * they're hidden from the renderer, and `n` stand-in lights take the place of the ones nearest the
+ * camera, copying each one's position (the boat moves), colour, reach and flickering intensity. Every
+ * lit pixel loops over every point light in the scene, so 13 lights that only ever light a few metres
+ * each cost the whole screen; this keeps the count fixed (no recompiles) at a few. A light changing
+ * hands fades out first, then in.
+ */
+export function lightLOD(sources: THREE.PointLight[], n: number, parent: THREE.Object3D, layer: number) {
+  const slots = Array.from({ length: n }, () => {
+    const light = new THREE.PointLight('#000000', 0, 1, 2);
+    light.layers.enable(layer); parent.add(light);
+    return { light, src: null as THREE.PointLight | null, fade: 0 };
+  });
+  for (const s of sources) s.visible = false;
+  const p = new THREE.Vector3(), score = new Map<THREE.PointLight, number>(), near: THREE.PointLight[] = [];
+  let t0 = 0;
+  return function update(dt: number, cam: THREE.Vector3) {
+    if ((t0 -= dt) <= 0) {
+      t0 = 0.3;
+      // nearest by how far the camera is outside each light's reach
+      for (const s of sources) score.set(s, s.getWorldPosition(p).distanceTo(cam) - s.distance);
+      near.length = 0; near.push(...sources);
+      near.sort((a, b) => score.get(a)! - score.get(b)!);
+      near.length = Math.min(n, near.length);
+      for (const s of slots) if (s.src && !near.includes(s.src)) s.src = null;
+      for (const l of near) {
+        if (slots.some((s) => s.src === l)) continue;
+        const free = slots.find((s) => !s.src && s.fade <= 0.02);
+        if (free) free.src = l;
+      }
+    }
+    for (const s of slots) {
+      s.fade += ((s.src ? 1 : 0) - s.fade) * Math.min(1, dt * 4);
+      if (s.src && s.fade < 0.02) s.fade = 0.02; // (a newly assigned slot starts its fade-in)
+      const l = s.light, src = s.src;
+      if (src) {
+        src.getWorldPosition(l.position);
+        l.color.copy(src.color); l.distance = src.distance; l.decay = src.decay;
+        l.intensity = src.intensity * s.fade;
+      } else l.intensity *= Math.max(0, 1 - dt * 4);
+    }
+  };
+}

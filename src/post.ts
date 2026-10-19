@@ -444,8 +444,9 @@ export class Post {
     this.dofPass = new EffectPass(camera, this.dof);
     const passes: [Pass, string][] = [
       [this.renderPass, 'scene'], [this.depthPass, 'depth'], [this.fog, 'fog'], [this.aoPass, ao ? 'ao+fog mix' : 'fog mix'], [this.dofPass, 'dof'],
-      [new EffectPass(camera, this.bloom, this.tone, this.grade), 'bloom+grade'],
-      [new EffectPass(camera, this.chroma), 'chroma'], [new EffectPass(camera, this.vignette, this.noise), 'vignette'],
+      // one pass from here to the screen: the lens fringe reads the scene before bloom and the tone map
+      // (it's the only effect that samples around its pixel), then vignette and grain on top
+      [new EffectPass(camera, this.chroma, this.bloom, this.tone, this.grade, this.vignette, this.noise), 'bloom+grade'],
     ];
     for (const [p, label] of passes) { this.composer.addPass(p); this.labels.set(p, label); }
   }

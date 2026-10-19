@@ -13,7 +13,7 @@ import { buildWaterfront, buildLadders, type Ladder } from './waterfront';
 import { debugMap, autopilot } from './debug';
 import { buildCordon } from './cordon';
 import { ChunkBuilder, type Chunk } from './chunks';
-import { buildLamps } from './lights';
+import { buildLamps, lightLOD } from './lights';
 import { buildBoats } from './boats';
 import { buildStation } from './station';
 import { buildStreetscape } from './streetscape';
@@ -214,6 +214,11 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   freeze(root);
   scene.matrixAutoUpdate = false; scene.matrixWorldAutoUpdate = false;
 
+  // the area's own point lights (not the lamp pool's) share a few stand-ins, nearest the camera first
+  const own: THREE.PointLight[] = [];
+  root.traverse((o) => { if ((o as THREE.PointLight).isPointLight && !o.castShadow && !lamps.group.getObjectById(o.id)) own.push(o as THREE.PointLight); });
+  const ownLights = lightLOD(own, quality === 'high' ? 4 : 3, scene, REFLECT_LAYER);
+
   // ---------------------------------------------------------------- distance culling
   // tiles by their bounds; landmarks, water tiles, boats, the station and the street's regional sets
   // (trees, leaves, cars) likewise (a landmark can be a hundred metres across): all past where the fog has swallowed them
@@ -359,6 +364,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
       perf.begin('lamps'); lamps.update(dt, t, player, lampScale); perf.end('lamps');
       perf.begin('landmarks'); for (const u of landmarkUpdates) u(dt, t); perf.end('landmarks');
       station?.update(t);
+      ownLights(dt, cam.position);
       perf.begin('street'); street.update(t, player); perf.end('street');
       flickerUpdate(beacon, t, 91);
       waterUniforms.uTime.value = t;
