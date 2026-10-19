@@ -200,6 +200,20 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     shot(at(-205, 3, 125), at(-209, 4, 128), at(-226, 6, 142), at(-226, 8, 142)),
   ];
 
+  // ---------------------------------------------------------------- frozen matrices
+  // Nothing under the root moves but the boats, floats, drones and the lamp pool's lights (and a
+  // landmark part marked userData.moving): freeze the rest, and the scene's own matrix, so the one
+  // matrix update a frame (main.ts) only recomputes what moves. Left on auto, every object recomputed
+  // its world matrix in every render call.
+  const moving = new Set<THREE.Object3D>([...boats.map((b) => b.group), ...wf.floats, ...cordon.drones, lamps.group]);
+  const freeze = (o: THREE.Object3D) => {
+    if (moving.has(o) || o.userData.moving) return;
+    o.updateMatrix(); o.matrixAutoUpdate = false;
+    for (const c of o.children) freeze(c);
+  };
+  freeze(root);
+  scene.matrixAutoUpdate = false; scene.matrixWorldAutoUpdate = false;
+
   // ---------------------------------------------------------------- distance culling
   // tiles by their bounds; landmarks, water tiles, boats, the station and the street's regional sets
   // (trees, leaves, cars) likewise (a landmark can be a hundred metres across): all past where the fog has swallowed them

@@ -155,7 +155,7 @@ class App {
     const pm = params.get('perf');
     perf.init(gl, params.get('debug') === 'stats' || params.has('bench'), params.has('bench') ? 'sync' : pm === 'timer' || pm === 'sync' ? pm : undefined);
     this.player = new Theo(theo, Math.min(8, gl.capabilities.getMaxAnisotropy()));
-    this.post = new Post(gl, built.scene, this.camera, state.quality === 'high' ? 4 : 0);
+    this.post = new Post(gl, built.scene, this.camera, state.quality);
     this.pmrem = new THREE.PMREMGenerator(gl);
     this.dlg.onInteract = () => void this.interact();
     if (params.get('debug') === 'stats') { this.stats = new StatsOverlay(); app.appendChild(this.stats.el); }
@@ -181,6 +181,13 @@ class App {
     this.banks = fogBanks(built.fogBanks ?? []);
     this.banks.obj.visible = !!built.fogBanks?.length;
     s.add(this.player.group, this.pShadow, this.ash.obj, this.rain.obj, this.banks.obj, this.fill);
+    // alpha-tested cutouts (leaves, ivy, gilt) draw after the solid opaques: with the depth buffer full,
+    // what they'd shade behind a wall is rejected before it runs (a cutout's discard keeps the GPU from
+    // doing that for whatever is drawn after it)
+    s.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (m && (Array.isArray(m) ? m : [m]).some((x) => x.alphaTest > 0 && !x.transparent)) o.renderOrder = Math.max(o.renderOrder, 1);
+    });
     const cam = built.camera ?? { near: 0.1, far: 1500 };
     this.camera.near = cam.near; this.camera.far = cam.far; this.camera.updateProjectionMatrix();
     if (this.embers) this.embers.obj.removeFromParent();
@@ -687,6 +694,10 @@ class App {
     this.prologue?.update(dt);
     this.dlg.tick(dt);
     this.updateFocus();
+    // an area that freezes its static world (the harbor) updates matrices here, once, instead of the
+    // renderer doing the whole scene at every render call (reflection, scene, normals)
+    const sc = this.built.scene;
+    if (!sc.matrixWorldAutoUpdate) { perf.begin('matrices'); sc.updateMatrixWorld(); perf.end('matrices'); }
     perf.begin('beforeRender'); this.built.beforeRender?.(this.gl, this.camera); perf.end('beforeRender');
     perf.begin('post'); this.post.render(dt); perf.end('post');
     this.stats?.show(this.gl, this.fps);
@@ -800,25 +811,34 @@ class App {
     m.position.copy(m.target.position).addScaledVector(this.moonDir, this.built.shadow?.lift ?? 60);
   }
 
-  private fl = new THREE.Vector3();
+  /** fog-light candidates, reused frame to frame */
+  private flc: { l: Built['lights'][number]; p: THREE.Vector3; score: number }[] = [];
+  private sp = new THREE.Vector3(); private st = new THREE.Vector3(); private toP = new THREE.Vector3();
   updateFogLights() {
-    const f = this.post.fog, cam = this.camera.position, m = this.mood;
-    const cand = this.built.lights.map((l) => {
-      const p = l.offset ? l.obj.localToWorld(l.offset.clone()) : l.obj.getWorldPosition(this.fl.clone());
-      return { l, p, score: (l.priority ?? 2) * 6 + p.distanceTo(cam) };
-    }).sort((a, b) => a.score - b.score).slice(0, MAX_LIGHTS);
+    const f = this.post.fog, cam = this.camera.position, m = this.mood, ls = this.built.lights, cand = this.flc;
+    while (cand.length < ls.length) cand.push({ l: ls[cand.length], p: new THREE.Vector3(), score: 0 });
+    cand.length = ls.length;
+    ls.forEach((l, i) => {
+      const c = cand[i];
+      c.l = l;
+      if (l.offset) l.obj.localToWorld(c.p.copy(l.offset)); else l.obj.getWorldPosition(c.p);
+      c.score = (l.priority ?? 2) * 6 + c.p.distanceTo(cam);
+    });
+    cand.sort((a, b) => a.score - b.score);
+    const n = Math.min(MAX_LIGHTS, cand.length);
     const lp = f.u<THREE.Vector4[]>('lPos'), lc = f.u<THREE.Color[]>('lCol');
-    cand.forEach((c, i) => {
+    for (let i = 0; i < n; i++) {
+      const c = cand[i];
       lp[i].set(c.p.x, c.p.y, c.p.z, c.l.radius);
       const lamp = c.l.point ? m.lamps : 1;
       lc[i].copy(c.l.color).multiplyScalar(c.l.base * (c.l.k ?? 1) * lamp * 2.0);
-    });
-    f.set('nLights', cand.length);
+    }
+    f.set('nLights', n);
     // drone searchlight beam
     const dr = this.built.activeDrone ? this.built.activeDrone() : this.built.drone;
     if (!dr) { f.set('spotLen', 0); return; }
     const s = dr.spot;
-    const sp = s.getWorldPosition(new THREE.Vector3()), st = s.target.getWorldPosition(new THREE.Vector3());
+    const sp = s.getWorldPosition(this.sp), st = s.target.getWorldPosition(this.st);
     f.u<THREE.Vector3>('spotPos').copy(sp);
     f.u<THREE.Vector3>('spotDir').copy(st.sub(sp).normalize());
     f.set('spotTan', Math.tan(s.angle));
@@ -830,10 +850,11 @@ class App {
     const dr = this.built.activeDrone ? this.built.activeDrone() : this.built.drone;
     if (!dr) { this.scan = 0; this.ui?.setScan(0); return; }
     const s = dr.spot;
-    const sp = s.getWorldPosition(new THREE.Vector3()), st = s.target.getWorldPosition(new THREE.Vector3());
+    const sp = s.getWorldPosition(this.sp), st = s.target.getWorldPosition(this.st);
     const dir = st.sub(sp).normalize();
-    const toP = this.pos.clone().add(new THREE.Vector3(0, 0.9, 0)).sub(sp);
-    const inBeam = toP.clone().normalize().dot(dir) > Math.cos(s.angle * 0.8) && toP.length() < 16 && state.cam !== 'cinematic';
+    const toP = this.toP.copy(this.pos).setY(this.pos.y + 0.9).sub(sp);
+    const len = toP.length();
+    const inBeam = toP.dot(dir) > Math.cos(s.angle * 0.8) * len && len < 16 && state.cam !== 'cinematic';
     this.scan += ((inBeam ? 1 : 0) - this.scan) * Math.min(1, dt * (inBeam ? 6 : 2));
     this.ui?.setScan(this.scan);
   }

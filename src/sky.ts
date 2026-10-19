@@ -11,6 +11,10 @@ export interface SkySettings {
   cloud: string; cloudLit: string; cloudAmt: number; moon: number; moonDir: [number, number, number]; stars: number;
 }
 
+/** the sky dome's renderOrder: after every opaque mesh (the alpha-tested ones use 1, see main.ts) */
+const BEACON = new THREE.Color('#ff2a1a');
+export const SKY_ORDER = 1000;
+
 export function skyDome() {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
@@ -56,7 +60,9 @@ export function skyDome() {
       }`,
   });
   const m = new THREE.Mesh(new THREE.SphereGeometry(500, 48, 24), mat);
-  m.renderOrder = -10; m.frustumCulled = false;
+  // drawn after every opaque thing (it sits at the far plane and writes no depth), so only the pixels
+  // nothing else covered pay for its noise; still opaque, so it's done before the additive glows
+  m.renderOrder = SKY_ORDER; m.frustumCulled = false;
   return {
     mesh: m,
     apply(s: SkySettings) {
@@ -151,7 +157,7 @@ export function spire(parent: THREE.Object3D, x: number, y: number, z: number) {
     update(t: number) {
       ring.rotation.z = t * 0.08; ring2.rotation.z = -t * 0.05;
       const blink = Math.sin(t * 1.4) > 0.6 ? 1 : 0.15;
-      (beacon.material as THREE.SpriteMaterial).color.set('#ff2a1a').multiplyScalar(6 * blink);
+      (beacon.material as THREE.SpriteMaterial).color.copy(BEACON).multiplyScalar(6 * blink);
     },
   };
 }

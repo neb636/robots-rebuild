@@ -88,11 +88,15 @@ export async function bench(host: BenchHost, mode: string) {
     const iv: number[] = [], long: number[] = [];
     let obs: PerformanceObserver | null = null;
     try { obs = new PerformanceObserver((l) => { for (const e of l.getEntries()) long.push(e.duration); }); obs.observe({ type: 'longtask', buffered: false }); } catch { /* no long-task timing (Safari) */ }
-    host.benchTick = (interval) => iv.push(interval);
+    // and the CPU sections, frame by frame: a hitch on the CPU hides inside a slow GPU frame, so it's
+    // measured on its own
+    const cpu: Record<string, number[]> = {};
+    host.benchTick = (interval) => { iv.push(interval); for (const [k, v] of perf.lastCpu) (cpu[k] ??= []).push(v); };
     const pilot = walk(['faneuil', 'quincy']), t0 = performance.now();
     while (!pilot.done && performance.now() - t0 < 150_000) await wait(250);
     host.benchTick = null; obs?.disconnect();
-    out.walk = { seconds: round((performance.now() - t0) / 1000, 1), frames: iv.length, p50: round(quantile(iv, 0.5)), p95: round(quantile(iv, 0.95)), p99: round(quantile(iv, 0.99)), max: round(quantile(iv, 1)), over25: iv.filter((v) => v > 25).length, over50: iv.filter((v) => v > 50).length, longTasks: long.map((v) => Math.round(v)) };
+    const cpuStats = Object.fromEntries(Object.entries(cpu).map(([k, v]) => [k, { p50: round(quantile(v, 0.5)), p99: round(quantile(v, 0.99)), max: round(quantile(v, 1)) }]));
+    out.walk = { seconds: round((performance.now() - t0) / 1000, 1), frames: iv.length, p50: round(quantile(iv, 0.5)), p95: round(quantile(iv, 0.95)), p99: round(quantile(iv, 0.99)), max: round(quantile(iv, 1)), over25: iv.filter((v) => v > 25).length, over50: iv.filter((v) => v > 50).length, longTasks: long.map((v) => Math.round(v)), cpu: cpuStats };
   }
   (window as unknown as { __bench: unknown }).__bench = out;
   const rows = out.views.map((v) => { const r = v as { view: string; p50: number; p95: number; gpu: Record<string, number>; drawTotal: number }; return `${r.view.padEnd(13)}${String(r.p50).padStart(7)}${String(r.p95).padStart(8)}${(perf.timed ? String(r.gpu.total ?? '-') : '-').padStart(8)}${String(r.drawTotal).padStart(7)}`; });

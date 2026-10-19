@@ -33,8 +33,9 @@ export class CollisionGrid {
     // a segment can reach a hero in a neighbouring cell
     for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
       const kk = k + di * 8192 + dj;
-      for (const s of this.segs.get(kk) ?? []) if (segDist2(x, z, s) < r * r) return true;
-      for (const c of this.rounds.get(kk) ?? []) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (r + c.r) ** 2) return true;
+      const ss = this.segs.get(kk), cs = this.rounds.get(kk);
+      if (ss) for (const s of ss) if (segDist2(x, z, s) < r * r) return true;
+      if (cs) for (const c of cs) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (r + c.r) ** 2) return true;
     }
     return false;
   };
@@ -42,19 +43,18 @@ export class CollisionGrid {
   /** fraction of the way from `from` to `to` before the line passes below a wall's top (1 = clear) */
   cameraBlock = (from: THREE.Vector3, to: THREE.Vector3): number => {
     let best = 1;
-    const dx = to.x - from.x, dz = to.z - from.z, dy = to.y - from.y;
-    const seen = new Set<Seg>();
-    this.cells(Math.min(from.x, to.x), Math.min(from.z, to.z), Math.max(from.x, to.x), Math.max(from.z, to.z), (k) => {
-      for (const s of this.segs.get(k) ?? []) {
-        if (seen.has(s)) continue;
-        seen.add(s);
+    const dx = to.x - from.x, dz = to.z - from.z, dy = to.y - from.y, c = this.cell;
+    // (a segment in several cells is simply tested again: cheaper than remembering which were seen)
+    for (let i = Math.floor(Math.min(from.x, to.x) / c); i <= Math.floor(Math.max(from.x, to.x) / c); i++) for (let j = Math.floor(Math.min(from.z, to.z) / c); j <= Math.floor(Math.max(from.z, to.z) / c); j++) {
+      const ss = this.segs.get(this.key(i, j));
+      if (ss) for (const s of ss) {
         const ex = s.bx - s.ax, ez = s.bz - s.az, den = dx * ez - dz * ex;
         if (Math.abs(den) < 1e-9) continue;
         const t = ((s.ax - from.x) * ez - (s.az - from.z) * ex) / den, u = ((s.ax - from.x) * dz - (s.az - from.z) * dx) / den;
         if (t <= 0 || t >= best || u < 0 || u > 1) continue;
         if (from.y + dy * t < s.top) best = t;
       }
-    });
+    }
     return best;
   };
 }

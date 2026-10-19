@@ -261,12 +261,13 @@ export class Post {
   quality: 'high' | 'low' = 'high';
   /** objects left out of the normal pass (additive light shafts, shadow-only casters) so SSAO ignores them */
   normalHidden: THREE.Object3D[] = [];
+  private wasVisible: boolean[] = [];
   private pong = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
   /** each pass's name in the profiler (perf.ts) */
   private labels = new Map<object, string>();
 
-  constructor(private gl: THREE.WebGLRenderer, scene: THREE.Scene, private camera: THREE.PerspectiveCamera, msaa: number) {
-    this.composer = new EffectComposer(gl, { frameBufferType: THREE.HalfFloatType, multisampling: msaa });
+  constructor(private gl: THREE.WebGLRenderer, scene: THREE.Scene, private camera: THREE.PerspectiveCamera, quality: 'high' | 'low') {
+    this.composer = new EffectComposer(gl, { frameBufferType: THREE.HalfFloatType, multisampling: quality === 'high' ? 4 : 0 });
     // effect passes never need MSAA or depth: give them single-sample buffers (see render())
     this.composer.outputBuffer.dispose();
     this.composer.outputBuffer = this.pong.clone();
@@ -287,10 +288,13 @@ export class Post {
     this.noise.blendMode.opacity.value = 0.08;
     this.chroma = new ChromaticAberrationEffect({ offset: new THREE.Vector2(0.0006, 0.0004), radialModulation: true, modulationOffset: 0.35 });
 
-    this.aoPass = new EffectPass(camera, this.ssao, this.fog);
+    // Low has no SSAO: leave it (and its normal pass) out of the stack rather than skip its blend, since
+    // a skipped SSAOEffect still renders its passes every frame
+    const ao = quality === 'high';
+    this.aoPass = ao ? new EffectPass(camera, this.ssao, this.fog) : new EffectPass(camera, this.fog);
     this.dofPass = new EffectPass(camera, this.dof);
     const passes: [Pass, string][] = [
-      [this.renderPass, 'scene'], [this.normalPass, 'normals'], [this.aoPass, 'ao+fog'], [this.dofPass, 'dof'],
+      [this.renderPass, 'scene'], ...(ao ? [[this.normalPass, 'normals'] as [Pass, string]] : []), [this.aoPass, ao ? 'ao+fog' : 'fog'], [this.dofPass, 'dof'],
       [new EffectPass(camera, this.bloom, this.tone, this.grade), 'bloom+grade'],
       [new EffectPass(camera, this.chroma), 'chroma'], [new EffectPass(camera, this.vignette, this.noise), 'vignette'],
     ];
@@ -304,8 +308,6 @@ export class Post {
 
   setQuality(q: 'high' | 'low') {
     this.quality = q;
-    this.normalPass.enabled = q === 'high';
-    this.ssao.blendMode.blendFunction = q === 'high' ? BlendFunction.MULTIPLY : BlendFunction.SKIP;
     this.dofPass.enabled = q === 'high';
     this.fog.set('steps', q === 'high' ? 14 : 6);
   }
@@ -356,12 +358,14 @@ export class Post {
     let input = scene, output = c.outputBuffer;
     for (const pass of c.passes) {
       if (!pass.enabled) continue;
+      // hide what the normal pass mustn't see, then restore each one as it was (the distance cull
+      // may have hidden some already: setting them all visible again would undo it)
       const hide = pass === this.normalPass && this.normalHidden.length > 0;
-      if (hide) for (const o of this.normalHidden) o.visible = false;
+      if (hide) { this.wasVisible.length = 0; for (const o of this.normalHidden) { this.wasVisible.push(o.visible); o.visible = false; } }
       perf.push(this.labels.get(pass) ?? pass.name);
       pass.render(gl, input, output, dt, false);
       perf.pop();
-      if (hide) for (const o of this.normalHidden) o.visible = true;
+      if (hide) this.normalHidden.forEach((o, i) => { o.visible = this.wasVisible[i]; });
       if (pass.needsSwap) {
         const next = input === scene ? this.pong : input;
         input = output; output = next;
