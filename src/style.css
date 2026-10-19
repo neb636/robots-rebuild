@@ -143,3 +143,59 @@ html, body {
   .actions.show { transform: none; }
   .actions .item { min-height: 40px; padding: 4px 14px 4px 8px; font-size: 14px; }
 }
+
+/* ---------------------------------------------------------------- paused: the frozen frame, softened */
+#gl { transition: filter 0.3s ease; }
+#app.paused #gl { filter: blur(5px) brightness(0.62) saturate(0.85); }
+#app.paused .ui, #app.paused .hudbtns, #app.paused .iprompt, #app.paused .actbtn, #app.paused .stick, #app.paused .dlg, #app.paused .objective, #app.paused .actions, #app.paused .notify { opacity: 0 !important; pointer-events: none !important; }
+
+/* pause and map buttons, top right (touch screens always; elsewhere with the HUD) */
+.hudbtns { position: absolute; right: calc(16px + env(safe-area-inset-right)); top: calc(14px + env(safe-area-inset-top)); z-index: 24; display: flex; gap: 10px; transition: opacity 0.3s; }
+.hudbtns.off { opacity: 0; pointer-events: none; }
+.hudbtns.nomap .mapbtn { display: none; }
+.hudbtns button { width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 1px solid rgba(236, 228, 210, 0.35); background: rgba(8, 10, 14, 0.45); color: #ece4d2; cursor: pointer;
+  display: grid; place-items: center; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background 0.15s ease, border-color 0.15s ease; }
+.hudbtns button:hover { background: rgba(8, 10, 14, 0.7); border-color: rgba(236, 228, 210, 0.6); }
+.hudbtns button:active { background: rgba(185, 80, 27, 0.55); }
+.hudbtns svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+@media (pointer: coarse) { .hudbtns button { width: 50px; height: 50px; } .hudbtns svg { width: 22px; height: 22px; } }
+/* the debug stats sit where the buttons are */
+.stats ~ .hudbtns, .hudbtns ~ .stats { top: auto; }
+
+/* ---------------------------------------------------------------- the area map (map.ts) */
+.mapv { position: absolute; inset: 0; z-index: 46; background: #16130f; opacity: 0; visibility: hidden; transition: opacity 0.25s ease, visibility 0s linear 0.25s; touch-action: none; font-family: var(--serif); color: #2f261d; }
+.mapv.in { opacity: 1; visibility: visible; transition: opacity 0.25s ease; }
+.mapv::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: calc(120px + env(safe-area-inset-top)); background: linear-gradient(180deg, rgba(22, 19, 15, 0.82), rgba(22, 19, 15, 0.45) 55%, rgba(22, 19, 15, 0)); pointer-events: none; }
+.mapv-head, .mapv-btns, .mapv-compass { z-index: 1; }
+.mapv canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.mapv canvas:active { cursor: grabbing; }
+.mapv-wait { position: absolute; left: 0; right: 0; top: 48%; margin: 0; text-align: center; font: italic 500 18px var(--serif); color: #a8a49c; opacity: 0; transition: opacity 0.2s; }
+.mapv.loading .mapv-wait { opacity: 1; }
+.mapv.loading .mapv-legend, .mapv.loading .mapv-compass { opacity: 0; }
+.mapv-head { position: absolute; left: calc(24px + env(safe-area-inset-left)); top: calc(18px + env(safe-area-inset-top)); pointer-events: none; padding: 12px 18px 12px 0; }
+.mapv-head h2 { margin: 0; font: 700 clamp(20px, 2.4vw, 30px) / 1 var(--serif); letter-spacing: 0.32em; text-transform: uppercase; color: #ece4d2; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9); }
+.mapv-head div { margin-top: 6px; font: 500 12px var(--serif); letter-spacing: 0.3em; text-transform: uppercase; color: #e0b089; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9); }
+.mapv-compass { position: absolute; right: calc(24px + env(safe-area-inset-right)); top: calc(78px + env(safe-area-inset-top)); width: 64px; height: 64px; color: #2f261d; pointer-events: none; overflow: visible; filter: drop-shadow(0 0 3px rgba(232, 220, 196, 0.9)); }
+.mapv-compass circle { fill: rgba(226, 212, 184, 0.9); }
+.mapv-compass text { font: 700 11px var(--serif); fill: #2f261d; }
+.mapv-legend { position: absolute; left: calc(24px + env(safe-area-inset-left)); bottom: calc(18px + env(safe-area-inset-bottom)); display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 9px 14px; border-radius: 3px;
+  background: rgba(226, 212, 184, 0.88); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); font: 600 13px var(--serif); letter-spacing: 0.06em; color: #2f261d; pointer-events: none; }
+.mapv-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.mapv-legend i { display: inline-block; width: 12px; height: 12px; }
+.mapv-legend .you { width: 0; height: 0; border: 6px solid transparent; border-left: 11px solid #e06d2c; border-right: 0; }
+.mapv-legend .lm { width: 9px; height: 9px; background: #93412a; transform: rotate(45deg); }
+.mapv-legend .cordon { height: 0; border-top: 2.5px dashed #962616; width: 18px; }
+.mapv-legend .water { background: #7d9696; border-radius: 2px; }
+.mapv-btns { position: absolute; right: calc(16px + env(safe-area-inset-right)); top: calc(14px + env(safe-area-inset-top)); display: flex; gap: 10px; }
+.mapv-btns button { width: 46px; height: 46px; padding: 0; border-radius: 50%; border: 1px solid rgba(47, 38, 29, 0.5); background: rgba(226, 212, 184, 0.92); color: #2f261d; font: 600 22px / 1 var(--serif); cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.mapv-btns button:hover { background: #efe3c8; }
+.mapv-btns button:active { background: #d7854f; }
+.mapv-keys { position: absolute; right: calc(24px + env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom)); display: flex; gap: 14px; padding: 8px 12px; border-radius: 3px; background: rgba(22, 19, 15, 0.7); font: 500 13px var(--serif); color: #e2d8c4; pointer-events: none; }
+.mapv-keys kbd { margin-right: 4px; padding: 1px 5px; border: 1px solid rgba(226, 216, 196, 0.55); border-radius: 2px; font: 500 11px var(--serif); }
+@media (pointer: coarse) { .mapv-keys { display: none; } .mapv-btns button { width: 52px; height: 52px; } }
+@media (max-width: 700px) {
+  .mapv-legend { right: 16px; font-size: 12px; gap: 4px 12px; }
+  .mapv-head { top: calc(76px + env(safe-area-inset-top)); left: 16px; }
+  .mapv-compass { top: calc(136px + env(safe-area-inset-top)); right: 16px; }
+}

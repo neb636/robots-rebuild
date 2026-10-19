@@ -8,6 +8,7 @@ import type { Action, ActionMenu } from './actions';
 import { Dialogue, Interactable, Line } from './dialogue';
 import { audio } from './audio';
 import { state } from './settings';
+import { sleep } from './clock';
 
 export interface PrologueHost {
   apt: Apartment;
@@ -39,7 +40,8 @@ export interface PrologueHost {
 type Phase = 'morning' | 'broadcast' | 'outro' | 'out';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// (game time: holds while the game is paused)
+const wait = sleep;
 const MARCUS = (text: string, sfx?: string): Line => ({ who: 'Marcus  ·  phone', text, style: 'phone', voice: 'marcus', sfx });
 const TV = (text: string): Line => ({ who: 'Superintelligence Inc.  ·  live broadcast', text, style: 'tv', voice: 'tv' });
 const CLOCK = (text: string): Line => ({ who: 'Alarm clock', text, voice: 'narrator' });

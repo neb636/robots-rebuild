@@ -93,3 +93,9 @@ export function stopSpeech() {
   current = null;
   audio.duckMusic(false);
 }
+
+/** the pause menu: hold the line being spoken, and pick it up again after */
+export function pauseSpeech(on: boolean) {
+  if (!synth || !current) return;
+  if (on) synth.pause(); else synth.resume();
+}

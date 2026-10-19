@@ -37,25 +37,47 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 | Mood (street) | 1 / 2 / 3 | title Options | |
 | Camera | C | title Options | |
 | Hide UI | H | | |
+| Pause menu | Esc (or P) | **❙❙** button, top right | Start |
+| Map (harbor) | M | map button, top right | View |
 
 ## Settings
 
-Mood, camera, quality and audio are player settings, saved on the device (localStorage)
-and restored on the next visit. They're set from **Options** on the title screen (there is no
-in-game settings panel); in game, the keys still work (1 / 2 / 3, C):
+Mood, camera, graphics, audio and look are player settings, saved on the device (localStorage)
+and restored on the next visit. They're set from **Options** on the title screen or **Settings** in
+the pause menu (both are `src/options.ts`), in three pages: **Game** (mood, camera, look speed,
+invert look, HUD), **Graphics** (Detail, antialiasing, ambient occlusion, depth of field, fog, film
+effects, resolution, dynamic resolution, frame rate) and **Audio** (voices, music / effects /
+dialogue volume). In game, the keys still work too (1 / 2 / 3, C, H).
 
-Indoors, the apartment has its own fixed morning light, so Mood is hidden; Camera switches between
+Most settings apply at once. Detail, Antialiasing and Ambient occlusion are fixed when an area is
+built: changed in game, they're tagged **Reload**, the Graphics page offers **Reload now**, and
+leaving Settings asks to reload now or later. A reload goes straight back into the area at the
+hero's spot (the apartment starts Day Zero over).
+
+Indoors, the apartment has its own fixed morning light, so Mood only shows outside; Camera switches between
 a shoulder-height **Follow** camera (the default) and an **Overhead** dollhouse view (C).
 
 - **Mood:** Curfew (night rain, the default), Ashfall (dusk), Grey Pall (dead fog). Each mood is a block of
   data in `MOODS` (`src/scene.ts`): sky, fog, grade, moonlight, rain, wet ground.
 - **Camera:** Follow (third-person), JRPG (diorama angle), Cinematic (hand-placed shots, `CINE` in
   `src/main.ts`).
-- **Quality:** High, or Low (no SSAO or depth of field, 1x pixel ratio, no MSAA). Touch devices
-  default to Low.
+- **Detail:** High, or Low (lighter geometry, 2K textures, smaller shadow maps, 1x pixel ratio), and
+  it sets antialiasing, ambient occlusion, depth of field and fog to match. Touch devices default to
+  Low.
 - **Audio:** Generated (the default: the recorded ElevenLabs voice-over and effects where a scene
   has them, the browser voice for anything not recorded yet) or Web (browser speech and synthesized
   sounds only). See Voice-over below.
+
+## Pause menu and map
+
+Esc, the ❙❙ button (touch screens) or Start pauses: the game, its scripted beats (`sleep` in
+`src/clock.ts`) and any voice line stop, the world's sound goes muffled, and the menu offers Resume,
+Map, Settings, Controls and Main Menu. Switching away from the tab or app pauses too.
+
+Big areas have a map (`Built.map`: the harbor paints one from its baked data in `src/harbor/map.ts`,
+and `src/map.ts` shows it): the whole district in ink on paper, landmarks and districts named, the
+cordon, and your marker with the way the camera faces. It opens on you; drag or the left stick
+pans, pinch / wheel / right stick zooms, and C or Y finds you again.
 
 URL params override the saved settings without changing them, for sharing a specific setup:
 `?mood=curfew&cam=jrpg&q=low&audio=web&ui=0&card=0`. `?menu=0` skips the title screen and goes

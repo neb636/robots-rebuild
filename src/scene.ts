@@ -15,6 +15,7 @@ import { Character, CONVERTED, blobShadow } from './character';
 import type { Grade, FogSettings, Post } from './post';
 import type { Interactable, Dialogue } from './dialogue';
 import type { CamMode } from './settings';
+import type { AreaMap } from './map';
 
 export const TERRACE_Y = 3.2;
 const STAIR = { x0: 3.1, x1: 6.5, zTop: -12, zBot: -3, steps: 16 };
@@ -169,6 +170,8 @@ export interface Built {
   beforeRender?: (gl: THREE.WebGLRenderer, cam: THREE.PerspectiveCamera) => void;
   /** free GPU resources the shell doesn't know about (render targets, array textures) */
   dispose?: () => void;
+  /** a big area's map for the pause menu (map.ts), painted the first time it's asked for */
+  map?: () => AreaMap;
 }
 
 // Acorn Lane's camera: cinematic shots ([from, to] camera positions and look targets) and the
