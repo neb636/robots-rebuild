@@ -21,8 +21,10 @@ import { audio } from './audio';
 import { state, saveSettings, params, isTouch, CAMS, CamMode, skipTitleOnce, consumeSkipTitle, consumeResume, lockBuildSettings, basePixelRatio, Resume } from './settings';
 import { applyVolumes } from './options';
 import { PauseMenu } from './pause';
-import { MapView } from './map';
+import { MapView, type MapMarks, type MapLabel } from './map';
 import { Minimap } from './minimap';
+import { Guide } from './guide';
+import { waypoint } from './waypoint';
 import { setPaused, sleep } from './clock';
 import { pauseSpeech } from './speech';
 import { TitleScreen } from './title';
@@ -170,6 +172,8 @@ class App {
   paused = false;
   pauseMenu: PauseMenu;
   mapView: MapView;
+  /** the Current: the way to the player's mark (areas with a map) */
+  guide: Guide | null = null;
   private padPrev = new Set<number>();
 
   constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset, public area: string, private resume: Resume | null) {
@@ -202,6 +206,7 @@ class App {
       interior: () => this.interior,
     });
     this.mapView = new MapView(app, () => ({ x: this.pos.x, z: this.pos.z, heading: this.heading, yaw: this.yaw }), () => this.built.card);
+    this.mapView.marks = this.marks();
     this.ui.sync();
     addEventListener('resize', () => this.resize());
     this.resize();
@@ -239,6 +244,19 @@ class App {
     const sy = built.heightAt(sp.x, sp.z);
     this.pos.set(sp.x, isNaN(sy) ? 0 : sy, sp.z); this.heading = sp.heading;
     this.player.group.position.copy(this.pos);
+    // the mark and the Current, where the area has a map to mark
+    this.guide?.dispose(); this.guide = null;
+    waypoint.load(this.area);
+    if (built.map && built.bounds) {
+      const fromParam = params.has('mark') && !this.markParamDone;
+      if (fromParam) { this.markParamDone = true; this.markFromParam(params.get('mark')!); }
+      this.guide = new Guide(built, () => this.pos, () => this.paused);
+      // (a ?mark= link opens with the Current running toward it)
+      if (fromParam) this.guide.pulse();
+      this.guide.onChange = () => this.ui?.sync();
+      this.guide.onArrive = (w) => this.ui?.note(`${w.label ?? 'Your mark'} · you’re here`);
+    }
+    if (this.mapView) this.mapView.marks = this.marks();
     this.applyMood();
     if (!this.interior && state.cam === 'cinematic') { state.cam = 'follow'; if (built.cine) this.setCam('cinematic', false); }
     this.resetCamera();
@@ -343,6 +361,57 @@ class App {
     this.post.render(0);
   }
 
+  // ---------------------------------------------------------------- the mark and the Current
+  private markParamDone = false;
+
+  /** what the map needs to mark spots and draw the way (null: this area can't be marked) */
+  marks(): MapMarks | null {
+    if (!this.guide) return null;
+    const g = this.guide;
+    return {
+      mark: () => waypoint.mark,
+      route: () => { const pts = g.remaining(); return pts ? { pts, left: g.left } : null; },
+      status: () => (g.planning && !g.route ? 'planning' : g.unreachable ? 'none' : 'ok'),
+      place: (x, z, label) => this.placeMark(x, z, label),
+      clear: () => waypoint.clear(),
+    };
+  }
+
+  /** mark (x, z), moved onto the nearest ground the hero could stand on: null, or why it can't be */
+  placeMark(x: number, z: number, label?: MapLabel): string | null {
+    const b = this.built;
+    const why = b.unmarkable?.(x, z);
+    if (why) return why;
+    const free = (px: number, pz: number) => !Number.isNaN(b.heightAt(px, pz)) && !(b.blocked?.(px, pz, 0.4) ?? false);
+    // a landmark's name sits mid-building: look further for its doorstep
+    const reach = label ? 45 : 16;
+    let at: [number, number] | null = free(x, z) ? [x, z] : null;
+    for (let r = 1; !at && r <= reach; r += 1) {
+      const n = Math.max(8, Math.round(r * 2.5));
+      for (let k = 0; k < n && !at; k++) { const a = (k / n) * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (free(px, pz)) at = [px, pz]; }
+    }
+    if (!at) return 'Nowhere to stand there.';
+    waypoint.set({ x: at[0], z: at[1], label: label?.text });
+    return null;
+  }
+
+  /** ?mark=faneuil (a name on the map, or a spot), or ?mark=x,z: start with that marked */
+  private markFromParam(v: string) {
+    const xz = v.split(',').map(Number);
+    if (xz.length === 2 && xz.every(Number.isFinite)) { this.placeMark(xz[0], xz[1]); return; }
+    const q = v.toLowerCase().replace(/[-_]/g, ' ');
+    const l = this.built.map?.().labels.find((l) => (l.kind === 'landmark' || l.kind === 'place') && l.text.toLowerCase().includes(q));
+    const sp = this.built.spots?.[v];
+    if (l) this.placeMark(l.x, l.z, l);
+    else if (sp) this.placeMark(sp.x, sp.z);
+  }
+
+  /** G, d-pad up, the ⚡ button */
+  sendCurrent() {
+    if (this.frozen || this.paused) return;
+    this.guide?.pulse();
+  }
+
   // ---------------------------------------------------------------- pause, map
   /** came back from a settings reload */
   get resumed() { return this.resumedFrom; }
@@ -394,14 +463,14 @@ class App {
     if (k === 'dof' || k === 'fog' || k === 'grain') { this.post.applySettings(); if (this.paused) this.redraw(); }
     if (k === 'scale') this.resize();
     if (k === 'drs' && !state.drs) this.drs.reset();
-    if (k === 'hud') this.ui?.sync();
+    if (k === 'hud' || k === 'guide') this.ui?.sync();
   }
 
   /** reload into this area at this spot, for the settings that are fixed when an area is built */
   reloadHere() {
     // drop setting params from the URL so they don't override what was just saved
     const p = new URLSearchParams(location.search);
-    for (const k of ['q', 'mood', 'cam', 'at', 'walk', 'bench']) p.delete(k);
+    for (const k of ['q', 'mood', 'cam', 'at', 'walk', 'bench', 'mark']) p.delete(k);
     if (!saveSettings()) { p.set('q', state.quality); p.set('mood', state.mood); p.set('cam', state.cam); }
     const pose = this.savedPose ?? { pos: this.pos, heading: this.heading };
     skipTitleOnce(this.interior ? { area: this.area } : { area: this.area, x: pose.pos.x, z: pose.pos.z, heading: pose.heading });
@@ -413,7 +482,7 @@ class App {
   /** back to the title screen: the same page without the params that skip it */
   toTitle() {
     const p = new URLSearchParams(location.search);
-    for (const k of ['menu', 'card', 'at', 'walk', 'bench']) p.delete(k);
+    for (const k of ['menu', 'card', 'at', 'walk', 'bench', 'mark']) p.delete(k);
     const qs = p.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
     location.reload();
@@ -520,6 +589,7 @@ class App {
         this.setCam(this.interior ? (state.cam === 'jrpg' ? 'follow' : 'jrpg') : cams[(cams.indexOf(state.cam) + 1) % cams.length]);
       }
       if (e.code === 'KeyH') { state.hud = !state.hud; this.ui?.sync(); saveSettings(); }
+      if (e.code === 'KeyG') this.sendCurrent();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
@@ -657,7 +727,8 @@ class App {
       if (this.actions.open && !this.dlg.open && !this.focus) this.actions.activate();
       else this.dlg.press();
     }
-    if (padUp && !this.padUp) this.actions.move(-1);
+    // d-pad up moves up the action menu, or sends the Current when there's no menu
+    if (padUp && !this.padUp) { if (this.actions.open) this.actions.move(-1); else this.sendCurrent(); }
     if (padDown && !this.padDown) this.actions.move(1);
     this.padA = padA; this.padUp = padUp; this.padDown = padDown;
     if (v.lengthSq() > 1) v.normalize();
@@ -830,6 +901,7 @@ class App {
 
     this.updateCamera(dt, speed);
     perf.begin('update'); this.built.update(dt, this.t, this.camera, this.pos); perf.end('update');
+    perf.begin('guide'); this.guide?.update(dt, this.camera); perf.end('guide');
     perf.begin('fogLights'); this.updateFogLights(); perf.end('fogLights');
     this.updateScan(dt);
     this.built.sky.update(this.t, this.camera.position);
@@ -1055,6 +1127,7 @@ class UI {
   bars = el('div', 'bars', '<i></i><i></i>');
   /** pause and map, top right: the way into the menu on a touch screen (Esc and M on a keyboard) */
   btns = el('div', 'hudbtns', `
+    <button class="guidebtn" aria-label="Send the Current toward your mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2.5 6 13.5h5.5L10 21.5l8-11.5h-5.5z"/></svg></button>
     <button class="mapbtn" aria-label="Map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z M9 4v13.5 M15 6.5V20"/></svg></button>
     <button class="pausebtn" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14 M16 5v14"/></svg></button>`);
   minimap: Minimap;
@@ -1066,7 +1139,9 @@ class UI {
     const tap = (sel: string, f: () => void) => this.btns.querySelector(sel)!.addEventListener('click', (e) => { e.preventDefault(); a.enableAudio(); f(); });
     tap('.pausebtn', () => a.openPause());
     tap('.mapbtn', () => a.openMap(true));
-    this.minimap = new Minimap(this.root, () => ({ x: a.pos.x, z: a.pos.z, heading: a.heading, yaw: a.yaw }), () => { a.enableAudio(); a.openMap(true); });
+    tap('.guidebtn', () => a.sendCurrent());
+    this.minimap = new Minimap(this.root, () => ({ x: a.pos.x, z: a.pos.z, heading: a.heading, yaw: a.yaw }), () => { a.enableAudio(); a.openMap(true); }, () => a.mapView?.marks ?? null);
+    app.appendChild(this.noteEl);
     this.sync();
   }
   sync() {
@@ -1075,11 +1150,21 @@ class UI {
     // on a touch screen the pause button is the only way to the menu, so it stays
     this.btns.classList.toggle('off', !state.hud && !isTouch);
     this.btns.classList.toggle('nomap', !this.a.built.map);
+    this.btns.classList.toggle('marked', !!this.a.guide && !!waypoint.mark && state.guide !== 'off');
     this.root.querySelector('.b2')!.textContent = this.a.built.brand ?? (this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static');
     this.bars.classList.toggle('on', state.cam === 'cinematic' && !this.a.interior);
     // the cinematic camera's shots have no hero to follow
     this.minimap.attach(this.a.built.map);
     this.minimap.root.classList.toggle('off', state.cam === 'cinematic' && !this.a.interior);
+  }
+  private noteEl = el('div', 'guidenote');
+  private noteT = 0;
+  /** a passing line at the top (the mark reached) */
+  note(text: string) {
+    this.noteEl.textContent = text;
+    this.noteEl.classList.add('show');
+    clearTimeout(this.noteT);
+    this.noteT = window.setTimeout(() => this.noteEl.classList.remove('show'), 3400);
   }
   setScan(k: number) { this.scanEl.style.opacity = String(k > 0.05 ? Math.min(1, k * 1.4) * (0.75 + 0.25 * Math.sin(performance.now() / 90)) : 0); this.scanVig.style.opacity = String(k * 0.9); }
   cineFade(k: number) { this.cine.style.opacity = String(k); }

@@ -39,13 +39,16 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 | Hide UI | H | | |
 | Pause menu | Esc (or P) | **❙❙** button, top right | Start |
 | Map (harbor) | M, or click the minimap | map button, or tap the minimap | View |
+| Mark a spot (on the map) | click, or Enter at the crosshair | tap | A |
+| Clear the mark (on the map) | X, or click the mark | ✕ by its name, or tap the mark | X |
+| Send the Current toward the mark | G | ⚡ button | d-pad up |
 
 ## Settings
 
 Mood, camera, graphics, audio and look are player settings, saved on the device (localStorage)
 and restored on the next visit. They're set from **Options** on the title screen or **Settings** in
 the pause menu (both are `src/options.ts`), in three pages: **Game** (mood, camera, look speed,
-invert look, HUD), **Graphics** (Detail, antialiasing, ambient occlusion, depth of field, fog, film
+invert look, guide, HUD), **Graphics** (Detail, antialiasing, ambient occlusion, depth of field, fog, film
 effects, resolution, dynamic resolution, frame rate) and **Audio** (voices, music / effects /
 dialogue volume). In game, the keys still work too (1 / 2 / 3, C, H).
 
@@ -84,6 +87,31 @@ On big screens (desktop and iPad; not phones) the same painting shows as a round
 top-right buttons (`src/minimap.ts`): about 70 m around you, turned so the camera's view is up, with
 north marked on the rim. It's painted behind the loader, hides with the HUD and in the Cinematic
 camera, and a click or tap opens the full map.
+
+### Marking the map, and the Current
+
+A click or tap on the map marks that spot (on a landmark's name, the landmark, by name) in blue grease
+pencil, like the wall map in the attic; on a keyboard or gamepad a crosshair shows while you pan, and
+Enter or A marks it. X (either), the ✕ by its name, or a tap on the mark rubs it out. A spot inside a
+building moves to the nearest pavement; past the cordon or out on the water it can't be marked. The
+way there is drawn from you, with how far it is, on the map and the minimap, where a pointer on the
+rim shows the mark while it's out of range. The mark is kept on the device (`src/waypoint.ts`).
+
+In the world it's followed by **the Current** (`src/guide.ts`): the machines keep the city's grid up,
+and Marcus, the electrician, taught Theo to listen to it. Close the map on a new mark, or press G (the
+⚡ button, d-pad up), and a pulse of blue-white current crackles out from Theo's feet along the
+streets toward it: the way he can walk, round the corners, not as the crow flies. The street lamps it
+passes, dead or alive, flare as it goes by. Between pulses a low mains hum comes from the way the
+route goes next, the static clearing as he faces it. Reaching the mark, the nearest lamp flares and
+goes out. **Settings → Game → Guide** picks Pulse (the default), Trail (a faint line always on) or Off
+(nothing in the world; the map still shows the way).
+
+The route is A* over a 2 m grid on the area's walkable ground (`src/route.ts`), each cell worked out
+the first time a search reaches it and kept, a slice per frame; straying 9 m from it routes again
+from where you are. Across the harbor a route takes 2 to 27 ms the first time and a few ms after.
+An area offers all this with `Built.bounds` (and `Built.lampHeads`, `Built.unmarkable`).
+`?mark=faneuil` (any landmark or place name on the map, or a spot name, or `?mark=x,z`) starts with
+that marked and the Current running.
 
 URL params override the saved settings without changing them, for sharing a specific setup:
 `?mood=curfew&cam=jrpg&q=low&audio=web&ui=0&card=0`. `?menu=0` skips the title screen and goes

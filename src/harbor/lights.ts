@@ -107,6 +107,8 @@ export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGr
     });
   }
   return { lamps, pool: pool.map((s) => s.fog), group, update,
+    /** each lamp's lantern, lit or not */
+    heads: lamps.map((l) => ({ x: l.x, y: l.y + HEAD_Y - 0.35, z: l.z })),
     /** daylight puts the lit lamps' glass out */
     setOn: (on: boolean) => { glassOn.emissiveIntensity = on ? 3.2 : 0; },
     addSources: (ls: LightSource[]) => { lit.push(...ls); } };
