@@ -13,6 +13,7 @@ import { ChunkBuilder, type Chunk } from './chunks';
 import { pbrMat } from '../props';
 import { getBarkMat, taperTube, bushCards, leafCards, tuftGeometry, getGrassMat, grassPatch, type Card } from '../foliage';
 import { rng } from '../noise';
+import { weather, type SignalArm } from './signs';
 
 // ground classes (header.ground): what a pit, a bench or a pole stands on, and where cars were left
 const SIDEWALK = new Set([4, 5, 6, 7, 8]);
@@ -239,6 +240,41 @@ function carKit(k: number) {
   }
   return mergeGeometries(g);
 }
+/** Massachusetts plates, sixteen of them on one canvas: red on white, the state in script across the top */
+function plateTexture() {
+  const W = 256, H = 128, cv = document.createElement('canvas');
+  cv.width = W * 4; cv.height = H * 4;
+  const c = cv.getContext('2d')!, R = rng(1788);
+  const L = 'ABCDEFGHJKLMNPRSTUVWXYZ', D = '0123456789', pick = (s: string) => s[Math.floor(R() * s.length)];
+  for (let i = 0; i < 16; i++) {
+    c.save(); c.translate((i % 4) * W, Math.floor(i / 4) * H);
+    c.fillStyle = '#eceae2'; c.fillRect(0, 0, W, H);
+    c.strokeStyle = '#8e2a2a'; c.lineWidth = 4; c.strokeRect(5, 5, W - 10, H - 10);
+    c.fillStyle = '#a32a2c'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = 'italic bold 22px Georgia, "Times New Roman", serif'; c.fillText('Massachusetts', W / 2, 24);
+    const reg = R() < 0.5 ? `${pick(D)}${pick(L)}${pick(L)}${pick(L)} ${pick(D)}${pick(D)}` : `${pick(D)}${pick(D)}${pick(L)}${pick(L)} ${pick(D)}${pick(D)}`;
+    c.save(); c.translate(W / 2, 68); c.scale(0.8, 1); c.font = 'bold 54px "Helvetica Neue", Arial, sans-serif'; c.fillText(reg, 0, 0); c.restore();
+    c.font = 'italic 15px Georgia, "Times New Roman", serif'; c.fillText('The Spirit of America', W / 2, 108);
+    weather(c, W, H, R, 0.55);
+    c.restore();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+/** one instanced plate per bumper; `plate` picks the canvas's cell */
+function plateMat() {
+  // (plates are retroreflective: they catch what little light there is)
+  const tex = plateTexture(), m = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.08, roughness: 0.55, metalness: 0.2 });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float plate;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvMapUv = (vMapUv + vec2(mod(plate, 4.0), 3.0 - floor(plate / 4.0))) * 0.25;');
+  };
+  m.customProgramCacheKey = () => 'harbor-plate';
+  return m;
+}
+
 const PAINT = ['#4e6a6c', '#6a2c26', '#8a8a86', '#2a3440', '#b8b4a8', '#1c1d20', '#5a5440', '#7a6a48', '#3c4a3a', '#a8a090', '#40465a'];
 
 // -------------------------------------------------------------------------------- weeds
@@ -527,7 +563,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     const c = centres.find((c) => Math.hypot(c.x / c.n - p.x, c.z / c.n - p.z) < 22);
     if (c) { c.x += p.x; c.z += p.z; c.n++; } else centres.push({ x: p.x, z: p.z, n: 1 });
   }
-  const sig = signalKit(), poles: THREE.Matrix4[] = [], blink: { phase: number; mode: number }[] = [];
+  const sig = signalKit(), poles: THREE.Matrix4[] = [], blink: { phase: number; mode: number }[] = [], arms: SignalArm[] = [];
   for (const c0 of centres) {
     const cx = c0.x / c0.n, cz = c0.z / c0.n;
     if (Number.isNaN(ground(cx, cz))) continue;
@@ -547,6 +583,8 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     for (const p of second ? [first, second] : [first]) {
       const y = ground(p.x, p.z);
       poles.push(xform(p.x, y, p.z, Math.atan2(-(cz - p.z), cx - p.x)));
+      const D = Math.hypot(cx - p.x, cz - p.z) || 1;
+      arms.push({ x: p.x, y, z: p.z, armY: y + SIG_H, ux: (cx - p.x) / D, uz: (cz - p.z) / D });
       blink.push({ phase: R() * 6.28, mode: R() < 0.12 ? 0 : mode });
       collide.addCircle(p.x, p.z, 0.16, y + SIG_H);
     }
@@ -559,6 +597,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   // ---- cars: parked along the curbs where they ran out of fuel or road, a few left across the street
   const carXf: THREE.Matrix4[][] = CARS.map(() => []), carCol: THREE.Color[][] = CARS.map(() => []);
   const parked: [number, number][] = [];
+  const plates: THREE.Matrix4[] = [], plateIds: number[] = [];
   const fits = (x: number, z: number, yaw: number, k: number) => {
     const { l, w } = CARS[k], ux = Math.sin(yaw), uz = Math.cos(yaw), vx = Math.cos(yaw), vz = -Math.sin(yaw);
     for (const [a, b] of [[0, 0], [1, 1], [1, -1], [-1, 1], [-1, -1], [0.5, 0], [-0.5, 0]]) if (!ROAD.has(classAt(x + (ux * a * l) / 2 + (vx * b * w) / 2, z + (uz * a * l) / 2 + (vz * b * w) / 2))) return false;
@@ -569,7 +608,14 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   };
   const leave = (x: number, z: number, yaw: number, k: number) => {
     const { l, w } = CARS[k], y = ground(x, z);
-    carXf[k].push(xform(x, y, z, yaw, 1, -0.045));
+    const m = xform(x, y, z, yaw, 1, -0.045);
+    carXf[k].push(m);
+    // a plate front and back, above the bumpers (one's been lost now and then)
+    const id = Math.floor(R() * 16);
+    for (const s of [1, -1]) if (R() > 0.06) {
+      plates.push(m.clone().multiply(new THREE.Matrix4().makeRotationY(s > 0 ? 0 : Math.PI).setPosition(0, CARS[k].y + 0.25, s * (CARS[k].l / 2 + 0.008))));
+      plateIds.push(id);
+    }
     carCol[k].push(new THREE.Color(R() < 0.08 ? '#1a1612' : PAINT[Math.floor(R() * PAINT.length)]));
     parked.push([x, z]);
     const ux = Math.sin(yaw), uz = Math.cos(yaw), vx = Math.cos(yaw), vz = -Math.sin(yaw);
@@ -607,6 +653,8 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     }
   });
   counts.cars = parked.length;
+  const pl = instanced(group, new THREE.PlaneGeometry(0.305, 0.152), plateMat(), plates, undefined, false);
+  if (pl) { pl.geometry.setAttribute('plate', new THREE.InstancedBufferAttribute(Float32Array.from(plateIds), 1)); pl.name = 'plates'; }
 
   // ---- weeds: in the gutters, along the curb tops, in the lawns nobody mows and the cracked lots
   for (const line of curbs) for (let i = 0; i < line.length - 1; i++) {
@@ -642,7 +690,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   const chunks: Chunk[] = cb.flush(group);
   const k = new THREE.Color();
   return {
-    group, chunks, counts, regional,
+    group, chunks, counts, regional, arms,
     /** where things ended up (for tests and screenshots) */
     debug: { cars: parked, trees: perKit.flatMap((l) => l.map((m) => [m.elements[12], m.elements[14]])), signals: poles.map((m) => [m.elements[12], m.elements[14]]) },
     update(t: number, hero: THREE.Vector3) {

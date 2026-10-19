@@ -36,7 +36,8 @@
   "armenianPark": 0,
   "ringsFountain": 0,
   "unionOysterHouse": 0,
-  "columbusTrellis": 0
+  "columbusTrellis": 0,
+  "oldNorthChurch": 5
  },
  "ground": {
   "landArea": 476365,
@@ -79,9 +80,11 @@
   "lampOsm": 60,
   "lamp": 2273
  },
+ "streets": 338,
+ "shops": 186,
  "bytes": {
-  "json": 148509,
+  "json": 220464,
   "bin": 4584128,
-  "binGz": 2005815
+  "binGz": 2005826
  }
 }

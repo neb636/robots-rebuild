@@ -25,6 +25,10 @@ const STYLE: Record<string, Style> = {
 
 export const facadeUniforms = { uTime: { value: 0 } };
 
+/** a style's ground-floor height and storefront bay spacing (where the facade paints its sign band:
+ *  from ground - 0.95 to ground - 0.3 above the footing) */
+export const storefront = (style: string) => ({ ground: (STYLE[style] ?? STYLE.brickCommercial).ground, bay: 3.4 });
+
 export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = false) {
   const arr = textureArrays(quality);
   const st = styles.map((s) => STYLE[s] ?? STYLE.brickCommercial);

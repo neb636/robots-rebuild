@@ -30,7 +30,27 @@ the trawler *Persistence* moored off Long Wharf: `built.harbor` has `waterHeight
 | Tools | Six more cine shots, fog banks on the buoy line, 23 ladders, `?debug=map`, `?walk=` autopilot (all eleven spots reached, none stuck). |
 | Wrap-up | README section, map-data credits, `harbor-*.js` chunk, regression of the apartment and Acorn Lane. |
 
+## Done since: making it read as Boston
+
+The layout matched Boston but walking it didn't say so. `signs.ts` and `freedomtrail.ts` add:
+
+| Piece | What |
+|---|---|
+| Data | The bake keeps every named way (`header.streets`: name, OSM highway kind, points) and the neighbourhood's shops, cafés, bars and restaurants (`header.shops`; OSM `brand` tags, kiosks and ticket booths left out). |
+| Street blades | A post with two green blades at each crossing of differently named roads (two posts across a primary/secondary), on the corner just past the curb; the cross street's name hung from each signal mast arm (`street.arms`). Some blades bent, turned or gone. |
+| Parking signs | On about a quarter of the lamp posts, facing the traffic: snow emergency artery and tow zones on the main roads, resident permit (North End / Waterfront / Downtown) and street cleaning elsewhere, and up to seven *Don't even think of parking here*. |
+| Storefronts | Each shop's board on the street-facing bay of the building it's in (or the nearest one), over the facade's sign band (raised to 2.8 m over the pavement on hills); some lit, some pubs and cafés with a hanging sign. Not on landmarks or buildings too low for a storefront. |
+| Freedom Trail | `ROUTE` (hand-placed on the sidewalks, OSM's own Freedom Trail ways where it maps them): a 0.36 m brick strip with granite edging, a medallion every 38 m, four stop signs, the red line on the map. |
+| Other | HarborWalk markers every ~85 m along its ways, graffiti on street walls, Massachusetts plates (`streetscape.ts`), the Old North Church steeple past the North End cordon (`landmarks/northend.ts`, lanterns lit, a glow sprite so it reads through the fog). |
+| Cost | One atlas (4096 x 2048, half on Low), two materials sharing it (boards and posts; flat paint and brick, polygon-offset, alpha-cut), per-vertex `glow` for the retroreflective/lit faces; nothing casts shadows. Main+shadow+reflection draws rose by 6-14 per view on High (8-12 on Low), triangles unchanged. Walkable area 306,612 m2 (posts), 0 leaks, all spots. |
+
 ## Follow-ups (not done)
+
+- Signs: street-number plaques, MBTA bus stops (OSM has them, not baked), wall-mounted corner signs
+  in the narrow North End lanes where there's no room for a post. Shop names come from OSM as of the
+  snapshot: re-check them (and the brand filter) after a `harbor:fetch`.
+- The Old North Church is only seen up Salem St and over low rooftops; the fog hides it past ~250 m
+  except for its lanterns.
 
 - Reflection pass: ~110-145 own draws at the busiest water views against the plan's 80 (it keeps
   towers and anything near); the other passes are in budget. iPad Low needs a real-device check
