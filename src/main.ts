@@ -613,6 +613,8 @@ class App {
   // ---------------------------------------------------------------- simulation
   /** height of the hero above the ground, and its vertical speed */
   jumpY = 0; jumpV = 0;
+  /** seconds spent running without a break: outdoors, a run builds into a sprint */
+  runT = 0;
   jump() {
     if (this.frozen || this.jumpY > 0 || this.jumpV !== 0 || (state.cam === 'cinematic' && !this.interior)) return;
     this.jumpV = 3.9;
@@ -645,7 +647,11 @@ class App {
     if (mv.lengthSq() > 0.001) {
       const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
       const dx = fx * mv.y + rx * mv.x, dz = fz * mv.y + rz * mv.x;
-      const sp = (run ? 4.6 : 2.3) * Math.min(1, mv.length());
+      // a run held for a second and a half builds into a sprint, for crossing the big areas (not
+      // indoors, nor on the autopilot, so the bench's walk keeps its pace)
+      this.runT = run && !auto && !this.interior ? this.runT + dt : 0;
+      const sprint = THREE.MathUtils.smoothstep(this.runT, 1.5, 2.5);
+      const sp = (run ? 4.6 + 2.9 * sprint : 2.3) * Math.min(1, mv.length());
       const h0 = heightAt(this.pos.x, this.pos.z, this.pos.y);
       const cur = isNaN(h0) ? this.pos.y : h0;
       const nx = this.pos.x + dx * sp * dt, nz = this.pos.z + dz * sp * dt;
@@ -654,10 +660,13 @@ class App {
       const h1 = heightAt(this.pos.x, this.pos.z, cur);
       if (this.canStand(this.pos.x, nz, isNaN(h1) ? cur : h1)) this.pos.z = nz;
       speed = Math.hypot(this.pos.x - ox, this.pos.z - oz) / dt;
+      // held up against a wall the sprint winds down fast (a curb's single-frame bump barely touches it)
+      if (speed < sp * 0.5) this.runT = Math.max(0, this.runT - dt * 6);
       const target = Math.atan2(dx, dz);
       let d = target - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.heading += d * Math.min(1, dt * 10);
     }
+    else this.runT = 0;
     if (this.auto) speed = this.autoWalk(dt);
     if (this.turnTo !== null) {
       let d = this.turnTo - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -911,7 +920,7 @@ class UI {
   constructor(private a: App) {
     this.root.innerHTML = `
       <div class="brand"><div class="b1">QUIET MACHINES</div><div class="b2">Prologue · Static</div></div>
-      <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run · <b>Space</b> jump / interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
+      <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run, keep going to sprint) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run (keep going to sprint) · <b>Space</b> jump / interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
     app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl);
     this.sync();
   }
