@@ -14,6 +14,8 @@ export const automated = navigator.webdriver === true;
 const fpsParam = params.get('fps');
 const CAP = fpsParam !== null && !isNaN(+fpsParam) ? +fpsParam : automated ? 30 : 60;
 const IDLE_MS = 30_000, IDLE_FPS = 4;
+/** what a frame may take at the current pace (ms): the cap's whole number of refreshes, or one refresh uncapped */
+export const pace = { budget: 1000 / 60 };
 
 let lastInput = performance.now();
 if (automated) {
@@ -46,9 +48,11 @@ export function frameLoop(frame: (now: number) => void): () => void {
       // 144 Hz, 55 on 165 Hz): a cap that doesn't divide the refresh rate alternates between k and k + 1
       // refreshes a frame, which reads as constant judder. Half a refresh of slack absorbs jitter.
       const k = refreshesPerFrame(1000 / vsync, cap);
+      pace.budget = k * vsync;
       if (now - last < (k - 0.5) * vsync) return;
       last = now;
     }
+    else pace.budget = vsync;
     frame(now);
   };
   raf = requestAnimationFrame(tick);

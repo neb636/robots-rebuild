@@ -23,6 +23,7 @@ import { TitleScreen } from './title';
 import { frameLoop } from './frameloop';
 import { perf } from './perf';
 import { bench } from './bench';
+import { DynamicRes, drs } from './drs';
 
 const app = document.getElementById('app')!;
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
@@ -127,6 +128,7 @@ class App {
   stats: StatsOverlay | null = null;
   /** ?bench's per-frame sampler (bench.ts) */
   benchTick: ((interval: number) => void) | null = null;
+  drs = new DynamicRes(() => this.resize());
   keys = new Set<string>();
   stick = { x: 0, y: 0 };
   look = { dx: 0, dy: 0 };
@@ -262,8 +264,11 @@ class App {
     frameLoop((now) => {
       const real = (now - last) / 1000; last = now;
       // (not counting the interval after a frame the profiler serialized: ?debug=stats)
-      if (!perf.serialized) this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
+      const skewed = perf.serialized;
+      if (!skewed) this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
+      const t0 = performance.now();
       this.frame(Math.min(0.05, real), real * 1000);
+      if (!skewed && !perf.serialized) this.drs.tick(real * 1000, performance.now() - t0, now);
       this.benchTick?.(real * 1000);
     });
     if (params.get('card') !== '0') this.ui?.titleCard();
@@ -274,8 +279,12 @@ class App {
     }
   }
 
+  /** the quality's pixel ratio, times the dynamic-resolution scale */
+  pixelRatio() { return Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1) * drs.scale; }
+
   resize() {
     const w = innerWidth, h = innerHeight;
+    this.gl.setPixelRatio(this.pixelRatio());
     this.gl.setSize(w, h, false);
     this.post.setSize(w, h);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
@@ -323,7 +332,6 @@ class App {
   applyQuality() {
     const q = state.quality;
     this.post.setQuality(q);
-    this.gl.setPixelRatio(Math.min(devicePixelRatio, q === 'high' ? 1.5 : 1));
     this.resize?.();
   }
 
@@ -887,7 +895,7 @@ class StatsOverlay {
     const cpu = [...perf.cpu.m].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ');
     const px = gl.getDrawingBufferSize(this.size);
     this.el.textContent = [
-      `${fps.toFixed(0)} fps · ${state.quality === 'high' ? 'High' : 'Low'} ${px.x}x${px.y} · ${perf.timed ? (perf.mode === 'sync' && perf.sampleMs ? `GPU ${perf.gpuTotal.toFixed(1)} ms when stalled (1 frame/s) · ` : `GPU ${perf.gpuTotal.toFixed(1)} ms (${perf.mode}) · `) : ''}${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`,
+      `${fps.toFixed(0)} fps · ${state.quality === 'high' ? 'High' : 'Low'} ${px.x}x${px.y}${drs.scale < 1 ? ` (dynamic ${Math.round(drs.scale * 100)}%)` : ''} · ${perf.timed ? (perf.mode === 'sync' && perf.sampleMs ? `GPU ${perf.gpuTotal.toFixed(1)} ms when stalled (1 frame/s) · ` : `GPU ${perf.gpuTotal.toFixed(1)} ms (${perf.mode}) · `) : ''}${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`,
       `CPU ms: ${cpu}`,
       ...perf.table(),
     ].join('\n');

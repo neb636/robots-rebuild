@@ -426,6 +426,14 @@ export class Post {
       worldProximityFalloff: 0.3, fade: 0.02, resolutionScale: 0.5, depthAwareUpsampling: true,
       normalDepthBuffer: this.depthPass.texture,
     });
+    // its radius in pixels is a define, rewritten (a recompile) on every resize: make it a uniform, so
+    // a dynamic-resolution step never compiles a shader
+    const sm = this.ssao.ssaoMaterial as unknown as THREE.ShaderMaterial & { r: number; resolution: THREE.Vector2; updateRadius(): void };
+    sm.uniforms.uRadius = { value: 0 };
+    sm.defines.RADIUS = 'uRadius'; sm.defines.RADIUS_SQ = '(uRadius * uRadius)';
+    sm.fragmentShader = 'uniform float uRadius;\n' + sm.fragmentShader;
+    sm.updateRadius = function () { this.uniforms.uRadius.value = this.r * this.resolution.height; };
+    sm.updateRadius(); sm.needsUpdate = true;
     this.fog = new FogPass(camera, this.depthPass.texture);
     this.fogMix = new FogMixEffect(camera, this.fog.texture, this.depthPass.texture);
     this.dof = new DepthOfFieldEffect(camera, { worldFocusDistance: 8, worldFocusRange: 6, bokehScale: 2.2, resolutionScale: 0.5 });
