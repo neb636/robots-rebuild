@@ -4,6 +4,23 @@
 
 When the requested task or prompt is complete, commit the resulting changes and push the commit to the remote branch. Before opening a pull request, check whether the current branch already has one. If a pull request exists, update it by pushing the new commit; otherwise, open a pull request for the current branch.
 
+## Pull request descriptions: direct test links
+
+Every pull request description must include a **Test this** section with complete, clickable
+Markdown links to the PR preview and each relevant scene, feature, or test state. Use descriptive
+labels and include all required paths, query parameters, and hash routes in each URL, so the
+reviewer can open the exact state in one tap. Follow the format in
+[Kaylee-Gamepack PR #100](https://github.com/neb636/Kaylee-Gamepack/pull/100).
+
+Use this repository's PR preview base,
+`https://neb636.github.io/robots-rebuild/pr-preview/pr-<number>/`, with the actual PR number.
+For example: [Harbor with live stats](https://neb636.github.io/robots-rebuild/pr-preview/pr-32/?menu=0&card=0&start=harbor&debug=stats).
+Do not give query fragments alone or ask the reviewer to append `?...` to a URL.
+Add a short instruction beside each link when interaction or console output matters. Confirm the
+preview path from the workflow or deployment comment; if deployment is pending, say so. For
+documentation-only changes with no runtime behavior to test, link directly to the changed document
+and state that no gameplay testing is needed.
+
 ## Audio for new scenes: browser audio first
 
 Write every new scene's audio with what the browser provides: music, ambience and SFX as procedural
