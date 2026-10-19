@@ -194,7 +194,6 @@ class App {
     this.embers = built.emberOrigin ? embers(built.emberOrigin, 90) : null;
     if (this.embers) s.add(this.embers.obj);
     this.post.setScene(s);
-    this.post.normalHidden = built.normalHidden ?? [];
     // ?at=name starts at one of the area's named spots
     const sp = built.spots?.[params.get('at') ?? ''] ?? built.spawn;
     const sy = built.heightAt(sp.x, sp.z);

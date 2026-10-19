@@ -125,8 +125,6 @@ export interface Built {
   mood?: Mood;
   drone?: ReturnType<typeof drone>;
   emberOrigin?: THREE.Vector3;
-  /** kept out of the SSAO normal pass */
-  normalHidden?: THREE.Object3D[];
   lanternPivots?: THREE.Group[];
   pois?: THREE.Vector3[];
 

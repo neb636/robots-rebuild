@@ -643,8 +643,6 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   const k = new THREE.Color();
   return {
     group, chunks, counts, regional,
-    /** what the normal pass (SSAO) can skip: alpha-cut cards it would draw as solid squares */
-    normalHidden: [...regional.filter((o) => o.name === 'leaves'), ...weeds.meshes],
     /** where things ended up (for tests and screenshots) */
     debug: { cars: parked, trees: perKit.flatMap((l) => l.map((m) => [m.elements[12], m.elements[14]])), signals: poles.map((m) => [m.elements[12], m.elements[14]]) },
     update(t: number, hero: THREE.Vector3) {
