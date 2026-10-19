@@ -126,6 +126,8 @@ export function autopilot(names: string[], spots: Record<string, Spot>, heightAt
 
   const state = {
     route: [] as Spot[],
+    /** every leg walked (or given up) */
+    get done() { return leg >= legs.length; },
     steer(pos: THREE.Vector3, t: number): { x: number; z: number } | null {
       if (leg >= legs.length) return null;
       const goal = spots[legs[leg]];

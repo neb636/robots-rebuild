@@ -50,13 +50,26 @@ export function tuftGeometry(blades: number, R: () => number, tall = 1) {
   return g;
 }
 
+/** a patch of instanced grass that follows someone (the harbor's weeds): tufts shrink to nothing
+ *  between radii z and w of (x, y) in world xz, so the patch's edge never pops as it moves, and thin out
+ *  past 14 m (each tuft fades on its own hash, so the patch keeps about a third of them at its edge, where
+ *  they're a few pixels tall). w <= 0: off. */
+export const grassPatch = { value: new THREE.Vector4(0, 0, 0, 0) };
+
 /** Inject world-space wind sway, weighted by uv.y (blade height) squared. */
-function windify(m: THREE.Material, amp: number, weight: 'up' | 'down' = 'up') {
+function windify(m: THREE.Material, amp: number, weight: 'up' | 'down' = 'up', patch?: { value: THREE.Vector4 }) {
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uWind = wind;
-    sh.vertexShader = 'uniform float uWind;\n' + sh.vertexShader.replace('#include <project_vertex>', /* glsl */`
+    if (patch) sh.uniforms.uPatch = patch;
+    sh.vertexShader = 'uniform float uWind;\n' + (patch ? 'uniform vec4 uPatch;\n' : '') + sh.vertexShader.replace('#include <project_vertex>', /* glsl */`
       vec4 mvPosition = vec4( transformed, 1.0 );
       #ifdef USE_INSTANCING
+        ${patch ? `if (uPatch.w > 0.0) {
+          vec2 io = (modelMatrix * instanceMatrix[3]).xz;
+          float pd = distance(io, uPatch.xy), ph = fract(sin(dot(io, vec2(12.9898, 78.233))) * 43758.5453);
+          float keep = mix(1.15, 0.35, smoothstep(14.0, uPatch.w, pd));
+          mvPosition.xyz *= (1.0 - smoothstep(uPatch.z, uPatch.w, pd)) * smoothstep(ph, ph + 0.15, keep);
+        }` : ''}
         mvPosition = instanceMatrix * mvPosition;
       #endif
       vec4 wpos = modelMatrix * mvPosition;
@@ -70,7 +83,7 @@ function windify(m: THREE.Material, amp: number, weight: 'up' | 'down' = 'up') {
     `);
   };
   // the injected code differs per amp, so it must not share a cached program with other windified materials
-  m.customProgramCacheKey = () => 'wind' + amp + weight;
+  m.customProgramCacheKey = () => 'wind' + amp + weight + (patch ? 'patch' : '');
   foliageMats.push(m);
 }
 
@@ -78,7 +91,7 @@ let grassMat: THREE.MeshStandardMaterial | null = null;
 export function getGrassMat() {
   if (!grassMat) {
     grassMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
-    windify(grassMat, 0.09);
+    windify(grassMat, 0.09, 'up', grassPatch);
   }
   return grassMat;
 }

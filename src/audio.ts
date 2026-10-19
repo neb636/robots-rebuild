@@ -742,12 +742,17 @@ class AudioEngine {
     src().connect(drBp).connect(drG); drG.connect(drPan).connect(out);
     lfo(5.5, 6, buzz.frequency);
     const T = 0.25; // a quarter-second glide, so levels follow the hero without zipper noise
+    let set = -1;
     return (l: HarborField) => {
       const now = c.currentTime;
-      lapG.gain.setTargetAtTime(0.03 + l.shore * 0.3, now, T);
-      humG.gain.setTargetAtTime(l.wall * 0.11, now, T); whineG.gain.setTargetAtTime(l.wall * l.wall * 0.004, now, T);
-      humPan.pan.setTargetAtTime(l.wallPan * 0.8, now, T);
-      drG.gain.setTargetAtTime(l.drone * 0.07, now, T); drPan.pan.setTargetAtTime(l.dronePan * 0.9, now, T);
+      // with that glide, 15 updates a second is plenty (and keeps each param's automation list short)
+      if (now - set >= 1 / 15) {
+        set = now;
+        lapG.gain.setTargetAtTime(0.03 + l.shore * 0.3, now, T);
+        humG.gain.setTargetAtTime(l.wall * 0.11, now, T); whineG.gain.setTargetAtTime(l.wall * l.wall * 0.004, now, T);
+        humPan.pan.setTargetAtTime(l.wallPan * 0.8, now, T);
+        drG.gain.setTargetAtTime(l.drone * 0.07, now, T); drPan.pan.setTargetAtTime(l.dronePan * 0.9, now, T);
+      }
       // one-off sounds, as often as their sources are near
       if (Math.random() < l.dt * l.shore * 0.9) this.harborHit(out, 'lap', 0.5 + l.shore * 0.5);
       if (Math.random() < l.dt * (0.04 + l.buoy * 0.12)) this.harborHit(out, 'bell', 0.25 + l.buoy * 0.75);

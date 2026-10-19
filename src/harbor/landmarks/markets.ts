@@ -729,6 +729,7 @@ export const quincy: LandmarkBuilder = (ctx) => {
     const [x, z] = wld(F, sL, tL);
     const holder = new THREE.Group();
     const lr = hangingLantern(holder, new THREE.Vector3(x, Y(7.3), z), 3.3 * k, { color: '#ffb468', intensity: 5, flicker: 0.14 });
+    lr.pivot.userData.moving = true; // it sways (harbor/index.ts freezes everything else)
     if (lr.light) {
       const L: FogLight = { ...lr.light, priority: 1 };
       if (!hi && L.point) { L.point.parent?.remove(L.point); L.point = undefined; L.pointBase = undefined; }

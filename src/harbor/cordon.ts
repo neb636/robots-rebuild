@@ -323,7 +323,8 @@ export function buildCordon(d: HarborData, parent: THREE.Object3D, collide: Coll
       bars.forEach((b, i) => {
         const y = b.rise * (0.5 - 0.5 * Math.cos(t * 0.7 + i * 1.9));
         dv.subVectors(b.b, b.a);
-        bm.compose(bp.copy(b.a).add(b.b).multiplyScalar(0.5).setY(b.a.y + y), bq.setFromUnitVectors(X, dv.clone().normalize()), bs.set(dv.length(), 1, 1));
+        const len = dv.length();
+        bm.compose(bp.copy(b.a).add(b.b).multiplyScalar(0.5).setY(b.a.y + y), bq.setFromUnitVectors(X, dv.divideScalar(len || 1)), bs.set(len, 1, 1));
         barMesh.setMatrixAt(i, bm);
       });
       barMesh.instanceMatrix.needsUpdate = true;

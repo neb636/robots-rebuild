@@ -423,7 +423,6 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   const updaters: ((dt: number, t: number) => void)[] = [];
   const at: Record<string, THREE.Vector3> = {};
   let turntable!: Turntable;
-  const normalHidden: THREE.Object3D[] = [];
   const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   const solid = (x0: number, z0: number, x1: number, z1: number) => colliders.push({ x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1) });
   /** box with its base at y (world-scaled UVs) */
@@ -640,7 +639,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     const glass = new THREE.Mesh(new THREE.PlaneGeometry(la - 0.05, h - 0.05), paint('#cfe4f0', 0.05, { transparent: true, opacity: 0.12, metalness: 0.1, depthWrite: false }));
     const [gx, gz] = place(d, ac);
     glass.position.set(gx, yc, gz); if (d.axis === 'z') glass.rotation.y = Math.PI / 2;
-    w.group.add(glass); normalHidden.push(glass);
+    w.group.add(glass);
     wb.flush(w.group);
   };
   /** a closed two-panel shaker door in an opening, with a black lever on the given side */
@@ -752,7 +751,6 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   const shadowG = new THREE.Group(); root.add(shadowG);
   shadowB.flush(shadowG);
   shadowG.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = false; } });
-  normalHidden.push(shadowG);
 
   // =================================================================== bedroom
   // a big woven rug under the bed
@@ -1623,7 +1621,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    const m = new THREE.Mesh(g, shaftMat); m.renderOrder = 5; root.add(m); normalHidden.push(m);
+    const m = new THREE.Mesh(g, shaftMat); m.renderOrder = 5; root.add(m);
   }
   // Motes wander lazily around a home point. Each one traces back toward the sun to the window wall:
   // if it lands inside a window it's in a sunbeam and lights up. Some start in the beams, so they glitter.
@@ -1686,7 +1684,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
           gl_FragColor = vec4(vCol * mix(spot, disc, bokeh), 1.0);
         }`,
     });
-    const pts = new THREE.Points(g, m); pts.frustumCulled = false; root.add(pts); normalHidden.push(pts);
+    const pts = new THREE.Points(g, m); pts.frustumCulled = false; root.add(pts);
     return m;
   };
   const air = [
@@ -1867,7 +1865,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
     heightAt, spawn: { x: -5.0, z: -2.7, heading: -Math.PI * 0.85 },
     card: ['MT. VERNON STREET', 'Beacon Hill · day zero'],
     music: 'apartment', ambience: 'city',
-    mood: HONEYLIGHT, normalHidden,
+    mood: HONEYLIGHT,
     at, inLiving, tv, clock, phone, cat, lamps, turntable,
     setFollow(on: boolean) { follow = on; ceiling.visible = on; },
     cameraBlock(from, to) {

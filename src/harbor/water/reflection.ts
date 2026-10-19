@@ -5,6 +5,7 @@
 // Only objects on REFLECT_LAYER are drawn; the scene's lights must be on it too, or the reflection
 // pass would see a different light set and every material would compile a second program.
 import * as THREE from 'three';
+import { drs } from '../../drs';
 
 export const REFLECT_LAYER = 1;
 
@@ -30,7 +31,8 @@ export class PlanarReflection {
   /** Draw the mirrored scene. `hide` is the water itself (and anything else that mustn't reflect). */
   render(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, hide: THREE.Object3D[]) {
     gl.getDrawingBufferSize(this.size);
-    const w = Math.max(1, Math.floor(this.size.x * this.scale)), h = Math.max(1, Math.floor(this.size.y * this.scale));
+    // (sized from the full-resolution buffer: dynamic resolution doesn't blur the mirror)
+    const w = Math.max(1, Math.floor(this.size.x * this.scale / drs.scale)), h = Math.max(1, Math.floor(this.size.y * this.scale / drs.scale));
     if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);
     const n = new THREE.Vector3(0, 1, 0), p0 = new THREE.Vector3(0, this.level, 0);
     this.camPos.setFromMatrixPosition(camera.matrixWorld);

@@ -11,7 +11,7 @@ import type { WalkMesh } from './walk';
 import type { Part } from './buildings';
 import { ChunkBuilder, type Chunk } from './chunks';
 import { pbrMat } from '../props';
-import { getBarkMat, taperTube, bushCards, leafCards, tuftGeometry, getGrassMat, type Card } from '../foliage';
+import { getBarkMat, taperTube, bushCards, leafCards, tuftGeometry, getGrassMat, grassPatch, type Card } from '../foliage';
 import { rng } from '../noise';
 
 // ground classes (header.ground): what a pit, a bench or a pole stands on, and where cars were left
@@ -278,16 +278,20 @@ function meadowClump(R: () => number, blades: number) {
 }
 
 /** weeds in the gutters and tree pits (kinds 0-2) and meadow in the lawns (3-4): every tuft is baked
- *  here, and the patch around the hero is copied into one instanced mesh per kind whenever they've
- *  moved a few metres, nearest first */
+ *  here, sorted by kind and 8 m cell, and the cells around the hero are copied, nearest first, into one
+ *  instanced mesh per kind whenever they've moved a few metres. A cell's tufts are contiguous, so an
+ *  update is a few hundred block copies, not a pass over every tuft; the grass shader shrinks tufts away
+ *  toward the patch's edge (grassPatch, around the hero), so the cell-sized steps never show. */
 class WeedPatch {
   static CRACK = 0; static MEADOW = 3;
+  static CELL = 8; static STEP = 2;
   private x: number[] = []; private z: number[] = []; private k: number[] = []; private m: number[] = []; private c: number[] = [];
-  private mf: Float32Array | null = null; private cf: Float32Array | null = null;
-  private cells = new Map<number, number[]>();
+  /** per kind: matrices and colours sorted by cell, and each cell's [first, count] */
+  private kinds: { mf: Float32Array; cf: Float32Array; cells: Map<number, [number, number]> }[] | null = null;
   meshes: THREE.InstancedMesh[];
   private last = new THREE.Vector2(1e9, 1e9);
-  private order: [number, number][];
+  /** this update's cells (offsets from the hero's cell) and their distances, nearest first */
+  private order: [number, number][] = []; private orderD: number[] = [];
   constructor(parent: THREE.Object3D, private radius: number, crack: number, meadow: number, seed: number) {
     const R = rng(seed);
     const geos = [tuftGeometry(7, R), tuftGeometry(11, R), tuftGeometry(6, R, 1.6), meadowClump(R, 16), meadowClump(R, 20)];
@@ -299,10 +303,6 @@ class WeedPatch {
       parent.add(im);
       return im;
     });
-    const n = Math.ceil(radius / 16);
-    this.order = [];
-    for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) this.order.push([i, j]);
-    this.order.sort((a, b) => a[0] ** 2 + a[1] ** 2 - (b[0] ** 2 + b[1] ** 2));
   }
   private m4 = new THREE.Matrix4(); private q = new THREE.Quaternion(); private e = new THREE.Euler(); private v = new THREE.Vector3(); private s = new THREE.Vector3();
   /** a tuft of `kind` (a crack weed picks one of the three tufts itself) */
@@ -314,26 +314,63 @@ class WeedPatch {
     this.m.push(...this.m4.elements);
     const t = R();
     this.c.push(0.8 + t * 0.22, 0.88 + t * 0.25, 0.75 + t * 0.2);
-    const key = Math.floor(x / 16) * 100003 + Math.floor(z / 16);
-    let l = this.cells.get(key);
-    if (!l) this.cells.set(key, (l = []));
-    l.push(i);
+  }
+  private static key(i: number, j: number) { return i * 100003 + j; }
+  /** sort every tuft by (kind, cell) into flat arrays, once */
+  private sort() {
+    const C = WeedPatch.CELL, cellOf = (t: number) => WeedPatch.key(Math.floor(this.x[t] / C), Math.floor(this.z[t] / C));
+    this.kinds = this.meshes.map((_, g) => {
+      const ids: number[] = [];
+      for (let t = 0; t < this.k.length; t++) if (this.k[t] === g) ids.push(t);
+      const key = ids.map(cellOf);
+      const ord = ids.map((_, i) => i).sort((a, b) => key[a] - key[b]);
+      const mf = new Float32Array(ids.length * 16), cf = new Float32Array(ids.length * 3), cells = new Map<number, [number, number]>();
+      ord.forEach((o, i) => {
+        const t = ids[o];
+        for (let e = 0; e < 16; e++) mf[i * 16 + e] = this.m[t * 16 + e];
+        for (let e = 0; e < 3; e++) cf[i * 3 + e] = this.c[t * 3 + e];
+        const r = cells.get(key[o]);
+        if (r) r[1]++; else cells.set(key[o], [i, 1]);
+      });
+      return { mf, cf, cells };
+    });
+    this.m = []; this.c = [];
   }
   update(p: THREE.Vector3) {
-    if ((p.x - this.last.x) ** 2 + (p.z - this.last.y) ** 2 < 9) return;
-    if (!this.mf) { this.mf = new Float32Array(this.m); this.cf = new Float32Array(this.c); this.m = []; this.c = []; }
+    grassPatch.value.set(p.x, p.z, this.radius - 8, this.radius);
+    if ((p.x - this.last.x) ** 2 + (p.z - this.last.y) ** 2 < WeedPatch.STEP ** 2) return;
+    if (!this.kinds) this.sort();
     this.last.set(p.x, p.z);
-    const gx = Math.floor(p.x / 16), gz = Math.floor(p.z / 16), r2 = this.radius ** 2;
-    const n = this.meshes.map(() => 0);
-    for (const [i, j] of this.order) for (const k of this.cells.get((gx + i) * 100003 + gz + j) ?? []) {
-      if ((this.x[k] - p.x) ** 2 + (this.z[k] - p.z) ** 2 > r2) continue;
-      const g = this.k[k], im = this.meshes[g];
-      if (n[g] >= im.instanceMatrix.count) continue;
-      (im.instanceMatrix.array as Float32Array).set(this.mf.subarray(k * 16, k * 16 + 16), n[g] * 16);
-      (im.instanceColor!.array as Float32Array).set(this.cf!.subarray(k * 3, k * 3 + 3), n[g] * 3);
-      n[g]++;
+    // whole cells whose centre is within the radius, plus a step (the hero can walk that far before the
+    // next update) and half a cell's diagonal: every tuft within the radius stays on hand
+    const C = WeedPatch.CELL, gx = Math.floor(p.x / C), gz = Math.floor(p.z / C);
+    const reach = this.radius + WeedPatch.STEP + C * Math.SQRT1_2, n = Math.ceil(reach / C) + 1;
+    const order = this.order, od = this.orderD;
+    order.length = 0; od.length = 0;
+    for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) {
+      const d = Math.hypot((gx + i + 0.5) * C - p.x, (gz + j + 0.5) * C - p.z);
+      if (d <= reach) { order.push([i, j]); od.push(d); }
     }
-    this.meshes.forEach((im, g) => { im.count = n[g]; im.instanceMatrix.needsUpdate = true; im.instanceColor!.needsUpdate = true; });
+    const idx = order.map((_, i) => i).sort((a, b) => od[a] - od[b]);
+    const sorted = idx.map((i) => order[i]);
+    this.meshes.forEach((im, g) => {
+      const { mf, cf, cells } = this.kinds![g], cap = im.instanceMatrix.count;
+      const ma = im.instanceMatrix.array as Float32Array, ca = im.instanceColor!.array as Float32Array;
+      let k = 0;
+      for (const [i, j] of sorted) {
+        const r = cells.get(WeedPatch.key(gx + i, gz + j));
+        if (!r) continue;
+        const take = Math.min(r[1], cap - k);
+        if (take <= 0) break;
+        ma.set(mf.subarray(r[0] * 16, (r[0] + take) * 16), k * 16);
+        ca.set(cf.subarray(r[0] * 3, (r[0] + take) * 3), k * 3);
+        k += take;
+      }
+      im.count = k;
+      // upload only what's in use
+      im.instanceMatrix.clearUpdateRanges(); im.instanceMatrix.addUpdateRange(0, k * 16); im.instanceMatrix.needsUpdate = true;
+      im.instanceColor!.clearUpdateRanges(); im.instanceColor!.addUpdateRange(0, k * 3); im.instanceColor!.needsUpdate = true;
+    });
   }
   get size() { return this.x.length; }
 }
@@ -606,8 +643,6 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   const k = new THREE.Color();
   return {
     group, chunks, counts, regional,
-    /** what the normal pass (SSAO) can skip: alpha-cut cards it would draw as solid squares */
-    normalHidden: [...regional.filter((o) => o.name === 'leaves'), ...weeds.meshes],
     /** where things ended up (for tests and screenshots) */
     debug: { cars: parked, trees: perKit.flatMap((l) => l.map((m) => [m.elements[12], m.elements[14]])), signals: poles.map((m) => [m.elements[12], m.elements[14]]) },
     update(t: number, hero: THREE.Vector3) {

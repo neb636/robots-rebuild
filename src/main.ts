@@ -21,6 +21,9 @@ import { audio } from './audio';
 import { state, saveSettings, params, isTouch, CAMS, CamMode, skipTitleOnce, consumeSkipTitle } from './settings';
 import { TitleScreen } from './title';
 import { frameLoop } from './frameloop';
+import { perf } from './perf';
+import { bench } from './bench';
+import { DynamicRes, drs } from './drs';
 
 const app = document.getElementById('app')!;
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
@@ -73,7 +76,7 @@ async function boot() {
   const theo = await loadTheo(state.quality);
   setLoad(0.9, outdoors ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
   const app3 = new App(gl, built, theo);
-  if (params.has('debug')) (window as any).__app = app3;
+  if (params.has('debug')) { (window as any).__app = app3; (window as any).__perf = perf; }
   setLoad(1, ''); await nextFrame();
   // compile shaders up front so the first frames don't hitch
   if (harbor) {
@@ -89,6 +92,7 @@ async function boot() {
   loader.classList.add('done');
   setTimeout(() => loader.remove(), 1200);
   app3.start();
+  if (params.has('bench')) void bench(app3, params.get('bench') ?? '');
   // a gesture on the title already unlocked audio, so the prologue's music can start right away
   if (audio.ready) app3.enableAudio();
   (window as any).app = app3;
@@ -122,6 +126,9 @@ class App {
   /** toward the moon (from the mood); the shadow camera rides up this from the hero */
   moonDir = new THREE.Vector3(0, 1, 0);
   stats: StatsOverlay | null = null;
+  /** ?bench's per-frame sampler (bench.ts) */
+  benchTick: ((interval: number) => void) | null = null;
+  drs = new DynamicRes(() => this.resize());
   keys = new Set<string>();
   stick = { x: 0, y: 0 };
   look = { dx: 0, dy: 0 };
@@ -147,11 +154,13 @@ class App {
   built!: Built;
 
   constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset) {
+    const pm = params.get('perf');
+    perf.init(gl, params.get('debug') === 'stats' || params.has('bench'), params.has('bench') ? 'sync' : pm === 'timer' || pm === 'sync' ? pm : undefined);
     this.player = new Theo(theo, Math.min(8, gl.capabilities.getMaxAnisotropy()));
-    this.post = new Post(gl, built.scene, this.camera, state.quality === 'high' ? 4 : 0);
+    this.post = new Post(gl, built.scene, this.camera, state.quality);
     this.pmrem = new THREE.PMREMGenerator(gl);
     this.dlg.onInteract = () => void this.interact();
-    if (params.get('debug') === 'stats') { this.stats = new StatsOverlay(); app.appendChild(this.stats.el); gl.info.autoReset = false; }
+    if (params.get('debug') === 'stats') { this.stats = new StatsOverlay(); app.appendChild(this.stats.el); }
     this.applyQuality();
     this.attach(built);
     this.bindInput();
@@ -174,13 +183,19 @@ class App {
     this.banks = fogBanks(built.fogBanks ?? []);
     this.banks.obj.visible = !!built.fogBanks?.length;
     s.add(this.player.group, this.pShadow, this.ash.obj, this.rain.obj, this.banks.obj, this.fill);
+    // alpha-tested cutouts (leaves, ivy, gilt) draw after the solid opaques: with the depth buffer full,
+    // what they'd shade behind a wall is rejected before it runs (a cutout's discard keeps the GPU from
+    // doing that for whatever is drawn after it)
+    s.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (m && (Array.isArray(m) ? m : [m]).some((x) => x.alphaTest > 0 && !x.transparent)) o.renderOrder = Math.max(o.renderOrder, 1);
+    });
     const cam = built.camera ?? { near: 0.1, far: 1500 };
     this.camera.near = cam.near; this.camera.far = cam.far; this.camera.updateProjectionMatrix();
     if (this.embers) this.embers.obj.removeFromParent();
     this.embers = built.emberOrigin ? embers(built.emberOrigin, 90) : null;
     if (this.embers) s.add(this.embers.obj);
     this.post.setScene(s);
-    this.post.normalHidden = built.normalHidden ?? [];
     // ?at=name starts at one of the area's named spots
     const sp = built.spots?.[params.get('at') ?? ''] ?? built.spawn;
     const sy = built.heightAt(sp.x, sp.z);
@@ -248,8 +263,13 @@ class App {
     let last = performance.now();
     frameLoop((now) => {
       const real = (now - last) / 1000; last = now;
-      this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
-      this.frame(Math.min(0.05, real));
+      // (not counting the interval after a frame the profiler serialized: ?debug=stats)
+      const skewed = perf.serialized;
+      if (!skewed) this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
+      const t0 = performance.now();
+      this.frame(Math.min(0.05, real), real * 1000);
+      if (!skewed && !perf.serialized) this.drs.tick(real * 1000, performance.now() - t0, now);
+      this.benchTick?.(real * 1000);
     });
     if (params.get('card') !== '0') this.ui?.titleCard();
     if (this.prologue) {
@@ -259,8 +279,12 @@ class App {
     }
   }
 
+  /** the quality's pixel ratio, times the dynamic-resolution scale */
+  pixelRatio() { return Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1) * drs.scale; }
+
   resize() {
     const w = innerWidth, h = innerHeight;
+    this.gl.setPixelRatio(this.pixelRatio());
     this.gl.setSize(w, h, false);
     this.post.setSize(w, h);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
@@ -308,7 +332,6 @@ class App {
   applyQuality() {
     const q = state.quality;
     this.post.setQuality(q);
-    this.gl.setPixelRatio(Math.min(devicePixelRatio, q === 'high' ? 1.5 : 1));
     this.resize?.();
   }
 
@@ -590,6 +613,8 @@ class App {
   // ---------------------------------------------------------------- simulation
   /** height of the hero above the ground, and its vertical speed */
   jumpY = 0; jumpV = 0;
+  /** seconds spent running without a break: outdoors, a run builds into a sprint */
+  runT = 0;
   jump() {
     if (this.frozen || this.jumpY > 0 || this.jumpV !== 0 || (state.cam === 'cinematic' && !this.interior)) return;
     this.jumpV = 3.9;
@@ -606,7 +631,9 @@ class App {
     return !isNaN(h) && Math.abs(h - fromY) < 0.45 && !this.blocked(x, z);
   }
 
-  frame(dt: number) {
+  /** one frame; `interval` is the real time since the last one (ms, 0 for the warm-up frames) */
+  frame(dt: number, interval = 0) {
+    perf.beginFrame();
     this.t += dt;
     wind.value += dt;
     let mv0 = this.readMove();
@@ -620,7 +647,11 @@ class App {
     if (mv.lengthSq() > 0.001) {
       const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
       const dx = fx * mv.y + rx * mv.x, dz = fz * mv.y + rz * mv.x;
-      const sp = (run ? 4.6 : 2.3) * Math.min(1, mv.length());
+      // a run held for a second and a half builds into a sprint, for crossing the big areas (not
+      // indoors, nor on the autopilot, so the bench's walk keeps its pace)
+      this.runT = run && !auto && !this.interior ? this.runT + dt : 0;
+      const sprint = THREE.MathUtils.smoothstep(this.runT, 1.5, 2.5);
+      const sp = (run ? 4.6 + 2.9 * sprint : 2.3) * Math.min(1, mv.length());
       const h0 = heightAt(this.pos.x, this.pos.z, this.pos.y);
       const cur = isNaN(h0) ? this.pos.y : h0;
       const nx = this.pos.x + dx * sp * dt, nz = this.pos.z + dz * sp * dt;
@@ -629,10 +660,13 @@ class App {
       const h1 = heightAt(this.pos.x, this.pos.z, cur);
       if (this.canStand(this.pos.x, nz, isNaN(h1) ? cur : h1)) this.pos.z = nz;
       speed = Math.hypot(this.pos.x - ox, this.pos.z - oz) / dt;
+      // held up against a wall the sprint winds down fast (a curb's single-frame bump barely touches it)
+      if (speed < sp * 0.5) this.runT = Math.max(0, this.runT - dt * 6);
       const target = Math.atan2(dx, dz);
       let d = target - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.heading += d * Math.min(1, dt * 10);
     }
+    else this.runT = 0;
     if (this.auto) speed = this.autoWalk(dt);
     if (this.turnTo !== null) {
       let d = this.turnTo - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -663,8 +697,8 @@ class App {
     }
 
     this.updateCamera(dt, speed);
-    this.built.update(dt, this.t, this.camera, this.pos);
-    this.updateFogLights();
+    perf.begin('update'); this.built.update(dt, this.t, this.camera, this.pos); perf.end('update');
+    perf.begin('fogLights'); this.updateFogLights(); perf.end('fogLights');
     this.updateScan(dt);
     this.built.sky.update(this.t, this.camera.position);
     this.ash.update(this.t, this.camera.position);
@@ -677,10 +711,14 @@ class App {
     this.prologue?.update(dt);
     this.dlg.tick(dt);
     this.updateFocus();
-    this.stats?.begin(this.gl);
-    this.built.beforeRender?.(this.gl, this.camera);
-    this.post.render(dt);
-    this.stats?.end(this.gl, this.fps);
+    // an area that freezes its static world (the harbor) updates matrices here, once, instead of the
+    // renderer doing the whole scene at every render call (reflection, scene, normals)
+    const sc = this.built.scene;
+    if (!sc.matrixWorldAutoUpdate) { perf.begin('matrices'); sc.updateMatrixWorld(); perf.end('matrices'); }
+    perf.begin('beforeRender'); this.built.beforeRender?.(this.gl, this.camera); perf.end('beforeRender');
+    perf.begin('post'); this.post.render(dt); perf.end('post');
+    this.stats?.show(this.gl, this.fps);
+    perf.endFrame(interval);
   }
 
   updateCamera(dt: number, speed: number) {
@@ -790,25 +828,34 @@ class App {
     m.position.copy(m.target.position).addScaledVector(this.moonDir, this.built.shadow?.lift ?? 60);
   }
 
-  private fl = new THREE.Vector3();
+  /** fog-light candidates, reused frame to frame */
+  private flc: { l: Built['lights'][number]; p: THREE.Vector3; score: number }[] = [];
+  private sp = new THREE.Vector3(); private st = new THREE.Vector3(); private toP = new THREE.Vector3();
   updateFogLights() {
-    const f = this.post.fog, cam = this.camera.position, m = this.mood;
-    const cand = this.built.lights.map((l) => {
-      const p = l.offset ? l.obj.localToWorld(l.offset.clone()) : l.obj.getWorldPosition(this.fl.clone());
-      return { l, p, score: (l.priority ?? 2) * 6 + p.distanceTo(cam) };
-    }).sort((a, b) => a.score - b.score).slice(0, MAX_LIGHTS);
+    const f = this.post.fog, cam = this.camera.position, m = this.mood, ls = this.built.lights, cand = this.flc;
+    while (cand.length < ls.length) cand.push({ l: ls[cand.length], p: new THREE.Vector3(), score: 0 });
+    cand.length = ls.length;
+    ls.forEach((l, i) => {
+      const c = cand[i];
+      c.l = l;
+      if (l.offset) l.obj.localToWorld(c.p.copy(l.offset)); else l.obj.getWorldPosition(c.p);
+      c.score = (l.priority ?? 2) * 6 + c.p.distanceTo(cam);
+    });
+    cand.sort((a, b) => a.score - b.score);
+    const n = Math.min(MAX_LIGHTS, cand.length);
     const lp = f.u<THREE.Vector4[]>('lPos'), lc = f.u<THREE.Color[]>('lCol');
-    cand.forEach((c, i) => {
+    for (let i = 0; i < n; i++) {
+      const c = cand[i];
       lp[i].set(c.p.x, c.p.y, c.p.z, c.l.radius);
       const lamp = c.l.point ? m.lamps : 1;
       lc[i].copy(c.l.color).multiplyScalar(c.l.base * (c.l.k ?? 1) * lamp * 2.0);
-    });
-    f.set('nLights', cand.length);
+    }
+    f.set('nLights', n);
     // drone searchlight beam
     const dr = this.built.activeDrone ? this.built.activeDrone() : this.built.drone;
     if (!dr) { f.set('spotLen', 0); return; }
     const s = dr.spot;
-    const sp = s.getWorldPosition(new THREE.Vector3()), st = s.target.getWorldPosition(new THREE.Vector3());
+    const sp = s.getWorldPosition(this.sp), st = s.target.getWorldPosition(this.st);
     f.u<THREE.Vector3>('spotPos').copy(sp);
     f.u<THREE.Vector3>('spotDir').copy(st.sub(sp).normalize());
     f.set('spotTan', Math.tan(s.angle));
@@ -820,10 +867,11 @@ class App {
     const dr = this.built.activeDrone ? this.built.activeDrone() : this.built.drone;
     if (!dr) { this.scan = 0; this.ui?.setScan(0); return; }
     const s = dr.spot;
-    const sp = s.getWorldPosition(new THREE.Vector3()), st = s.target.getWorldPosition(new THREE.Vector3());
+    const sp = s.getWorldPosition(this.sp), st = s.target.getWorldPosition(this.st);
     const dir = st.sub(sp).normalize();
-    const toP = this.pos.clone().add(new THREE.Vector3(0, 0.9, 0)).sub(sp);
-    const inBeam = toP.clone().normalize().dot(dir) > Math.cos(s.angle * 0.8) && toP.length() < 16 && state.cam !== 'cinematic';
+    const toP = this.toP.copy(this.pos).setY(this.pos.y + 0.9).sub(sp);
+    const len = toP.length();
+    const inBeam = toP.dot(dir) > Math.cos(s.angle * 0.8) * len && len < 16 && state.cam !== 'cinematic';
     this.scan += ((inBeam ? 1 : 0) - this.scan) * Math.min(1, dt * (inBeam ? 6 : 2));
     this.ui?.setScan(this.scan);
   }
@@ -835,17 +883,17 @@ const ROOM_CENTER = new THREE.Vector3(0, 0, 0);
 function el(tag: string, cls: string, html = '') { const e = document.createElement(tag); e.className = cls; e.innerHTML = html; return e; }
 
 /**
- * ?debug=stats: what a frame costs, summed over every pass (scene, shadows, normals, reflections,
- * post), and a console warning whenever a new shader program shows up after warm-up, since that
- * means some material or light change forced a recompile mid-game.
+ * ?debug=stats: what a frame costs, pass by pass (perf.ts: GPU ms where the browser can time it,
+ * draws and triangles), the CPU sections, and a console warning whenever a new shader program shows
+ * up after warm-up, since that means some material or light change forced a recompile mid-game.
  */
 class StatsOverlay {
   el = el('div', 'stats');
   private programs = 0;
   private born = performance.now();
   private shown = 0;
-  begin(gl: THREE.WebGLRenderer) { gl.info.reset(); }
-  end(gl: THREE.WebGLRenderer, fps: number) {
+  private size = new THREE.Vector2();
+  show(gl: THREE.WebGLRenderer, fps: number) {
     const i = gl.info, n = i.programs?.length ?? 0, now = performance.now();
     if (n > this.programs) {
       if (this.programs > 0 && now - this.born > 5000) console.warn(`[stats] shader programs ${this.programs} -> ${n} after warm-up`);
@@ -853,7 +901,13 @@ class StatsOverlay {
     }
     if (now - this.shown < 250) return;
     this.shown = now;
-    this.el.textContent = `${fps.toFixed(0)} fps · ${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`;
+    const cpu = [...perf.cpu.m].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ');
+    const px = gl.getDrawingBufferSize(this.size);
+    this.el.textContent = [
+      `${fps.toFixed(0)} fps · ${state.quality === 'high' ? 'High' : 'Low'} ${px.x}x${px.y}${drs.scale < 1 ? ` (dynamic ${Math.round(drs.scale * 100)}%)` : ''} · ${perf.timed ? (perf.mode === 'sync' && perf.sampleMs ? `GPU ${perf.gpuTotal.toFixed(1)} ms when stalled (1 frame/s) · ` : `GPU ${perf.gpuTotal.toFixed(1)} ms (${perf.mode}) · `) : ''}${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`,
+      `CPU ms: ${cpu}`,
+      ...perf.table(),
+    ].join('\n');
   }
 }
 
@@ -866,7 +920,7 @@ class UI {
   constructor(private a: App) {
     this.root.innerHTML = `
       <div class="brand"><div class="b1">QUIET MACHINES</div><div class="b2">Prologue · Static</div></div>
-      <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run · <b>Space</b> jump / interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
+      <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run, keep going to sprint) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run (keep going to sprint) · <b>Space</b> jump / interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
     app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl);
     this.sync();
   }

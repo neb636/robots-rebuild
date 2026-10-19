@@ -45,16 +45,50 @@ export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGr
     const fog: FogLight = { obj: anchor, color: WARM.clone(), radius: 0.35, base: 0, flicker: 0, point: light, pointBase: 0, priority: 1 };
     pool.push({ fog, lamp: null, fade: 0, power: 1, light });
   }
+  // the lit sources bucketed in a 32 m grid, so finding the nearest is a look at the cells around the
+  // hero, not a sort of every lamp (rebuilt when sources are added)
+  const CELL = 32, grid = new Map<number, LightSource[]>();
+  let gridOf = -1;
+  const key = (i: number, j: number) => i * 100003 + j;
+  const cand: LightSource[] = [], candD: number[] = [], near: LightSource[] = [], want: LightSource[] = [];
+  const keep = new Set<LightSource>(), held = new Set<LightSource>();
+  /** the `n` lit sources nearest (x, z), nearest first, into `near` */
+  function nearest(x: number, z: number, n: number) {
+    if (gridOf !== lit.length) {
+      grid.clear();
+      for (const l of lit) { const k = key(Math.floor(l.x / CELL), Math.floor(l.z / CELL)); let b = grid.get(k); if (!b) grid.set(k, (b = [])); b.push(l); }
+      gridOf = lit.length;
+    }
+    const gx = Math.floor(x / CELL), gz = Math.floor(z / CELL);
+    cand.length = 0; candD.length = 0;
+    // widen the search until there are enough, then two rings more (a nearer lamp can sit across them)
+    for (let r = 0, extra = -1; r < 64 && extra < 2; r++) {
+      for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== r) continue;
+        const b = grid.get(key(gx + i, gz + j));
+        if (b) for (const l of b) { cand.push(l); candD.push((l.x - x) ** 2 + (l.z - z) ** 2); }
+      }
+      if (cand.length >= n) extra++;
+    }
+    near.length = 0;
+    // partial selection: n passes over a few dozen candidates
+    for (let k = 0; k < n && k < cand.length; k++) {
+      let best = k;
+      for (let i = k + 1; i < cand.length; i++) if (candD[i] < candD[best]) best = i;
+      [cand[k], cand[best]] = [cand[best], cand[k]]; [candD[k], candD[best]] = [candD[best], candD[k]];
+      near.push(cand[k]);
+    }
+  }
   let t0 = 0;
   /** reassign the pool to the lit lamps nearest the hero, fading lights in and out as they move */
   function update(dt: number, t: number, hero: THREE.Vector3, lampScale: number) {
     if ((t0 -= dt) <= 0) {
       t0 = 0.3;
-      const near = lit.map((l) => ({ l, d: (l.x - hero.x) ** 2 + (l.z - hero.z) ** 2 })).sort((a, b) => a.d - b.d).slice(0, nHalo).map((o) => o.l);
-      const keep = new Set(near);
+      nearest(hero.x, hero.z, nHalo);
+      keep.clear(); for (const l of near) keep.add(l);
       // free slots whose lamp fell out of range; fill them with lamps not yet in the pool
-      const held = new Set(pool.map((s) => s.lamp));
-      const want = near.filter((l) => !held.has(l));
+      held.clear(); for (const s of pool) if (s.lamp) held.add(s.lamp);
+      want.length = 0; for (const l of near) if (!held.has(l)) want.push(l);
       for (const s of pool) if (s.lamp && !keep.has(s.lamp)) s.lamp = null;
       // prefer giving the real lights to the nearest lamps
       for (const s of pool) if (!s.lamp && s.fade <= 0.01 && want.length) {
@@ -100,4 +134,49 @@ function ring(acc: ReturnType<ChunkBuilder['at']>, l: Lamp, y0: number, r0: numb
     acc.v(bx + c * r1, l.y + y1, bz + s * r1, c / len, ny / len, s / len);
   }
   for (let i = 0; i < n; i++) { const a = base + i * 2; acc.tri(a, a + 1, a + 3); acc.tri(a, a + 3, a + 2); }
+}
+
+/**
+ * Light LOD for the area's own point lights (landmark lanterns, the station, the trawler's lantern):
+ * they're hidden from the renderer, and `n` stand-in lights take the place of the ones nearest the
+ * camera, copying each one's position (the boat moves), colour, reach and flickering intensity. Every
+ * lit pixel loops over every point light in the scene, so 13 lights that only ever light a few metres
+ * each cost the whole screen; this keeps the count fixed (no recompiles) at a few. A light changing
+ * hands fades out first, then in.
+ */
+export function lightLOD(sources: THREE.PointLight[], n: number, parent: THREE.Object3D, layer: number) {
+  const slots = Array.from({ length: n }, () => {
+    const light = new THREE.PointLight('#000000', 0, 1, 2);
+    light.layers.enable(layer); parent.add(light);
+    return { light, src: null as THREE.PointLight | null, fade: 0 };
+  });
+  for (const s of sources) s.visible = false;
+  const p = new THREE.Vector3(), score = new Map<THREE.PointLight, number>(), near: THREE.PointLight[] = [];
+  let t0 = 0;
+  return function update(dt: number, cam: THREE.Vector3) {
+    if ((t0 -= dt) <= 0) {
+      t0 = 0.3;
+      // nearest by how far the camera is outside each light's reach
+      for (const s of sources) score.set(s, s.getWorldPosition(p).distanceTo(cam) - s.distance);
+      near.length = 0; near.push(...sources);
+      near.sort((a, b) => score.get(a)! - score.get(b)!);
+      near.length = Math.min(n, near.length);
+      for (const s of slots) if (s.src && !near.includes(s.src)) s.src = null;
+      for (const l of near) {
+        if (slots.some((s) => s.src === l)) continue;
+        const free = slots.find((s) => !s.src && s.fade <= 0.02);
+        if (free) free.src = l;
+      }
+    }
+    for (const s of slots) {
+      s.fade += ((s.src ? 1 : 0) - s.fade) * Math.min(1, dt * 4);
+      if (s.src && s.fade < 0.02) s.fade = 0.02; // (a newly assigned slot starts its fade-in)
+      const l = s.light, src = s.src;
+      if (src) {
+        src.getWorldPosition(l.position);
+        l.color.copy(src.color); l.distance = src.distance; l.decay = src.decay;
+        l.intensity = src.intensity * s.fade;
+      } else l.intensity *= Math.max(0, 1 - dt * 4);
+    }
+  };
 }
