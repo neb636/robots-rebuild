@@ -13,7 +13,8 @@ import { ChunkBuilder, type Chunk } from './chunks';
 import { pbrMat } from '../props';
 import { getBarkMat, taperTube, bushCards, leafCards, tuftGeometry, getGrassMat, grassPatch, type Card } from '../foliage';
 import { rng } from '../noise';
-import { weather, type SignalArm } from './signs';
+import type { SignalArm } from './signs';
+import { KITS, pickKit, paintFor, plateMat, platesOf, carFleet } from './cars';
 
 // ground classes (header.ground): what a pit, a bench or a pole stands on, and where cars were left
 const SIDEWALK = new Set([4, 5, 6, 7, 8]);
@@ -213,69 +214,6 @@ function lensMat(color: string) {
   m.customProgramCacheKey = () => 'harbor-lens';
   return m;
 }
-
-const CARS = [
-  { w: 1.84, l: 4.6, h: 0.64, cw: 1.62, cl: 2.3, ch: 0.56, cz: -0.25, y: 0.3 }, // sedan
-  { w: 1.94, l: 4.8, h: 0.86, cw: 1.84, cl: 2.9, ch: 0.7, cz: -0.55, y: 0.36 }, // SUV
-  { w: 1.76, l: 4.1, h: 0.62, cw: 1.62, cl: 2.4, ch: 0.6, cz: -0.45, y: 0.3 }, // hatchback
-];
-/** an abandoned car: the paint is the instance colour; two tyres gone flat on the kerb side */
-function carKit(k: number) {
-  const c = CARS[k], g: THREE.BufferGeometry[] = [];
-  const by = c.y + c.h / 2, cy = c.y + c.h + c.ch / 2 - 0.05, glass = '#0b0d10';
-  g.push(tint(at(new RoundedBoxGeometry(c.w, c.h, c.l, 2, 0.16), 0, by, 0), '#ffffff'));
-  g.push(tint(at(new RoundedBoxGeometry(c.cw, c.ch, c.cl, 2, 0.18), 0, cy, c.cz), '#ffffff'));
-  g.push(tint(at(new THREE.PlaneGeometry(c.cl - 0.32, c.ch - 0.16), c.cw / 2 + 0.006, cy, c.cz, 0, Math.PI / 2), glass));
-  g.push(tint(at(new THREE.PlaneGeometry(c.cl - 0.32, c.ch - 0.16), -c.cw / 2 - 0.006, cy, c.cz, 0, -Math.PI / 2), glass));
-  g.push(tint(at(new THREE.PlaneGeometry(c.cw - 0.22, c.ch - 0.1), 0, cy, c.cz + c.cl / 2 + 0.006, -0.3), glass));
-  g.push(tint(at(new THREE.PlaneGeometry(c.cw - 0.22, c.ch - 0.12), 0, cy, c.cz - c.cl / 2 - 0.006, -0.3, Math.PI), glass));
-  for (const s of [-1, 1]) {
-    g.push(tint(at(new RoundedBoxGeometry(c.w + 0.04, 0.16, 0.14, 1, 0.05), 0, c.y + 0.12, s * (c.l / 2 + 0.02)), '#262626'));
-    for (const x of [-1, 1]) g.push(tint(at(new THREE.PlaneGeometry(0.32, 0.12), x * (c.w / 2 - 0.25), by + 0.1, s * (c.l / 2 + 0.006), 0, s > 0 ? 0 : Math.PI), s > 0 ? '#d8d4c4' : '#6a1410'));
-  }
-  for (const [x, z, flat] of [[1, 1, 1], [-1, 1, 0], [1, -1, 1], [-1, -1, 0]]) {
-    const w = new THREE.CylinderGeometry(0.33, 0.33, 0.24, 10).rotateZ(Math.PI / 2);
-    if (flat) w.scale(1, 0.76, 1);
-    g.push(tint(at(w, x * (c.w / 2 - 0.08), flat ? 0.33 * 0.76 : 0.33, z * (c.l / 2 - 0.85)), '#141414'));
-  }
-  return mergeGeometries(g);
-}
-/** Massachusetts plates, sixteen of them on one canvas: red on white, the state in script across the top */
-function plateTexture() {
-  const W = 256, H = 128, cv = document.createElement('canvas');
-  cv.width = W * 4; cv.height = H * 4;
-  const c = cv.getContext('2d')!, R = rng(1788);
-  const L = 'ABCDEFGHJKLMNPRSTUVWXYZ', D = '0123456789', pick = (s: string) => s[Math.floor(R() * s.length)];
-  for (let i = 0; i < 16; i++) {
-    c.save(); c.translate((i % 4) * W, Math.floor(i / 4) * H);
-    c.fillStyle = '#eceae2'; c.fillRect(0, 0, W, H);
-    c.strokeStyle = '#8e2a2a'; c.lineWidth = 4; c.strokeRect(5, 5, W - 10, H - 10);
-    c.fillStyle = '#a32a2c'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.font = 'italic bold 22px Georgia, "Times New Roman", serif'; c.fillText('Massachusetts', W / 2, 24);
-    const reg = R() < 0.5 ? `${pick(D)}${pick(L)}${pick(L)}${pick(L)} ${pick(D)}${pick(D)}` : `${pick(D)}${pick(D)}${pick(L)}${pick(L)} ${pick(D)}${pick(D)}`;
-    c.save(); c.translate(W / 2, 68); c.scale(0.8, 1); c.font = 'bold 54px "Helvetica Neue", Arial, sans-serif'; c.fillText(reg, 0, 0); c.restore();
-    c.font = 'italic 15px Georgia, "Times New Roman", serif'; c.fillText('The Spirit of America', W / 2, 108);
-    weather(c, W, H, R, 0.55);
-    c.restore();
-  }
-  const t = new THREE.CanvasTexture(cv);
-  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-  return t;
-}
-/** one instanced plate per bumper; `plate` picks the canvas's cell */
-function plateMat() {
-  // (plates are retroreflective: they catch what little light there is)
-  const tex = plateTexture(), m = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.08, roughness: 0.55, metalness: 0.2 });
-  m.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float plate;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvMapUv = (vMapUv + vec2(mod(plate, 4.0), 3.0 - floor(plate / 4.0))) * 0.25;');
-  };
-  m.customProgramCacheKey = () => 'harbor-plate';
-  return m;
-}
-
-const PAINT = ['#4e6a6c', '#6a2c26', '#8a8a86', '#2a3440', '#b8b4a8', '#1c1d20', '#5a5440', '#7a6a48', '#3c4a3a', '#a8a090', '#40465a'];
 
 // -------------------------------------------------------------------------------- weeds
 /** a clump of unmown meadow grass, knee-high and gone to straw at the tips: what two summers did to
@@ -595,32 +533,38 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   counts.signals = poles.length;
 
   // ---- cars: parked along the curbs where they ran out of fuel or road, a few left across the street
-  const carXf: THREE.Matrix4[][] = CARS.map(() => []), carCol: THREE.Color[][] = CARS.map(() => []);
-  const parked: [number, number][] = [];
-  const plates: THREE.Matrix4[] = [], plateIds: number[] = [];
+  const carXf: THREE.Matrix4[][] = KITS.map(() => []), carCol: THREE.Color[][] = KITS.map(() => []);
+  const parked: [number, number][] = [], kinds: number[] = [];
+  const plates: THREE.Matrix4[] = [], plateIds: number[] = [], plateAt = KITS.map((_, k) => platesOf(k));
   const fits = (x: number, z: number, yaw: number, k: number) => {
-    const { l, w } = CARS[k], ux = Math.sin(yaw), uz = Math.cos(yaw), vx = Math.cos(yaw), vz = -Math.sin(yaw);
+    const { l, w } = KITS[k], ux = Math.sin(yaw), uz = Math.cos(yaw), vx = Math.cos(yaw), vz = -Math.sin(yaw);
     for (const [a, b] of [[0, 0], [1, 1], [1, -1], [-1, 1], [-1, -1], [0.5, 0], [-0.5, 0]]) if (!ROAD.has(classAt(x + (ux * a * l) / 2 + (vx * b * w) / 2, z + (uz * a * l) / 2 + (vz * b * w) / 2))) return false;
     if (collide.blocked(x, z, w / 2) || collide.blocked(x + (ux * l) / 3, z + (uz * l) / 3, w / 2) || collide.blocked(x - (ux * l) / 3, z - (uz * l) / 3, w / 2)) return false;
     // not nosed up against a landmark (the market canopies' glass, the aquarium's plaza)
     if (landmark(x, z, w / 2 + 1.2) || landmark(x + (ux * l) / 2, z + (uz * l) / 2, 1.2) || landmark(x - (ux * l) / 2, z - (uz * l) / 2, 1.2)) return false;
-    return !parked.some(([qx, qz]) => (qx - x) ** 2 + (qz - z) ** 2 < 6.2 ** 2);
+    return !parked.some(([qx, qz]) => (qx - x) ** 2 + (qz - z) ** 2 < (l / 2 + 3.8) ** 2);
   };
   const leave = (x: number, z: number, yaw: number, k: number) => {
-    const { l, w } = CARS[k], y = ground(x, z);
+    const { l, w } = KITS[k], y = ground(x, z);
     const m = xform(x, y, z, yaw, 1, -0.045);
     carXf[k].push(m);
-    // a plate front and back, above the bumpers (one's been lost now and then)
+    // a plate front and back, on the bumper and the tail (one's been lost now and then)
     const id = Math.floor(R() * 16);
-    for (const s of [1, -1]) if (R() > 0.06) {
-      plates.push(m.clone().multiply(new THREE.Matrix4().makeRotationY(s > 0 ? 0 : Math.PI).setPosition(0, CARS[k].y + 0.25, s * (CARS[k].l / 2 + 0.008))));
+    plateAt[k].forEach(([py, pz], i) => {
+      if (R() < 0.06) return;
+      plates.push(m.clone().multiply(new THREE.Matrix4().makeRotationY(i ? Math.PI : 0).setPosition(0, py, pz)));
       plateIds.push(id);
-    }
-    carCol[k].push(new THREE.Color(R() < 0.08 ? '#1a1612' : PAINT[Math.floor(R() * PAINT.length)]));
-    parked.push([x, z]);
+    });
+    carCol[k].push(paintFor(k, R));
+    parked.push([x, z]); kinds.push(k);
     const ux = Math.sin(yaw), uz = Math.cos(yaw), vx = Math.cos(yaw), vz = -Math.sin(yaw);
     const c = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => [x + (ux * a * l) / 2 + (vx * b * w) / 2, z + (uz * a * l) / 2 + (vz * b * w) / 2]);
-    for (let i = 0; i < 4; i++) collide.addSeg(c[i][0], c[i][1], c[(i + 1) % 4][0], c[(i + 1) % 4][1], y + 1.45);
+    for (let i = 0; i < 4; i++) collide.addSeg(c[i][0], c[i][1], c[(i + 1) % 4][0], c[(i + 1) % 4][1], y + KITS[k].gh.yT);
+    // weeds come up round the tyres and along the sills
+    for (let t = 0; t < 7; t++) {
+      const a = (R() - 0.5) * l * 1.05, b = (R() < 0.5 ? -1 : 1) * (w / 2 + (R() - 0.3) * 0.25), px = x + ux * a + vx * b, pz = z + uz * a + vz * b, py = ground(px, pz);
+      if (!Number.isNaN(py)) weeds.add(px, py, pz, 0.7 + R() * 0.8, R);
+    }
   };
   const want = quality === 'high' ? 110 : 75;
   for (const line of curbs) for (let i = 0; i < line.length - 1 && parked.length < want; i++) {
@@ -628,9 +572,10 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     if (L < 6) continue;
     const ux = (bx - ax) / L, uz = (bz - az) / L;
     for (let s = 3 + R() * 25; s < L - 3; s += 10 + R() * 50) {
+      const k = pickKit(R);
       // the street is on the curb's right
-      const off = 1.15 + R() * 0.25, x = ax + ux * s + uz * off, z = az + uz * s - ux * off;
-      const k = R() < 0.5 ? 0 : R() < 0.5 ? 1 : 2, yaw = Math.atan2(ux, uz) + (R() < 0.5 ? 0 : Math.PI) + (R() - 0.5) * 0.08;
+      const off = KITS[k].w / 2 + 0.25 + R() * 0.25, x = ax + ux * s + uz * off, z = az + uz * s - ux * off;
+      const yaw = Math.atan2(ux, uz) + (R() < 0.5 ? 0 : Math.PI) + (R() - 0.5) * 0.08;
       if (fits(x, z, yaw, k)) leave(x, z, yaw, k);
     }
   }
@@ -639,19 +584,13 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     const [ax, , az] = line[i], [bx, , bz] = line[i + 1], L = Math.hypot(bx - ax, bz - az);
     if (L < 4) continue;
     const ux = (bx - ax) / L, uz = (bz - az) / L, off = 4 + R() * 3, s = R() * L;
-    const x = ax + ux * s + uz * off, z = az + uz * s - ux * off, yaw = R() * Math.PI * 2, k = Math.floor(R() * 3);
+    const x = ax + ux * s + uz * off, z = az + uz * s - ux * off, yaw = R() * Math.PI * 2, k = pickKit(R);
     // only where there's still a way past on both sides
     if (!ROAD.has(classAt(x + uz * 3.6, z - ux * 3.6)) || !ROAD.has(classAt(x - uz * 3.6, z + ux * 3.6))) continue;
     if (fits(x, z, yaw, k)) { leave(x, z, yaw, k); left++; }
   }
-  const carMat = pbrMat('metal', '#ffffff', { vertexColors: true, metalness: 0.4 });
-  CARS.forEach((_, k) => {
-    const geo = carKit(k), idx = carXf[k].map((_, i) => i);
-    for (const ids of byRegion(idx, (i) => [carXf[k][i].elements[12], carXf[k][i].elements[14]])) {
-      const im = instanced(group, geo, carMat, ids.map((i) => carXf[k][i]), ids.map((i) => carCol[k][i]));
-      if (im) { im.name = 'cars'; regional.push(im); }
-    }
-  });
+  const fleet = carFleet(group, carXf, carCol, byRegion);
+  regional.push(...fleet.far);
   counts.cars = parked.length;
   const pl = instanced(group, new THREE.PlaneGeometry(0.305, 0.152), plateMat(), plates, undefined, false);
   if (pl) { pl.geometry.setAttribute('plate', new THREE.InstancedBufferAttribute(Float32Array.from(plateIds), 1)); pl.name = 'plates'; }
@@ -692,9 +631,10 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   return {
     group, chunks, counts, regional, arms,
     /** where things ended up (for tests and screenshots) */
-    debug: { cars: parked, trees: perKit.flatMap((l) => l.map((m) => [m.elements[12], m.elements[14]])), signals: poles.map((m) => [m.elements[12], m.elements[14]]) },
+    debug: { cars: parked, carKinds: kinds, carTris: fleet.tris, trees: perKit.flatMap((l) => l.map((m) => [m.elements[12], m.elements[14]])), signals: poles.map((m) => [m.elements[12], m.elements[14]]) },
     update(t: number, hero: THREE.Vector3) {
       weeds.update(hero);
+      fleet.update(hero);
       // flashing signals: about once a second each, out of step with their neighbours
       blink.forEach((b, i) => {
         const on = Math.sin(t * Math.PI * 1.05 + b.phase) > 0 ? 1 : 0.03;
