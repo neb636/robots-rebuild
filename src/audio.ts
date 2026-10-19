@@ -831,6 +831,90 @@ class AudioEngine {
     setTimeout(() => { try { g.disconnect(); p.disconnect(); } catch { /* gone */ } }, 6000);
   }
 
+  // ------------------------------------------------ the Current (guide.ts)
+  private humNodes: { g: GainNode; pan: StereoPannerNode; tone: GainNode; hiss: GainNode } | null = null;
+  private humSet = -1;
+  /**
+   * The grid's hum between pulses: a mains buzz under a hiss of static, from the way the route goes
+   * next. `clear` (0..1, facing that way) brings the buzz up out of the static.
+   */
+  currentHum(level: number, pan: number, clear: number) {
+    if (!this.ready) return;
+    const c = this.ctx, now = c.currentTime;
+    if (!this.humNodes) {
+      if (level <= 0) return;
+      const g = c.createGain(); g.gain.value = 0;
+      const p = c.createStereoPanner();
+      const tone = c.createGain(), hiss = c.createGain();
+      // 60 Hz mains and its harmonics, through a soft band
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+      for (const [f, a] of [[60, 0.6], [120, 0.35], [180, 0.15]]) {
+        const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; const og = c.createGain(); og.gain.value = a;
+        o.connect(og).connect(lp); o.start();
+      }
+      lp.connect(tone);
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true; s.start();
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 0.6;
+      s.connect(bp).connect(hiss);
+      tone.connect(g); hiss.connect(g); g.connect(p).connect(this.sfxBus);
+      this.humNodes = { g, pan: p, tone, hiss };
+    }
+    if (now - this.humSet < 1 / 15) return;
+    this.humSet = now;
+    const h = this.humNodes, T = 0.25;
+    h.g.gain.setTargetAtTime(level * 0.05, now, T);
+    h.pan.pan.setTargetAtTime(pan * 0.85, now, T);
+    h.tone.gain.setTargetAtTime(0.25 + clear * 0.75, now, T);
+    h.hiss.gain.setTargetAtTime(0.5 * (1 - clear) + 0.08, now, T);
+  }
+
+  /** the Current's one-offs: a pulse leaving (crackle running off along the street, a relay clunk at
+   *  its end), a lamp arcing as it passes, and the mark reached */
+  current(kind: 'pulse' | 'arc' | 'arrive', pan: number, vol: number) {
+    if (!this.ready) return;
+    const c = this.ctx, t = c.currentTime, out = c.createGain(), p = c.createStereoPanner();
+    p.pan.value = pan * 0.85; out.gain.value = vol; out.connect(p).connect(this.sfxBus);
+    const env = (g: GainNode, peak: number, a: number, dec: number, at = t) => { g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(peak, at + a); g.gain.exponentialRampToValueAtTime(0.0001, at + a + dec); };
+    const noise = (at: number, dur: number) => { const s = c.createBufferSource(); s.buffer = this.noiseBuf; s.start(at, Math.random()); s.stop(at + dur); return s; };
+    if (kind === 'pulse') {
+      // a charge building, then let go: a swell of buzz, and crackle that runs off and thins out
+      const buzz = c.createOscillator(); buzz.type = 'sawtooth'; buzz.frequency.setValueAtTime(55, t); buzz.frequency.exponentialRampToValueAtTime(120, t + 0.35);
+      const blp = c.createBiquadFilter(); blp.type = 'lowpass'; blp.frequency.setValueAtTime(300, t); blp.frequency.exponentialRampToValueAtTime(1600, t + 0.35); blp.frequency.exponentialRampToValueAtTime(200, t + 2.6);
+      const bg = c.createGain(); env(bg, 0.07, 0.3, 2.4); buzz.connect(blp).connect(bg).connect(out); buzz.start(t); buzz.stop(t + 2.8);
+      const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2400; hp.connect(out);
+      const send = c.createGain(); send.gain.value = 0.5; hp.connect(send).connect(this.reverbSend);
+      for (let i = 0; i < 70; i++) {
+        const k = i / 70, at = t + 0.3 + k * 2.6 + Math.random() * 0.05;
+        const g = c.createGain(); g.gain.value = (0.05 + Math.random() ** 2 * 0.3) * (1 - k) ** 1.5; g.connect(hp);
+        noise(at, 0.003 + Math.random() * 0.012).connect(g);
+      }
+      // the relay at the far end, faint
+      const th = c.createOscillator(); th.frequency.setValueAtTime(140, t + 2.9); th.frequency.exponentialRampToValueAtTime(60, t + 3.0);
+      const tg = c.createGain(); env(tg, 0.05, 0.004, 0.12, t + 2.9); th.connect(tg).connect(out); th.start(t + 2.9); th.stop(t + 3.1);
+    } else if (kind === 'arc') {
+      // a lamp arcing: a snap, a buzz that sags, the glass ticking
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3600; bp.Q.value = 0.7;
+      const sg = c.createGain(); env(sg, 0.18, 0.002, 0.08); noise(t, 0.1).connect(bp).connect(sg).connect(out);
+      const b = c.createOscillator(); b.type = 'square'; b.frequency.setValueAtTime(120, t); b.frequency.linearRampToValueAtTime(95, t + 0.6);
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+      const am = c.createGain(); am.gain.value = 0.5; const lfo = c.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 17 + Math.random() * 9;
+      const depth = c.createGain(); depth.gain.value = 0.5; lfo.connect(depth).connect(am.gain);
+      const bg = c.createGain(); env(bg, 0.045, 0.01, 0.6); b.connect(lp).connect(am).connect(bg).connect(out);
+      b.start(t); b.stop(t + 0.7); lfo.start(t); lfo.stop(t + 0.7);
+      for (let i = 0; i < 3; i++) { const at = t + 0.05 + Math.random() * 0.25, o = c.createOscillator(); o.frequency.value = 4200 + Math.random() * 1800; const g = c.createGain(); env(g, 0.01, 0.001, 0.05, at); o.connect(g).connect(out); o.start(at); o.stop(at + 0.08); }
+    } else {
+      // the mark reached: the lamp's last flare, a soft two-note bell, and the grid going quiet
+      for (const [f, a, d, at] of [[523.3, 0.06, 2.4, 0.25], [784, 0.04, 2.0, 0.42], [1568, 0.012, 1.2, 0.42]] as const) {
+        const o = c.createOscillator(); o.frequency.value = f; const g = c.createGain(); env(g, a, 0.01, d, t + at);
+        o.connect(g); g.connect(out); g.connect(this.reverbSend); o.start(t + at); o.stop(t + at + d + 0.1);
+      }
+      const b = c.createOscillator(); b.type = 'sawtooth'; b.frequency.setValueAtTime(120, t); b.frequency.exponentialRampToValueAtTime(30, t + 1.4);
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
+      const bg = c.createGain(); env(bg, 0.05, 0.02, 1.3); b.connect(lp).connect(bg).connect(out); b.start(t); b.stop(t + 1.5);
+    }
+    setTimeout(() => { try { out.disconnect(); p.disconnect(); } catch { /* gone */ } }, 5000);
+  }
+
   // ------------------------------------------------ sfx
   sfx(name: string, vol = 1) {
     if (!this.ready) return;
@@ -858,6 +942,15 @@ class AudioEngine {
       case 'menuOk': case 'menuBack': {
         const f = name === 'menuOk' ? 392 : 294;
         for (const [k, a] of [[1, 0.07], [2.76, 0.02]] as const) { const gg = env(a, 1.4, 0.006); o('sine', f * k, t, 1.4).connect(gg); gg.connect(this.reverbSend); }
+        break;
+      }
+      // a mark on the map: a grease pencil scratching a circle on paper (and rubbed out)
+      case 'menuMark': case 'menuUnmark': {
+        const mark = name === 'menuMark', dur = mark ? 0.32 : 0.22;
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = mark ? 2600 : 1500; bp.Q.value = 0.9;
+        const am = c.createGain(); am.gain.value = 0.5;
+        const lfo = o('sine', mark ? 21 : 34, t, dur); const depth = c.createGain(); depth.gain.value = 0.5; lfo.connect(depth).connect(am.gain);
+        n(dur).connect(bp).connect(am).connect(env(mark ? 0.09 : 0.06, dur, 0.02));
         break;
       }
       case 'menuStart': {

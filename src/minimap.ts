@@ -2,7 +2,9 @@
 // for the big screens only (desktops and tablets; a phone's screen is too small to spare it). It
 // turns with the camera, so what's ahead on screen is up on the map, and a notch on the rim keeps
 // north. Tapping or clicking it opens the full map. Areas with a map (Built.map) get one.
-import type { AreaMap, MapHero } from './map';
+// With a mark on the map, the way there shows as the map's blue pencil, and the mark itself, or a
+// pointer on the rim toward it while it's out of range.
+import type { AreaMap, MapHero, MapMarks } from './map';
 
 /** metres from the hero to the rim */
 const RANGE = 70;
@@ -18,7 +20,7 @@ export class Minimap {
   private size = 0;
   private dpr = 1;
 
-  constructor(host: HTMLElement, private hero: () => MapHero, open: () => void) {
+  constructor(host: HTMLElement, private hero: () => MapHero, open: () => void, private marks: () => MapMarks | null = () => null) {
     this.root.className = 'minimap';
     this.root.setAttribute('aria-label', 'Open the map');
     this.root.appendChild(this.canvas);
@@ -75,7 +77,38 @@ export class Minimap {
       g.fillStyle = l.kind === 'place' ? '#1f3d48' : '#8a3418';
       g.beginPath(); g.moveTo(l.x, l.z - d); g.lineTo(l.x + d, l.z); g.lineTo(l.x, l.z + d); g.lineTo(l.x - d, l.z); g.closePath(); g.fill();
     }
+    // the way to the mark
+    const mk = this.marks(), route = mk?.route();
+    if (route && route.pts.length > 1) {
+      g.beginPath();
+      route.pts.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z)));
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      g.strokeStyle = 'rgba(236, 226, 204, 0.7)'; g.lineWidth = 5 / zoom; g.stroke();
+      g.setLineDash([5 / zoom, 4 / zoom]); g.strokeStyle = '#2b5ea8'; g.lineWidth = 2.6 / zoom; g.stroke(); g.setLineDash([]);
+    }
     g.restore();
+    // the mark: in range, a ringed X; out of it, a pointer on the rim
+    const w = mk?.mark();
+    if (w) {
+      const dx = w.x - h.x, dz = w.z - h.z, dist = Math.hypot(dx, dz);
+      const a = Math.atan2(dz, dx) + turn, rr = Math.min(dist * zoom, r - 12);
+      const mx = r + Math.cos(a) * rr, my = r + Math.sin(a) * rr;
+      g.lineCap = 'round';
+      for (const halo of [true, false]) {
+        g.strokeStyle = halo ? 'rgba(236, 226, 204, 0.85)' : '#2b5ea8'; g.lineWidth = halo ? 4.5 : 2;
+        g.beginPath();
+        if (dist * zoom < r - 12) {
+          g.arc(mx, my, 7, 0, Math.PI * 2);
+          g.moveTo(mx - 3, my - 3); g.lineTo(mx + 3, my + 3); g.moveTo(mx + 3, my - 3); g.lineTo(mx - 3, my + 3);
+        } else {
+          // an arrowhead on the rim, pointing out toward it
+          const c = Math.cos(a), sn = Math.sin(a);
+          g.moveTo(mx + c * 7, my + sn * 7); g.lineTo(mx - c * 3 - sn * 6, my - sn * 3 + c * 6); g.lineTo(mx - c * 3 + sn * 6, my - sn * 3 - c * 6); g.closePath();
+        }
+        g.stroke();
+      }
+      if (dist * zoom >= r - 12) { g.fillStyle = '#2b5ea8'; g.fill(); }
+    }
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     // the view: a soft fan of light straight up, then the hero's arrowhead the way he faces
     const fan = g.createRadialGradient(r, r, 3, r, r, r * 0.62);

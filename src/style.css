@@ -153,6 +153,15 @@ html, body {
 .hudbtns { position: absolute; right: calc(16px + env(safe-area-inset-right)); top: calc(14px + env(safe-area-inset-top)); z-index: 24; display: flex; gap: 10px; transition: opacity 0.3s; }
 .hudbtns.off { opacity: 0; pointer-events: none; }
 .hudbtns.nomap .mapbtn { display: none; }
+/* the Current's button, once the map has a mark (touch screens; G on a keyboard) */
+.hudbtns .guidebtn { display: none; color: #b8d4ff; }
+.hudbtns.marked .guidebtn { display: grid; }
+.hudbtns .guidebtn:active { background: rgba(43, 94, 168, 0.6); }
+/* a passing line at the top: the mark reached */
+.guidenote { position: absolute; left: 50%; top: calc(22px + env(safe-area-inset-top)); z-index: 23; transform: translateX(-50%); padding: 8px 18px; border-radius: 3px; background: rgba(10, 14, 22, 0.6);
+  font: italic 600 18px var(--serif); letter-spacing: 0.06em; color: #e2ecff; text-shadow: 0 0 12px rgba(110, 160, 255, 0.55); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.6s ease; }
+.guidenote.show { opacity: 1; }
+#app.paused .guidenote { opacity: 0; }
 .hudbtns button { width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 1px solid rgba(236, 228, 210, 0.35); background: rgba(8, 10, 14, 0.45); color: #ece4d2; cursor: pointer;
   display: grid; place-items: center; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background 0.15s ease, border-color 0.15s ease; }
 .hudbtns button:hover { background: rgba(8, 10, 14, 0.7); border-color: rgba(236, 228, 210, 0.6); }
@@ -186,6 +195,16 @@ html, body {
 .mapv-legend .lm { width: 9px; height: 9px; background: #93412a; transform: rotate(45deg); }
 .mapv-legend .cordon { height: 0; border-top: 2.5px dashed #962616; width: 18px; }
 .mapv-legend .water { background: #7d9696; border-radius: 2px; }
+.mapv-legend .mark { width: 11px; height: 11px; border: 2px solid #2b5ea8; border-radius: 50%; box-sizing: border-box; }
+.mapv:not(.marks) .mapv-legend .mark, .mapv:not(.marks) .mapv-mark { display: none; }
+/* the mark: what it is and how far, or how to make one */
+.mapv-mark { position: absolute; left: 50%; top: calc(22px + env(safe-area-inset-top)); z-index: 1; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 520px); padding: 7px 10px 7px 16px; border-radius: 3px;
+  background: rgba(226, 212, 184, 0.92); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); font: italic 600 16px var(--serif); color: #2b5ea8; pointer-events: none; }
+.mapv-mark span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapv-mark button { display: none; width: 28px; height: 28px; flex: none; padding: 0; border-radius: 50%; border: 1px solid rgba(43, 94, 168, 0.5); background: rgba(255, 255, 255, 0.35); color: #2b5ea8; font: 600 14px / 1 var(--serif); cursor: pointer; pointer-events: auto; touch-action: manipulation; }
+.mapv-mark.has button { display: block; }
+.mapv-mark:not(.has) { padding-right: 16px; color: #4a3c2e; }
+.mapv.loading .mapv-mark { opacity: 0; }
 .mapv-btns { position: absolute; right: calc(16px + env(safe-area-inset-right)); top: calc(14px + env(safe-area-inset-top)); display: flex; gap: 10px; }
 .mapv-btns button { width: 46px; height: 46px; padding: 0; border-radius: 50%; border: 1px solid rgba(47, 38, 29, 0.5); background: rgba(226, 212, 184, 0.92); color: #2f261d; font: 600 22px / 1 var(--serif); cursor: pointer;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
@@ -194,8 +213,10 @@ html, body {
 .mapv-keys { position: absolute; right: calc(24px + env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom)); display: flex; gap: 14px; padding: 8px 12px; border-radius: 3px; background: rgba(22, 19, 15, 0.7); font: 500 13px var(--serif); color: #e2d8c4; pointer-events: none; }
 .mapv-keys kbd { margin-right: 4px; padding: 1px 5px; border: 1px solid rgba(226, 216, 196, 0.55); border-radius: 2px; font: 500 11px var(--serif); }
 @media (pointer: coarse) { .mapv-keys { display: none; } .mapv-btns button { width: 52px; height: 52px; } }
+@media (max-width: 1000px) { .mapv-mark { top: auto; bottom: calc(66px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); } }
 @media (max-width: 700px) {
   .mapv-legend { right: 16px; font-size: 12px; gap: 4px 12px; }
+  .mapv-mark { bottom: calc(92px + env(safe-area-inset-bottom)); font-size: 15px; }
   .mapv-head { top: calc(76px + env(safe-area-inset-top)); left: 16px; }
   .mapv-compass { top: calc(136px + env(safe-area-inset-top)); right: 16px; }
 }

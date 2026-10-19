@@ -2,7 +2,12 @@
 // marker and the way the camera faces. Opens on the hero, like the maps in Ghost of Yōtei and The
 // Last of Us. M (or the map button, or View on a gamepad) opens it; drag or the left stick pans,
 // pinch, the wheel or the right stick zooms, and C or Y finds the hero again.
+// A tap or click marks a spot (on a landmark's name, that landmark) in blue grease pencil, like the
+// attic's wall map, and the way there is drawn from the hero; Enter or A marks the spot under the
+// crosshair, and X (either) or a tap on the mark rubs it out. The Current (guide.ts) follows it.
 // An area offers one through Built.map (the harbor: harbor/map.ts).
+import type { Waypoint } from './waypoint';
+import { audio } from './audio';
 
 export interface MapLabel {
   text: string;
@@ -19,6 +24,22 @@ export interface AreaMap {
 }
 
 export interface MapHero { x: number; z: number; heading: number; yaw: number }
+
+/** the mark and the way to it (the shell's guide.ts behind it) */
+export interface MapMarks {
+  mark(): Waypoint | null;
+  /** the way there from the hero (null while it's worked out, or if there's none), and metres left */
+  route(): { pts: [number, number][]; left: number } | null;
+  /** the way is being worked out / there is no way there / it's drawn */
+  status(): 'planning' | 'none' | 'ok';
+  /** mark (x, z), named after `label` if it was put on one: null, or why it can't be marked there */
+  place(x: number, z: number, label?: MapLabel): string | null;
+  clear(): void;
+}
+
+/** the grease pencil */
+const PENCIL = '#2b5ea8';
+const fmtDist = (m: number) => (m < 950 ? `${Math.max(10, Math.round(m / 10) * 10)} m` : `${(m / 1000).toFixed(1)} km`);
 
 const KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
@@ -40,6 +61,19 @@ export class MapView {
   private raf = 0;
   private last = 0;
   private pad = new Set<number>();
+  /** the crosshair shows (keys or a gamepad steer the map) */
+  private aim = false;
+  /** a tap waiting to see whether it's half of a double tap (which zooms instead) */
+  private pendingTap = 0;
+  private press: { x: number; y: number; t: number; moved: number } | null = null;
+  /** the landmark diamonds drawn this frame, for taps on them */
+  private drawn: { l: MapLabel; x: number; y: number }[] = [];
+  /** a passing note in the chip (why a spot can't be marked) */
+  private note = '';
+  private noteT = 0;
+  private chip!: HTMLElement;
+  /** the mark and its route (set by the shell; none: the map can't be marked) */
+  marks: MapMarks | null = null;
   private onKey = (e: KeyboardEvent) => this.key(e, true);
   private onKeyUp = (e: KeyboardEvent) => this.held.delete(e.code);
 
@@ -53,16 +87,19 @@ export class MapView {
         <text y="-26" text-anchor="middle">N</text>
       </svg>
       <div class="mapv-legend">
-        <span><i class="you"></i>You</span><span><i class="lm"></i>Landmark</span><span><i class="cordon"></i>The cordon</span><span><i class="water"></i>Open water</span>
+        <span><i class="you"></i>You</span><span><i class="lm"></i>Landmark</span><span><i class="cordon"></i>The cordon</span><span><i class="mark"></i>Your mark</span><span><i class="water"></i>Open water</span>
       </div>
+      <div class="mapv-mark" aria-live="polite"><span></span><button aria-label="Clear the mark">✕</button></div>
       <div class="mapv-btns">
         <button data-a="out" aria-label="Zoom out">−</button><button data-a="in" aria-label="Zoom in">+</button>
         <button data-a="center" aria-label="Find me">◎</button><button data-a="close" aria-label="Close the map">✕</button>
       </div>
       <p class="mapv-wait">Unfolding the map…</p>
-      <div class="mapv-keys"><span><kbd>Drag</kbd> Pan</span><span><kbd>Wheel</kbd> Zoom</span><span><kbd>C</kbd> Find me</span><span><kbd>Esc</kbd> Back</span></div>`;
+      <div class="mapv-keys"><span><kbd>Click</kbd> Mark</span><span><kbd>Drag</kbd> Pan</span><span><kbd>Wheel</kbd> Zoom</span><span><kbd>C</kbd> Find me</span><span><kbd>X</kbd> Clear</span><span><kbd>Esc</kbd> Back</span></div>`;
     this.root.prepend(this.canvas);
     host.appendChild(this.root);
+    this.chip = this.root.querySelector('.mapv-mark')!;
+    this.chip.querySelector('button')!.addEventListener('click', (e) => { e.preventDefault(); this.unmark(); });
     this.root.querySelector('.mapv-btns')!.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('button')?.dataset.a;
       if (!this.map && a !== 'close') return;
@@ -81,6 +118,8 @@ export class MapView {
     this.isOpen = true;
     this.root.classList.add('in', 'loading');
     this.held.clear(); this.pointers.clear();
+    this.aim = false; this.note = '';
+    this.root.classList.toggle('marks', !!this.marks);
     addEventListener('keydown', this.onKey);
     addEventListener('keyup', this.onKeyUp);
     addEventListener('resize', this.onResize);
@@ -114,6 +153,7 @@ export class MapView {
   close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    clearTimeout(this.pendingTap); this.pendingTap = 0;
     cancelAnimationFrame(this.raf);
     removeEventListener('keydown', this.onKey);
     removeEventListener('keyup', this.onKeyUp);
@@ -161,10 +201,12 @@ export class MapView {
     const k = e.code;
     if (!this.map && k !== 'Escape' && k !== 'KeyM') return;
     if (k === 'Escape' || k === 'KeyM' || k === 'Backspace') { e.preventDefault(); if (!e.repeat) this.close(); return; }
-    if (KEYS.includes(k)) { e.preventDefault(); this.held.add(k); return; }
+    if (KEYS.includes(k)) { e.preventDefault(); this.held.add(k); this.aim = true; return; }
     if (k === 'Equal' || k === 'NumpadAdd' || k === 'KeyE') { e.preventDefault(); this.zoomBy(1.5); }
     else if (k === 'Minus' || k === 'NumpadSubtract' || k === 'KeyQ') { e.preventDefault(); this.zoomBy(1 / 1.5); }
-    else if (k === 'KeyC' || k === 'Space' || k === 'Enter') { e.preventDefault(); if (!e.repeat) this.center(); }
+    else if (k === 'KeyC') { e.preventDefault(); if (!e.repeat) this.center(); }
+    else if (k === 'Space' || k === 'Enter' || k === 'NumpadEnter') { e.preventDefault(); if (!e.repeat) this.markCentre(); }
+    else if (k === 'KeyX' || k === 'Delete') { e.preventDefault(); if (!e.repeat) this.unmark(); }
   }
 
   private bindPointer() {
@@ -175,10 +217,12 @@ export class MapView {
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       try { c.setPointerCapture(e.pointerId); } catch { /* gone */ }
       if (this.pointers.size === 2) { const [a, b] = [...this.pointers.values()]; this.pinch = Math.hypot(a.x - b.x, a.y - b.y); }
-      // a double tap (or double click) zooms in on the spot
+      // a double tap (or double click) zooms in on the spot, instead of marking it
       const now = performance.now();
-      if (this.pointers.size === 1 && now - this.lastTap < 300) this.zoomBy(2, e.clientX, e.clientY);
+      if (this.pointers.size === 1 && now - this.lastTap < 300) { this.zoomBy(2, e.clientX, e.clientY); clearTimeout(this.pendingTap); this.pendingTap = 0; }
       this.lastTap = now;
+      this.press = this.pointers.size === 1 ? { x: e.clientX, y: e.clientY, t: now, moved: 0 } : null;
+      this.aim = false;
     });
     c.addEventListener('pointermove', (e) => {
       const p = this.pointers.get(e.pointerId);
@@ -186,6 +230,7 @@ export class MapView {
       e.preventDefault();
       const px = p.x, py = p.y;
       p.x = e.clientX; p.y = e.clientY;
+      if (this.press) this.press.moved = Math.max(this.press.moved, Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y));
       if (this.pointers.size >= 2) {
         // pinch: zoom about the fingers' midpoint, and pan with it
         const [a, b] = [...this.pointers.values()];
@@ -202,9 +247,62 @@ export class MapView {
       this.panBy(e.clientX - px, e.clientY - py);
     });
     const end = (e: PointerEvent) => { this.pointers.delete(e.pointerId); this.pinch = 0; };
-    c.addEventListener('pointerup', end);
-    c.addEventListener('pointercancel', end);
+    c.addEventListener('pointerup', (e) => {
+      const p = this.press;
+      this.press = null;
+      // a tap, not a drag: mark it, once it's clear it isn't the first of a double tap
+      if (p && this.pointers.size === 1 && p.moved < 8 && performance.now() - p.t < 500 && this.map && this.marks && e.button === 0) {
+        const x = e.clientX, y = e.clientY;
+        clearTimeout(this.pendingTap);
+        this.pendingTap = window.setTimeout(() => { this.pendingTap = 0; if (this.isOpen) this.tap(x, y); }, 280);
+      }
+      end(e);
+    });
+    c.addEventListener('pointercancel', (e) => { this.press = null; end(e); });
     c.addEventListener('wheel', (e) => { e.preventDefault(); if (this.map) this.zoomBy(Math.exp(-e.deltaY * 0.0018), e.clientX, e.clientY); }, { passive: false });
+  }
+
+  private toWorld(sx: number, sy: number) { return { x: this.cx + (sx - innerWidth / 2) / this.zoom, z: this.cz + (sy - innerHeight / 2) / this.zoom }; }
+
+  // ---------------------------------------------------------------- marks
+  /** a tap at (sx, sy): on the mark rubs it out; on a landmark's diamond or name marks that; else the spot */
+  private tap(sx: number, sy: number) {
+    const m = this.marks!, w = m.mark();
+    if (w) { const s = this.toScreen(w.x, w.z); if (Math.hypot(s.x - sx, s.y - sy) < 20) { this.unmark(); return; } }
+    let hit: { l: MapLabel; d: number } | null = null;
+    for (const d of this.drawn) {
+      const dd = Math.min(Math.hypot(d.x - sx, d.y - sy), Math.hypot((d.x - sx) * 0.5, d.y + 15 - sy));
+      if (dd < 22 && (!hit || dd < hit.d)) hit = { l: d.l, d: dd };
+    }
+    const p = hit ? { x: hit.l.x, z: hit.l.z } : this.toWorld(sx, sy);
+    const why = m.place(p.x, p.z, hit?.l);
+    if (why) { this.say(why); audio.sfx('menuBack', 0.6); return; }
+    this.note = '';
+    audio.sfx('menuMark');
+  }
+  /** Enter / A: mark what's under the crosshair */
+  markCentre() {
+    if (!this.map || !this.marks) return;
+    this.aim = true;
+    this.tap(innerWidth / 2, innerHeight / 2);
+  }
+  unmark() {
+    if (!this.marks?.mark()) return;
+    this.marks.clear();
+    this.note = '';
+    audio.sfx('menuUnmark');
+  }
+  private say(text: string) { this.note = text; this.noteT = performance.now(); }
+
+  /** the chip at the top: what's marked and how far, or how to mark */
+  private chipText() {
+    const m = this.marks;
+    if (!m) return '';
+    if (this.note && performance.now() - this.noteT < 2600) return this.note;
+    const w = m.mark();
+    if (!w) return this.aim ? 'Enter or A marks the crosshair' : matchMedia('(pointer: coarse)').matches ? 'Tap the map to mark a spot' : 'Click the map to mark a spot';
+    const r = m.route(), st = m.status(), name = w.label ?? 'Your mark';
+    return st === 'planning' ? `${name} · finding the way…` : st === 'none' ? `${name} · no way there from here` : `${name} · ${fmtDist(r?.left ?? 0)}`;
   }
 
   /** set the zoom, keeping the world point under (sx, sy) where it is */
@@ -240,6 +338,9 @@ export class MapView {
       const pressed = (i: number) => down.has(i) && !this.pad.has(i);
       if (pressed(1) || pressed(8) || pressed(9)) { this.pad = down; this.close(); return; }
       if (pressed(3)) this.center();
+      if (pressed(0)) this.markCentre();
+      if (pressed(2)) this.unmark();
+      if (Math.hypot(ax, ay) > 0.18) this.aim = true;
       this.pad = down;
     }
     if (vx || vy) this.panBy(vx * speed, vy * speed);
@@ -265,8 +366,60 @@ export class MapView {
     g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
     g.drawImage(m.base, 0, 0);
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.drawRoute();
     this.drawLabels(W, H);
+    this.drawMark();
     this.drawHero();
+    if (this.aim && this.marks) this.drawAim(W, H);
+    const text = this.chipText(), span = this.chip.firstElementChild as HTMLElement;
+    if (span.textContent !== text) span.textContent = text;
+    this.chip.classList.toggle('has', !!this.marks?.mark());
+  }
+
+  /** the way to the mark: blue grease pencil dashes over a pale halo */
+  private drawRoute() {
+    const r = this.marks?.route();
+    if (!r || r.pts.length < 2) return;
+    const g = this.g;
+    g.beginPath();
+    r.pts.forEach(([x, z], i) => { const s = this.toScreen(x, z); if (i) g.lineTo(s.x, s.y); else g.moveTo(s.x, s.y); });
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    g.strokeStyle = 'rgba(236, 226, 204, 0.75)'; g.lineWidth = 6; g.stroke();
+    g.setLineDash([7, 6]); g.strokeStyle = PENCIL; g.lineWidth = 3; g.stroke(); g.setLineDash([]);
+  }
+
+  /** the mark: a ring scrawled round and a bit over, an X through it */
+  private drawMark() {
+    const w = this.marks?.mark();
+    if (!w) return;
+    const g = this.g, s = this.toScreen(w.x, w.z);
+    g.save(); g.translate(s.x, s.y);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const halo of [true, false]) {
+      g.strokeStyle = halo ? 'rgba(236, 226, 204, 0.85)' : PENCIL; g.lineWidth = halo ? 6 : 2.6;
+      g.beginPath();
+      for (let i = 0; i <= 60; i++) {
+        const a = (i / 48) * Math.PI * 2 - 0.9, r = 13 + Math.sin(i * 0.9) * 0.8 + i * 0.04;
+        if (i) g.lineTo(Math.cos(a) * r, Math.sin(a) * r * 0.92); else g.moveTo(Math.cos(a) * r, Math.sin(a) * r * 0.92);
+      }
+      g.moveTo(-5.5, -5); g.lineTo(5.5, 5.5); g.moveTo(5.5, -5.5); g.lineTo(-5, 5.5);
+      g.stroke();
+    }
+    g.restore();
+    if (w.label) {
+      g.font = "italic 700 15px 'Cormorant Garamond', Georgia, serif"; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.lineWidth = 3.5; g.strokeStyle = 'rgba(236, 226, 204, 0.9)'; g.strokeText(w.label, s.x, s.y - 25);
+      g.fillStyle = PENCIL; g.fillText(w.label, s.x, s.y - 25);
+    }
+  }
+
+  /** the crosshair keys and a gamepad mark with */
+  private drawAim(W: number, H: number) {
+    const g = this.g, x = W / 2, y = H / 2;
+    const cross = () => { g.beginPath(); g.moveTo(x - 14, y); g.lineTo(x - 5, y); g.moveTo(x + 5, y); g.lineTo(x + 14, y); g.moveTo(x, y - 14); g.lineTo(x, y - 5); g.moveTo(x, y + 5); g.lineTo(x, y + 14); g.stroke(); };
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(236, 226, 204, 0.9)'; g.lineWidth = 4; cross();
+    g.strokeStyle = PENCIL; g.lineWidth = 1.8; cross();
   }
 
   private drawLabels(W: number, H: number) {
@@ -278,6 +431,7 @@ export class MapView {
       return true;
     };
     const order = { water: 0, district: 1, place: 2, landmark: 3 };
+    this.drawn.length = 0;
     for (const l of [...this.map!.labels].sort((a, b) => order[a.kind] - order[b.kind])) {
       const s = this.toScreen(l.x, l.z);
       if (s.x < -200 || s.y < -60 || s.x > W + 200 || s.y > H + 60) continue;
@@ -304,6 +458,7 @@ export class MapView {
       g.font = `600 ${l.kind === 'place' ? 14 : 13}px 'Cormorant Garamond', Georgia, serif`;
       const w = g.measureText(l.text).width;
       if (!free(s.x - w / 2 - 4, s.y - 7, s.x + w / 2 + 4, s.y + 24)) continue;
+      this.drawn.push({ l, x: s.x, y: s.y });
       g.fillStyle = l.kind === 'place' ? '#1f3d48' : '#8a3418';
       g.beginPath(); g.moveTo(s.x, s.y - 5); g.lineTo(s.x + 5, s.y); g.lineTo(s.x, s.y + 5); g.lineTo(s.x - 5, s.y); g.closePath(); g.fill();
       g.lineWidth = 3; g.strokeStyle = 'rgba(232, 220, 196, 0.85)'; g.lineJoin = 'round';

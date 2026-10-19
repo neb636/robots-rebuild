@@ -184,6 +184,13 @@ export interface Built {
   dispose?: () => void;
   /** a big area's map for the pause menu (map.ts), painted the first time it's asked for */
   map?: () => AreaMap;
+  /** the walkable area's extent: with a map, the player can mark a spot and the Current (guide.ts)
+   *  routes to it inside this rectangle */
+  bounds?: { x0: number; z0: number; x1: number; z1: number };
+  /** where the street lamps' lanterns hang (dead or alive): the Current flares them as it passes */
+  lampHeads?: { x: number; y: number; z: number }[];
+  /** why a spot on the map can't be marked (past the cordon, out on the water), or null if it can */
+  unmarkable?: (x: number, z: number) => string | null;
 }
 
 // Acorn Lane's camera: cinematic shots ([from, to] camera positions and look targets) and the

@@ -47,6 +47,13 @@ when its agent stops. `node scripts/browser-lock.mjs status` shows who holds it,
 `node scripts/browser-lock.mjs release --force` clears a stuck lock by hand. A lock idle for 10
 minutes, or held for a minute with no browser open, is taken over automatically.
 
+## QA in Partly Sunny
+
+Do visual QA, playtests and screenshots in the **Partly Sunny** mood (`?mood=day`, or key 4): plain
+daylight with a light haze, so the world reads as built instead of hidden in night, rain and fog. Add
+`mood=day` to every test URL, including the PR's **Test this** links, unless the change is about a
+specific mood (its lighting, weather or lamps); then check that mood, and Partly Sunny too.
+
 When splitting a feature across subagents, have implementation subagents finish with
 `npm run typecheck` and leave the browser alone. Then run the `playtester` once over the combined
 work, or once per finished piece; the lock queues them. Close the browser as soon as the

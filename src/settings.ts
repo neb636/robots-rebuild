@@ -6,6 +6,7 @@ import { MOODS } from './scene';
 export type CamMode = 'follow' | 'jrpg' | 'cinematic';
 export type AudioMode = 'web' | 'generated';
 export type Quality = 'high' | 'low';
+export type GuideMode = 'pulse' | 'trail' | 'off';
 export const CAMS: CamMode[] = ['follow', 'jrpg', 'cinematic'];
 export const params = new URLSearchParams(location.search);
 export const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -16,7 +17,7 @@ function loadSettings(): Saved {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
 /** the settings that are saved (the rest are per session) */
-const SAVED = ['mood', 'cam', 'quality', 'audio', 'aa', 'ao', 'dof', 'fog', 'grain', 'scale', 'drs', 'fps', 'look', 'invert', 'hud', 'music', 'sfx', 'voice'] as const;
+const SAVED = ['mood', 'cam', 'quality', 'audio', 'aa', 'ao', 'dof', 'fog', 'grain', 'scale', 'drs', 'fps', 'look', 'invert', 'hud', 'guide', 'music', 'sfx', 'voice'] as const;
 export function saveSettings(): boolean {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(Object.fromEntries(SAVED.map((k) => [k, state[k]]))));
@@ -75,6 +76,9 @@ export const state = {
   music: num(saved.music, VOLUMES, 10),
   sfx: num(saved.sfx, VOLUMES, 10),
   voice: num(saved.voice, VOLUMES, 10),
+  /** the Current (guide.ts): pulses when asked and for a new mark, a trail always on, or nothing in
+   *  the world (the map still shows the mark and the way) */
+  guide: pick<GuideMode>(params.get('guide') ?? saved.guide, ['pulse', 'trail', 'off'], 'pulse'),
   /** the HUD (brand, controls help, action menu); H toggles it */
   hud: params.get('ui') === '0' ? false : bool(saved.hud, true),
   sound: false,

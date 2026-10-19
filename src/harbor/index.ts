@@ -415,6 +415,9 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     },
     dispose() { refl?.dispose(); map?.dispose(); },
     map: () => (paper ??= harborMap(d, all)),
+    bounds: d.h.bounds,
+    lampHeads: lamps.heads,
+    unmarkable: (x, z) => (!inBoundary(x, z) ? 'That’s past the cordon.' : shore.distAt(x, z) > 6 && Number.isNaN(heightAt(x, z)) ? 'That’s open water.' : null),
     // walk(names): the hero walks these spots on autopilot (the bench; ?walk= does the same at load)
     ...({ harbor, __water: waterUniforms, walk: (names: string[]) => (pilot = autopilot(names, spots, heightAt, blocked)) } as object),
   };

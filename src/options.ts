@@ -63,7 +63,7 @@ export function optionPages(ctx: OptionCtx): Record<string, Page> {
     options: {
       head: ctx.inGame ? 'Settings' : 'Options',
       rows: [
-        sub('Game', 'opt-game', 'Mood, camera, look and the HUD.'),
+        sub('Game', 'opt-game', 'Mood, camera, look, the guide and the HUD.'),
         sub('Graphics', 'opt-gfx', 'Detail, effects, resolution and frame rate.'),
         sub('Audio', 'opt-audio', 'Voices and volume.'),
         { ...back, desc: () => (ctx.inGame ? 'Return to the pause menu.' : 'Return to the title.') },
@@ -86,6 +86,12 @@ export function optionPages(ctx: OptionCtx): Record<string, Page> {
         optRow('Look speed', () => ({ 0.6: 'Slow', 1: 'Normal', 1.5: 'Fast' } as Record<number, string>)[state.look], (d) => set('look', cycle(LOOKS, state.look, d)),
           () => isTouch ? 'How far the view turns for a drag of the right thumb.' : 'How fast the view turns with the mouse, keys and right stick.'),
         optRow('Invert look', () => onOff(state.invert), () => set('invert', !state.invert), () => state.invert ? 'Pushing up looks down, like a flight stick.' : 'Pushing up looks up.'),
+        optRow('Guide', () => ({ pulse: 'Pulse', trail: 'Trail', off: 'Off' })[state.guide], (d) => set('guide', cycle(['pulse', 'trail', 'off'] as const, state.guide, d)),
+          () => ({
+            pulse: `When you mark the map, the Current runs along the streets toward it. ${isTouch ? 'The ⚡ button' : 'G'} sends it again.`,
+            trail: 'A faint line of current always shows the way to your mark, and pulses when asked.',
+            off: 'Nothing in the world: the map still shows your mark and the way there.',
+          })[state.guide]),
         optRow('HUD', () => (state.hud ? 'Shown' : 'Hidden'), () => set('hud', !state.hud), () => state.hud ? 'Area name, controls and the action menu.' : 'A clean screen. (H toggles it in game.)'),
         { ...back, desc: () => 'Back to the settings.' },
       ],
@@ -132,12 +138,12 @@ export function controlsPage(back: Row, inGame: boolean): Page {
     rows: [
       ...(isTouch ? [
         infoRow('Move', 'Left thumb'), infoRow('Run', 'Push the stick to the edge'), infoRow('Look', 'Right thumb drag'),
-        infoRow('Zoom', 'Pinch'), infoRow('Pause', 'The ❙❙ button, top right'), infoRow('Map', 'The map button, where there is one'),
+        infoRow('Zoom', 'Pinch'), infoRow('Pause', 'The ❙❙ button, top right'), infoRow('Map', 'The map button, where there is one'), infoRow('Guide', 'The ⚡ button, once the map is marked'),
       ] : [
         infoRow('Move', 'W A S D · Arrows'), infoRow('Run', 'Shift'), infoRow('Look', 'Mouse drag · Q E'), infoRow('Zoom', 'Wheel'),
-        infoRow('Pause', 'Esc'), infoRow('Map', 'M'), infoRow('Mood', '1 2 3 4'), infoRow('Camera', 'C'), infoRow('Hide UI', 'H'),
+        infoRow('Pause', 'Esc'), infoRow('Map', 'M'), infoRow('Guide', 'G'), infoRow('Mood', '1 2 3 4'), infoRow('Camera', 'C'), infoRow('Hide UI', 'H'),
       ]),
-      infoRow('Gamepad', 'Sticks · A interact · Start pause · View map'),
+      infoRow('Gamepad', 'Sticks · A interact · Start pause · View map · D-pad up guide'),
       { ...back, desc: () => (inGame ? 'Return to the pause menu.' : 'Return to the title.') },
     ],
   };

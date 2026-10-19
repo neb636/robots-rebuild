@@ -19,7 +19,10 @@ game in a browser and report facts back. Someone else writes the 3D code and jud
 3. Use URL params to skip what the task doesn't need (see README.md, "Settings" and "Frame rate and browser testing"):
    - `?menu=0&card=0`: straight into the apartment (Day Zero)
    - `?menu=0&card=0&start=street`: straight to Acorn Lane
-   - `?audio=web`, `?mood=curfew|ashfall|pall`, `?cam=follow|jrpg|cinematic`, `?ui=0`
+   - `?menu=0&card=0&start=harbor`: straight to the harbor district
+   - `?mood=day` (Partly Sunny): **use it for every check by default** (AGENTS.md, "QA in Partly
+     Sunny"); only switch to `?mood=curfew|ashfall|pall` when the task is about that mood
+   - `?audio=web`, `?cam=follow|jrpg|cinematic`, `?ui=0`
    - `?debug` exposes `window.__THREE` for inspecting the scene graph
    - Leave quality at the default (High) unless told otherwise, so screenshots match the real game.
 4. Controls: WASD/arrows to move, Shift to run, Space/Enter/F to interact or advance text, Q/E to look,
