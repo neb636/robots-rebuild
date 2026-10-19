@@ -333,6 +333,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     applyMood(m) {
       // rain chops the harbour up; Grey Pall's dead calm stills it
       lampScale = m.lamps;
+      lamps.setOn(m.lamps > 0);
       groundUniforms.uWet.value = m.wet ? 1 : 0;
       waterUniforms.uRain.value = m.rain ? 1 : 0;
       waterUniforms.uAmp.value = m.rain ? 1.3 : m.name === 'Grey Pall' ? 0.45 : 0.85;

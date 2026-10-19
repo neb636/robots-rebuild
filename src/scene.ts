@@ -56,6 +56,8 @@ export interface Mood {
 }
 
 const glowDir: [number, number, number] = [0.2, 0.02, -1];
+/** Partly Sunny's sun, high enough (about 55°) to reach down into the downtown streets */
+const daySun: [number, number, number] = [0.5, 1.45, -0.9];
 export const MOODS: Record<string, Mood> = {
   ashfall: {
     name: 'Ashfall', blurb: 'Dusk two years on. Distant fires under the clouds, ash drifting like snow.',
@@ -83,6 +85,16 @@ export const MOODS: Record<string, Mood> = {
     moon: { color: '#d8d8d0', intensity: 0.9, dir: [0.4, 1.0, 0.45] },
     hemi: { sky: '#a8acb0', ground: '#3a3830', intensity: 0.9 },
     env: 0.8, lamps: 0.55, fill: 0.5, rim: { color: '#d8dcd8', strength: 0.08 }, ash: 0.35, rain: false, wet: false, fogBank: '#9a9c9a',
+  },
+  // plain daylight for seeing the world as built (QA): no ash or rain, a light haze, the lamps off
+  day: {
+    name: 'Partly Sunny', blurb: 'An ordinary afternoon. Sun between white clouds, a light haze, nothing hidden.',
+    sky: { zenith: '#3f7cc8', horizon: '#c4d6e6', glow: '#ffe2b0', glowDir: daySun, glowAmt: 0.35, cloud: '#e4e8ee', cloudLit: '#ffffff', cloudAmt: 0.9, moon: 1, moonDir: daySun, stars: 0 },
+    fog: { color: '#b4c4d4', sun: '#fff0d0', sunDir: daySun, density: 0.006, falloff: 0.05, base: 0, noise: 0.3, halo: 0, skyDist: 140 },
+    grade: { exposure: 1.05, tone: 'neutral', lift: [0.01, 0.01, 0.012], gamma: [1.0, 1.0, 1.0], gain: [1.02, 1.0, 0.98], sat: 1.05, contrast: 1.04, shadowTint: '#5a6a8a', highlightTint: '#fff0d8', split: 0.2, bloom: 0.5, bloomThreshold: 0.95, vignette: 0.2, grain: 0.02 },
+    moon: { color: '#fff2dc', intensity: 4.5, dir: daySun },
+    hemi: { sky: '#dce6f0', ground: '#a8987c', intensity: 1.6 },
+    env: 0.8, lamps: 0, fill: 0.35, rim: { color: '#ffffff', strength: 0.05 }, ash: 0, rain: false, wet: false, fogBank: '#e8eef4',
   },
 };
 

@@ -57,8 +57,9 @@ hero's spot (the apartment starts Day Zero over).
 Indoors, the apartment has its own fixed morning light, so Mood only shows outside; Camera switches between
 a shoulder-height **Follow** camera (the default) and an **Overhead** dollhouse view (C).
 
-- **Mood:** Curfew (night rain, the default), Ashfall (dusk), Grey Pall (dead fog). Each mood is a block of
-  data in `MOODS` (`src/scene.ts`): sky, fog, grade, moonlight, rain, wet ground.
+- **Mood:** Curfew (night rain, the default), Ashfall (dusk), Grey Pall (dead fog), Partly Sunny (plain
+  daylight with a light haze, for seeing the world as built; `?mood=day`). Keys 1–4 switch between them.
+  Each mood is a block of data in `MOODS` (`src/scene.ts`): sky, fog, grade, moonlight, rain, wet ground.
 - **Camera:** Follow (third-person), JRPG (diorama angle), Cinematic (hand-placed shots, `CINE` in
   `src/main.ts`).
 - **Detail:** High, or Low (lighter geometry, 2K textures, smaller shadow maps, 1x pixel ratio), and
