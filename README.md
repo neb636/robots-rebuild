@@ -30,7 +30,7 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 | Action | Keyboard / mouse | Touch (iPad) | Gamepad |
 |---|---|---|---|
 | Move | WASD / arrows | left-thumb stick | left stick |
-| Run | Shift | push the stick to the edge | full stick |
+| Run (keep it up a second outdoors to sprint) | Shift | push the stick to the edge | full stick |
 | Interact / advance text | Space, Enter, F | **!** button, tap the text box | A |
 | Look | mouse drag, Q / E | right-thumb drag | right stick |
 | Zoom | wheel | pinch | |
@@ -38,7 +38,7 @@ npm run build      # static build in dist/ (any static host, or open via `npm ru
 | Camera | C | title Options | |
 | Hide UI | H | | |
 | Pause menu | Esc (or P) | **❙❙** button, top right | Start |
-| Map (harbor) | M | map button, top right | View |
+| Map (harbor) | M, or click the minimap | map button, or tap the minimap | View |
 
 ## Settings
 
@@ -78,6 +78,11 @@ Big areas have a map (`Built.map`: the harbor paints one from its baked data in 
 and `src/map.ts` shows it): the whole district in ink on paper, landmarks and districts named, the
 cordon, and your marker with the way the camera faces. It opens on you; drag or the left stick
 pans, pinch / wheel / right stick zooms, and C or Y finds you again.
+
+On big screens (desktop and iPad; not phones) the same painting shows as a round minimap under the
+top-right buttons (`src/minimap.ts`): about 70 m around you, turned so the camera's view is up, with
+north marked on the rim. It's painted behind the loader, hides with the HUD and in the Cinematic
+camera, and a click or tap opens the full map.
 
 URL params override the saved settings without changing them, for sharing a specific setup:
 `?mood=curfew&cam=jrpg&q=low&audio=web&ui=0&card=0`. `?menu=0` skips the title screen and goes
