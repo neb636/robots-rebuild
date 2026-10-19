@@ -5,6 +5,7 @@
 import type { HarborData } from './data';
 import type { Part } from './buildings';
 import type { AreaMap, MapLabel } from '../map';
+import { ROUTE as FREEDOM_TRAIL } from './freedomtrail';
 
 /** paint for each ground class (data.h.ground order: GROUND in scripts/harbor/lib/ground.mjs) */
 const GROUND: Record<string, string> = {
@@ -89,6 +90,10 @@ export function harborMap(d: HarborData, parts: Part[]): AreaMap {
   g.fillStyle = OCHRE; g.fill(marks, 'evenodd');
   g.strokeStyle = 'rgba(20, 14, 10, 0.7)'; g.lineWidth = 0.5; g.stroke(body); g.stroke(marks);
 
+  // the Freedom Trail, a red line from the cordon at State St to the North End
+  g.strokeStyle = 'rgba(176, 44, 32, 0.9)'; g.lineWidth = 2.2; g.lineCap = 'round'; g.lineJoin = 'round';
+  g.beginPath(); FREEDOM_TRAIL.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.stroke();
+
   // beyond the cordon: a veil, soft at its edge
   const edge = new Path2D();
   d.h.boundary.forEach(([x, z], i) => (i ? edge.lineTo(x, z) : edge.moveTo(x, z))); edge.closePath();
@@ -130,7 +135,7 @@ export function harborMap(d: HarborData, parts: Part[]): AreaMap {
   g.fillStyle = burn; g.fillRect(0, 0, W, H);
   g.globalCompositeOperation = 'source-over';
 
-  return { x0: b.x0, z0: b.z0, x1: b.x1, z1: b.z1, base: cv, labels: [...DISTRICTS, ...landmarkLabels(d), { text: 'State Station', ...d.h.spots.state, kind: 'place' }] };
+  return { x0: b.x0, z0: b.z0, x1: b.x1, z1: b.z1, base: cv, labels: [...DISTRICTS, ...landmarkLabels(d), { text: 'State Station', ...d.h.spots.state, kind: 'place' }, { text: 'Freedom Trail', x: -118, z: -322, kind: 'place' }] };
 }
 
 /** each landmark's name at the middle of its biggest outline */

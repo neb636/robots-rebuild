@@ -21,7 +21,7 @@ import { buildParts, STYLES, ROOFS, TIERS } from './lib/buildings.mjs';
 import { paintGround, curbLines, triangulateGround, crossingDirs, GROUND, CURB_H } from './lib/ground.mjs';
 import { piers, waterCells, seawalls, pileLayout } from './lib/water.mjs';
 import { cordon } from './lib/cordon.mjs';
-import { points } from './lib/points.mjs';
+import { points, streets, shops } from './lib/points.mjs';
 import { previewSvg } from './lib/preview.mjs';
 import * as G from './lib/geom.mjs';
 
@@ -199,6 +199,8 @@ const zoneRings = groundZone.map(G.fromPath);
 const inZone = (x, z) => zoneRings.reduce((c, r) => (G.inRing(x, z, r) ? !c : c), false);
 const furniture = points({ lights, osm, inZone });
 log(`  furniture: ${Object.entries(furniture).map(([k, v]) => `${k} ${v.length}`).join(', ')}`);
+const streetWays = streets({ osm, near: inZone }), shopList = shops({ osm, inZone });
+log(`  ${streetWays.length} named ways (${new Set(streetWays.map((s) => s.name)).size} names), ${shopList.length} shops`);
 
 // ------------------------------------------------------------------ outputs
 log('writing');
@@ -264,6 +266,8 @@ const header = {
   terrain: { x0: detail.x0, z0: detail.z0, cell: TERRAIN_OUT, nx: onx, nz: onz },
   cordon: cord,
   furniture,
+  streets: streetWays,
+  shops: shopList,
   blobs: bw.index,
 };
 const json = JSON.stringify(header);
@@ -282,6 +286,7 @@ const stats = {
   waterArea: water.area,
   cordonGaps: cord.gaps.length, cordonGates: cord.gates.length, cordonGapLength: Math.round(cord.gaps.reduce((s, g) => s + g.length, 0)),
   furniture: Object.fromEntries(Object.entries(furniture).map(([k, v]) => [k, v.length])),
+  streets: streetWays.length, shops: shopList.length,
   bytes: { json: json.length, bin: bin.length, binGz: binGz.length },
 };
 const svg = previewSvg({ bounds: G.pathsBounds(groundZone), water: waterPaths, ground: GROUND, classes: painted.classes, parts: parts.filter((p) => p.tier <= 2), boundary: playRing, cordon: cord, curbs: curbs.map((c) => c.map(([x, , z]) => [x, z])), points: furniture, spots, floats: floats.map((p) => p.outer) });

@@ -19,5 +19,6 @@
   "armenianPark": { "name": "Armenian Heritage Park labyrinth", "osm": ["w832422130"] },
   "ringsFountain": { "name": "Rings Fountain plaza", "osm": ["w860134706"] },
   "unionOysterHouse": { "name": "Union Oyster House", "osm": ["w405520328"] },
-  "columbusTrellis": { "name": "Christopher Columbus Park trellis", "osm": [], "path": "w563978436" }
+  "columbusTrellis": { "name": "Christopher Columbus Park trellis", "osm": [], "path": "w563978436" },
+  "oldNorthChurch": { "name": "Old North Church", "osm": ["w29650592"] }
 }

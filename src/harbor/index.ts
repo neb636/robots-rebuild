@@ -19,6 +19,7 @@ import { buildLamps, lightLOD } from './lights';
 import { buildBoats } from './boats';
 import { buildStation } from './station';
 import { buildStreetscape } from './streetscape';
+import { buildSigns } from './signs';
 import { LAYERS } from './texarray';
 import { groundUniforms } from './groundmat';
 import { facadeUniforms } from './facade';
@@ -126,6 +127,11 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   chunks.push(...street.chunks);
   console.info('harbor streetscape', JSON.stringify(street.counts));
 
+  progress(0.9, 'Putting up the signs…'); await nextFrame();
+  const signs = buildSigns(d, root, collide, walk, { parts: all, arms: street.arms, lamps: lamps.lamps, quality });
+  chunks.push(...signs.chunks);
+  console.info('harbor signs', JSON.stringify(signs.counts));
+
   // name what isn't a chunk or a landmark, so the stats and profiles can tell it apart
   const label = (o: THREE.Object3D, name: string) => o.traverse((m) => { if ((m as THREE.Mesh).isMesh && !m.name) m.name = name; });
   label(sky.mesh, 'sky'); label(lamps.group, 'lampHeads'); for (const f of wf.floats) label(f, 'floats'); for (const b of boats) label(b.group, 'boats');
@@ -134,7 +140,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
 
   // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets)
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
-  const streets = new Set([...groundChunks, ...street.chunks]);
+  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks]);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
   for (const o of [sky.mesh, tower.group, cordon.buoys, cordon.lamps, cordon.eyes, ...cordon.drones, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
 
@@ -322,7 +328,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     spots,
     cine: { shots: cine, pose: spawn },
     // for tests: the play area's outline
-    ...({ __boundary: d.h.boundary, __street: street.debug } as object),
+    ...({ __boundary: d.h.boundary, __street: street.debug, __signs: signs.debug } as object),
     onAttach(ctx) { post = ctx.post; reflect(ctx.hero); ctx.fill.layers.enable(REFLECT_LAYER); station?.setDialogue(ctx.dlg); },
     applyMood(m) {
       // rain chops the harbour up; Grey Pall's dead calm stills it

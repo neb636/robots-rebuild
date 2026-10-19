@@ -97,6 +97,19 @@ Harbor Towers, Rowes Wharf and the southern North End. It's built at load time f
 baked into `src/harbor/data/` by `scripts/harbor/` (see `art/source/boston/README.md` for the
 pipeline and its inputs), with the landmarks modelled by hand in `src/harbor/landmarks/`.
 
+What makes it read as Boston from the sidewalk is in `src/harbor/signs.ts` and
+`src/harbor/freedomtrail.ts`: a green street blade on a post at every crossing of two named streets
+(the big ones hung from the signal arms too), the parking signs strapped to the lamp posts (snow
+emergency arteries, resident permits, street cleaning, tow zones, and now and then *Don't even
+think of parking here*), the HarborWalk's blue markers along the water, the neighbourhood's own
+storefronts on their real buildings (OpenStreetMap's shops, cafés, bars and restaurants; anything
+tagged as a chain brand is left out), Massachusetts plates on the cars, a little graffiti, and the
+Freedom Trail: the red brick line with its bronze medallions and its stop signs, from the cordon at
+State St round Faneuil Hall, through the Blackstone Block and up Hanover St to the Paul Revere House,
+then under the wall toward the Old North Church, whose steeple (two lanterns lit) stands past the
+North End's cordon. The trail is on the map too. Every sign face is drawn once onto one canvas atlas,
+so they cost a couple of draws per 128 m tile.
+
 - `?at=<spot>` starts at a named place: state, faneuil, quincy, longwharf, aquarium, columbus,
   customhouse, harbortowers, rowes, northsquare, blackstone.
 - `?debug=stats` shows what a frame costs (draws and triangles summed over every pass) and warns if
@@ -240,7 +253,8 @@ src/
   noise.ts       value / fbm / cellular noise and small math helpers
   harbor/        the harbor district (?start=harbor): the baked data and its loader, ground, buildings
                  and their facade shader, water and reflections, the waterfront, streetscape, lamps,
-                 the cordon, the station, tools (debug.ts), and landmarks/ (one module per landmark)
+                 signs (street blades, parking signs, storefronts) and the Freedom Trail, the cordon,
+                 the station, tools (debug.ts), and landmarks/ (one module per landmark)
   audio.ts       WebAudio synth, step sequencer, songs, ambience, SFX, talk blips; voice-over and recorded clips
   speech.ts      browser text-to-speech for dialogue (Audio: Web), a voice profile per speaker
   spoken.json    how on-screen text should be read aloud (shared with scripts/voice.mjs)
