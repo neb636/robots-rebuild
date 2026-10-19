@@ -26,7 +26,7 @@ export function frameLoop(frame: (now: number) => void): () => void {
   const tick = (now: number) => {
     if (stopped) return;
     raf = requestAnimationFrame(tick);
-    const idle = automated && fpsParam === null && now - lastInput > IDLE_MS;
+    const idle = automated && fpsParam === null && !params.has('bench') && now - lastInput > IDLE_MS;
     const cap = idle ? IDLE_FPS : CAP;
     if (cap > 0) {
       const interval = 1000 / cap;

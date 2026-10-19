@@ -27,6 +27,7 @@ import { swell, swellSlope } from './water/waves';
 import type { Post } from '../post';
 import { flickerUpdate, type FogLight } from '../props';
 import { audio } from '../audio';
+import { perf } from '../perf';
 
 /** What the harbor offers beyond the shell's Built (for the swim, the boat, tests). */
 export interface HarborHooks {
@@ -277,7 +278,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
 
   // ---------------------------------------------------------------- tools (?debug=map, ?walk=)
   const params = new URLSearchParams(location.search), walkArg = params.get('walk');
-  const pilot = walkArg ? autopilot(walkArg === 'tour' ? Object.keys(spots) : walkArg.split(','), spots, heightAt, blocked) : null;
+  let pilot = walkArg ? autopilot(walkArg === 'tour' ? Object.keys(spots) : walkArg.split(','), spots, heightAt, blocked) : null;
   const map = params.get('debug') === 'map' ? debugMap(d, collide, (i) => (flags[i] & 1) === 1) : null;
   let mapT = 0;
 
@@ -292,7 +293,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     brand: 'Prologue · The Harbor',
     blocked, cameraBlock: collide.cameraBlock, cameraFloor,
     activeDrone: cordon.activeDrone, fogBanks,
-    steer: pilot ? (pos, t) => pilot.steer(pos, t) : undefined,
+    steer: (pos, t) => pilot?.steer(pos, t) ?? null,
     normalHidden: street.normalHidden,
     camera: { near: 0.25, far: 2000 },
     shadow: { lift: 250 },
@@ -330,7 +331,9 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
           if (dx * dx + dz * dz > 110 * 110) for (const m of b.meshes) if (m.visible) { m.visible = false; hidden.push(m); }
         }
       }
+      perf.push('reflection');
       const drew = seen && refl!.render(gl, scene, cam, water.map((c) => c.mesh));
+      perf.pop();
       for (const o of hidden) o.visible = true;
       if (drew) {
         waterUniforms.uReflMat.value.copy(refl.texMatrix);
@@ -340,13 +343,13 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     },
     update(dt, t, cam, player) {
       tNow = t;
-      lamps.update(dt, t, player, lampScale);
-      for (const u of landmarkUpdates) u(dt, t);
+      perf.begin('lamps'); lamps.update(dt, t, player, lampScale); perf.end('lamps');
+      perf.begin('landmarks'); for (const u of landmarkUpdates) u(dt, t); perf.end('landmarks');
       station?.update(t);
-      street.update(t, player);
+      perf.begin('street'); street.update(t, player); perf.end('street');
       flickerUpdate(beacon, t, 91);
       waterUniforms.uTime.value = t;
-      if ((cullT -= dt) <= 0) { cullT = 0.25; cull(cam); }
+      if ((cullT -= dt) <= 0) { cullT = 0.25; perf.begin('cull'); cull(cam); perf.end('cull'); }
       if (map && (mapT -= dt) <= 0) {
         mapT = 0.25;
         map.draw({ hero: player, heading: Math.atan2(cam.position.x - player.x, cam.position.z - player.z) + Math.PI, chunks, lamps: lamps.pool.filter((l) => (l.k ?? 1) > 0.05).map((l) => l.obj.getWorldPosition(new THREE.Vector3())), drones: cordon.drones.map((g) => g.position), route: pilot?.route ?? [] });
@@ -375,13 +378,14 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
         cordon.buoys.setMatrixAt(i, m4); cordon.lamps.setMatrixAt(i, m4);
       });
       cordon.buoys.instanceMatrix.needsUpdate = true; cordon.lamps.instanceMatrix.needsUpdate = true;
-      cordon.update(t, dt, player);
-      soundField(dt, cam, player);
+      perf.begin('cordon'); cordon.update(t, dt, player); perf.end('cordon');
+      perf.begin('sound'); soundField(dt, cam, player); perf.end('sound');
       tower.update(t);
       // the cordon buoys blink together
       (cordon.lamps.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(t * 2.2) > 0.4 ? 7 : 0.6;
     },
     dispose() { refl?.dispose(); map?.dispose(); },
-    ...({ harbor, __water: waterUniforms } as object),
+    // walk(names): the hero walks these spots on autopilot (the bench; ?walk= does the same at load)
+    ...({ harbor, __water: waterUniforms, walk: (names: string[]) => (pilot = autopilot(names, spots, heightAt, blocked)) } as object),
   };
 }

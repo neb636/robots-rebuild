@@ -5,9 +5,10 @@ import * as THREE from 'three';
 import {
   EffectComposer, RenderPass, EffectPass, Effect, EffectAttribute, BloomEffect, VignetteEffect,
   ToneMappingEffect, ToneMappingMode, NoiseEffect, BlendFunction, ChromaticAberrationEffect,
-  DepthOfFieldEffect, SSAOEffect, NormalPass,
+  DepthOfFieldEffect, SSAOEffect, NormalPass, type Pass,
 } from 'postprocessing';
 import { latticeNoise3D } from './noisetex';
+import { perf } from './perf';
 
 export const MAX_LIGHTS = 12;
 
@@ -261,6 +262,8 @@ export class Post {
   /** objects left out of the normal pass (additive light shafts, shadow-only casters) so SSAO ignores them */
   normalHidden: THREE.Object3D[] = [];
   private pong = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+  /** each pass's name in the profiler (perf.ts) */
+  private labels = new Map<object, string>();
 
   constructor(private gl: THREE.WebGLRenderer, scene: THREE.Scene, private camera: THREE.PerspectiveCamera, msaa: number) {
     this.composer = new EffectComposer(gl, { frameBufferType: THREE.HalfFloatType, multisampling: msaa });
@@ -284,15 +287,14 @@ export class Post {
     this.noise.blendMode.opacity.value = 0.08;
     this.chroma = new ChromaticAberrationEffect({ offset: new THREE.Vector2(0.0006, 0.0004), radialModulation: true, modulationOffset: 0.35 });
 
-    this.composer.addPass(this.renderPass);
-    this.composer.addPass(this.normalPass);
     this.aoPass = new EffectPass(camera, this.ssao, this.fog);
-    this.composer.addPass(this.aoPass);
     this.dofPass = new EffectPass(camera, this.dof);
-    this.composer.addPass(this.dofPass);
-    this.composer.addPass(new EffectPass(camera, this.bloom, this.tone, this.grade));
-    this.composer.addPass(new EffectPass(camera, this.chroma));
-    this.composer.addPass(new EffectPass(camera, this.vignette, this.noise));
+    const passes: [Pass, string][] = [
+      [this.renderPass, 'scene'], [this.normalPass, 'normals'], [this.aoPass, 'ao+fog'], [this.dofPass, 'dof'],
+      [new EffectPass(camera, this.bloom, this.tone, this.grade), 'bloom+grade'],
+      [new EffectPass(camera, this.chroma), 'chroma'], [new EffectPass(camera, this.vignette, this.noise), 'vignette'],
+    ];
+    for (const [p, label] of passes) { this.composer.addPass(p); this.labels.set(p, label); }
   }
 
   /** Render a different scene through the same stack (level changes). */
@@ -356,7 +358,9 @@ export class Post {
       if (!pass.enabled) continue;
       const hide = pass === this.normalPass && this.normalHidden.length > 0;
       if (hide) for (const o of this.normalHidden) o.visible = false;
+      perf.push(this.labels.get(pass) ?? pass.name);
       pass.render(gl, input, output, dt, false);
+      perf.pop();
       if (hide) for (const o of this.normalHidden) o.visible = true;
       if (pass.needsSwap) {
         const next = input === scene ? this.pong : input;

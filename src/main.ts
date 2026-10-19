@@ -21,6 +21,8 @@ import { audio } from './audio';
 import { state, saveSettings, params, isTouch, CAMS, CamMode, skipTitleOnce, consumeSkipTitle } from './settings';
 import { TitleScreen } from './title';
 import { frameLoop } from './frameloop';
+import { perf } from './perf';
+import { bench } from './bench';
 
 const app = document.getElementById('app')!;
 const canvas = document.getElementById('gl') as HTMLCanvasElement;
@@ -89,6 +91,7 @@ async function boot() {
   loader.classList.add('done');
   setTimeout(() => loader.remove(), 1200);
   app3.start();
+  if (params.has('bench')) void bench(app3, params.get('bench') ?? '');
   // a gesture on the title already unlocked audio, so the prologue's music can start right away
   if (audio.ready) app3.enableAudio();
   (window as any).app = app3;
@@ -122,6 +125,8 @@ class App {
   /** toward the moon (from the mood); the shadow camera rides up this from the hero */
   moonDir = new THREE.Vector3(0, 1, 0);
   stats: StatsOverlay | null = null;
+  /** ?bench's per-frame sampler (bench.ts) */
+  benchTick: ((interval: number) => void) | null = null;
   keys = new Set<string>();
   stick = { x: 0, y: 0 };
   look = { dx: 0, dy: 0 };
@@ -147,11 +152,13 @@ class App {
   built!: Built;
 
   constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset) {
+    const pm = params.get('perf');
+    perf.init(gl, params.get('debug') === 'stats' || params.has('bench'), params.has('bench') ? 'sync' : pm === 'timer' || pm === 'sync' ? pm : undefined);
     this.player = new Theo(theo, Math.min(8, gl.capabilities.getMaxAnisotropy()));
     this.post = new Post(gl, built.scene, this.camera, state.quality === 'high' ? 4 : 0);
     this.pmrem = new THREE.PMREMGenerator(gl);
     this.dlg.onInteract = () => void this.interact();
-    if (params.get('debug') === 'stats') { this.stats = new StatsOverlay(); app.appendChild(this.stats.el); gl.info.autoReset = false; }
+    if (params.get('debug') === 'stats') { this.stats = new StatsOverlay(); app.appendChild(this.stats.el); }
     this.applyQuality();
     this.attach(built);
     this.bindInput();
@@ -249,7 +256,8 @@ class App {
     frameLoop((now) => {
       const real = (now - last) / 1000; last = now;
       this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
-      this.frame(Math.min(0.05, real));
+      this.frame(Math.min(0.05, real), real * 1000);
+      this.benchTick?.(real * 1000);
     });
     if (params.get('card') !== '0') this.ui?.titleCard();
     if (this.prologue) {
@@ -606,7 +614,9 @@ class App {
     return !isNaN(h) && Math.abs(h - fromY) < 0.45 && !this.blocked(x, z);
   }
 
-  frame(dt: number) {
+  /** one frame; `interval` is the real time since the last one (ms, 0 for the warm-up frames) */
+  frame(dt: number, interval = 0) {
+    perf.beginFrame();
     this.t += dt;
     wind.value += dt;
     let mv0 = this.readMove();
@@ -663,8 +673,8 @@ class App {
     }
 
     this.updateCamera(dt, speed);
-    this.built.update(dt, this.t, this.camera, this.pos);
-    this.updateFogLights();
+    perf.begin('update'); this.built.update(dt, this.t, this.camera, this.pos); perf.end('update');
+    perf.begin('fogLights'); this.updateFogLights(); perf.end('fogLights');
     this.updateScan(dt);
     this.built.sky.update(this.t, this.camera.position);
     this.ash.update(this.t, this.camera.position);
@@ -677,10 +687,10 @@ class App {
     this.prologue?.update(dt);
     this.dlg.tick(dt);
     this.updateFocus();
-    this.stats?.begin(this.gl);
-    this.built.beforeRender?.(this.gl, this.camera);
-    this.post.render(dt);
-    this.stats?.end(this.gl, this.fps);
+    perf.begin('beforeRender'); this.built.beforeRender?.(this.gl, this.camera); perf.end('beforeRender');
+    perf.begin('post'); this.post.render(dt); perf.end('post');
+    this.stats?.show(this.gl, this.fps);
+    perf.endFrame(interval);
   }
 
   updateCamera(dt: number, speed: number) {
@@ -835,17 +845,16 @@ const ROOM_CENTER = new THREE.Vector3(0, 0, 0);
 function el(tag: string, cls: string, html = '') { const e = document.createElement(tag); e.className = cls; e.innerHTML = html; return e; }
 
 /**
- * ?debug=stats: what a frame costs, summed over every pass (scene, shadows, normals, reflections,
- * post), and a console warning whenever a new shader program shows up after warm-up, since that
- * means some material or light change forced a recompile mid-game.
+ * ?debug=stats: what a frame costs, pass by pass (perf.ts: GPU ms where the browser can time it,
+ * draws and triangles), the CPU sections, and a console warning whenever a new shader program shows
+ * up after warm-up, since that means some material or light change forced a recompile mid-game.
  */
 class StatsOverlay {
   el = el('div', 'stats');
   private programs = 0;
   private born = performance.now();
   private shown = 0;
-  begin(gl: THREE.WebGLRenderer) { gl.info.reset(); }
-  end(gl: THREE.WebGLRenderer, fps: number) {
+  show(gl: THREE.WebGLRenderer, fps: number) {
     const i = gl.info, n = i.programs?.length ?? 0, now = performance.now();
     if (n > this.programs) {
       if (this.programs > 0 && now - this.born > 5000) console.warn(`[stats] shader programs ${this.programs} -> ${n} after warm-up`);
@@ -853,7 +862,12 @@ class StatsOverlay {
     }
     if (now - this.shown < 250) return;
     this.shown = now;
-    this.el.textContent = `${fps.toFixed(0)} fps · ${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`;
+    const cpu = [...perf.cpu.m].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ');
+    this.el.textContent = [
+      `${fps.toFixed(0)} fps · ${perf.timed ? `GPU ${perf.gpuTotal.toFixed(1)} ms (${perf.mode}) · ` : ''}${i.render.calls} draws · ${(i.render.triangles / 1e6).toFixed(2)} M tris · ${n} programs · ${i.memory.geometries} geometries · ${i.memory.textures} textures`,
+      `CPU ms: ${cpu}`,
+      ...perf.table(),
+    ].join('\n');
   }
 }
 
