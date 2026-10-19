@@ -22,6 +22,7 @@ import { state, saveSettings, params, isTouch, CAMS, CamMode, skipTitleOnce, con
 import { applyVolumes } from './options';
 import { PauseMenu } from './pause';
 import { MapView } from './map';
+import { Minimap } from './minimap';
 import { setPaused, sleep } from './clock';
 import { pauseSpeech } from './speech';
 import { TitleScreen } from './title';
@@ -85,6 +86,8 @@ async function boot() {
     : outdoors ? buildScene(state.quality) : buildApartment(state.quality);
   setLoad(0.85, 'Waking Theo…');
   const theo = await loadTheo(state.quality);
+  // the minimap's painting, behind the loader rather than as a hitch in the first seconds of play
+  if (built.map && Minimap.wanted) { setLoad(0.88, 'Inking the map…'); await nextFrame(); built.map(); }
   setLoad(0.9, outdoors ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
   const app3 = new App(gl, built, theo, area, resume);
   if (params.has('debug')) { (window as any).__app = app3; (window as any).__perf = perf; }
@@ -474,15 +477,15 @@ class App {
   resetCamera() {
     if (this.interior) {
       (this.built as Apartment).setFollow?.(this.indoorFollow);
-      if (this.indoorFollow) { this.yaw = this.heading + Math.PI; this.pitch = 0.3; this.dist = 3.2; this.camera.fov = 50; }
-      else { this.yaw = 0; this.pitch = 0.68; this.dist = 6.2; this.camera.fov = 42; }
+      if (this.indoorFollow) { this.yaw = this.heading + Math.PI; this.pitch = 0.3; this.dist = 3.2; this.camera.fov = this.fov0 = 50; }
+      else { this.yaw = 0; this.pitch = 0.68; this.dist = 6.2; this.camera.fov = this.fov0 = 42; }
       this.camera.updateProjectionMatrix();
       this.placeCamera(1, true);
       return;
     }
     // follow: start behind the hero (Acorn Lane's hero faces north, so that's yaw 0 there)
     this.yaw = state.cam === 'jrpg' ? Math.PI / 2 : this.heading + Math.PI; this.pitch = state.cam === 'jrpg' ? 0.6 : 0.24; this.dist = state.cam === 'jrpg' ? 14 : 5.0;
-    this.camera.fov = state.cam === 'jrpg' ? 30 : 40; this.camera.updateProjectionMatrix();
+    this.camera.fov = this.fov0 = state.cam === 'jrpg' ? 30 : 40; this.camera.updateProjectionMatrix();
     this.placeCamera(1, true);
   }
 
@@ -634,6 +637,7 @@ class App {
     if (k.has('KeyD') || k.has('ArrowRight')) v.x += 1;
     v.x += this.stick.x; v.y -= this.stick.y;
     let padA = false, padUp = false, padDown = false;
+    this.padRun = false;
     for (const p of navigator.getGamepads?.() ?? []) {
       if (!p) continue;
       padA ||= !!p.buttons[0]?.pressed;
@@ -641,7 +645,7 @@ class App {
       padDown ||= !!p.buttons[13]?.pressed;
       if (p.buttons.some((b) => b.pressed) || p.axes.some((x) => Math.abs(x) > 0.18)) this.player.poke();
       const ax = p.axes[0] ?? 0, ay = p.axes[1] ?? 0;
-      if (Math.hypot(ax, ay) > 0.18) { v.x += ax; v.y -= ay; }
+      if (Math.hypot(ax, ay) > 0.18) { v.x += ax; v.y -= ay; this.padRun ||= Math.hypot(ax, ay) > 0.95; }
       const cx = p.axes[2] ?? 0, cy = p.axes[3] ?? 0;
       if (Math.abs(cx) > 0.15) { this.look.dx += cx * 14; this.lastLook = this.t; }
       if (Math.abs(cy) > 0.15) this.look.dy += cy * 10;
@@ -727,8 +731,15 @@ class App {
   // ---------------------------------------------------------------- simulation
   /** height of the hero above the ground, and its vertical speed */
   jumpY = 0; jumpV = 0;
-  /** seconds spent running without a break: outdoors, a run builds into a sprint */
-  runT = 0;
+  /** seconds spent running: outdoors, a run builds into a sprint. A let-go shorter than SPRINT_GAP
+   *  (changing keys, a wobble of the thumb) doesn't count as a break */
+  runT = 0; runGap = 0;
+  /** the sprint, eased (0..1): the camera widens with it */
+  sprintK = 0;
+  /** the camera's field of view before the sprint widens it */
+  fov0 = 40;
+  /** the gamepad's move stick is pushed all the way (runs, like the touch stick) */
+  padRun = false;
   jump() {
     if (this.frozen || this.jumpY > 0 || this.jumpV !== 0 || (state.cam === 'cinematic' && !this.interior)) return;
     this.jumpV = 3.9;
@@ -754,17 +765,19 @@ class App {
     // an area's autopilot steers in world space (at a run): turn it into stick input in the camera's frame
     const auto = mv0.lengthSq() < 0.001 ? this.built.steer?.(this.pos, this.t) : null;
     if (auto) mv0 = new THREE.Vector2(auto.x * Math.cos(this.yaw) - auto.z * Math.sin(this.yaw), -auto.x * Math.sin(this.yaw) - auto.z * Math.cos(this.yaw));
-    const run = !!auto || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || Math.hypot(this.stick.x, this.stick.y) > 0.95;
+    const run = !!auto || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || Math.hypot(this.stick.x, this.stick.y) > 0.95 || this.padRun;
     const mv = (state.cam === 'cinematic' && !this.interior) || this.frozen ? new THREE.Vector2() : mv0;
     const heightAt = this.built.heightAt;
-    let speed = 0;
-    if (mv.lengthSq() > 0.001) {
+    let speed = 0, sprint = 0;
+    const moving = mv.lengthSq() > 0.001;
+    // a run kept up for a second builds into a sprint, for crossing the big areas (not indoors, nor
+    // on the autopilot, so the bench's walk keeps its pace)
+    if (moving && run && !auto && !this.interior) { this.runT += dt; this.runGap = 0; }
+    else if ((this.runGap += dt) > SPRINT_GAP) this.runT = 0;
+    if (moving) {
       const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
       const dx = fx * mv.y + rx * mv.x, dz = fz * mv.y + rz * mv.x;
-      // a run held for a second and a half builds into a sprint, for crossing the big areas (not
-      // indoors, nor on the autopilot, so the bench's walk keeps its pace)
-      this.runT = run && !auto && !this.interior ? this.runT + dt : 0;
-      const sprint = THREE.MathUtils.smoothstep(this.runT, 1.5, 2.5);
+      if (run) sprint = THREE.MathUtils.smoothstep(this.runT, 0.9, 1.5);
       const sp = (run ? 4.6 + 2.9 * sprint : 2.3) * Math.min(1, mv.length());
       const h0 = heightAt(this.pos.x, this.pos.z, this.pos.y);
       const cur = isNaN(h0) ? this.pos.y : h0;
@@ -774,13 +787,16 @@ class App {
       const h1 = heightAt(this.pos.x, this.pos.z, cur);
       if (this.canStand(this.pos.x, nz, isNaN(h1) ? cur : h1)) this.pos.z = nz;
       speed = Math.hypot(this.pos.x - ox, this.pos.z - oz) / dt;
-      // held up against a wall the sprint winds down fast (a curb's single-frame bump barely touches it)
-      if (speed < sp * 0.5) this.runT = Math.max(0, this.runT - dt * 6);
+      // held up against a wall the sprint winds down (a curb's or a bollard's glancing bump barely touches it)
+      if (speed < sp * 0.35) this.runT = Math.max(0, this.runT - dt * 4);
       const target = Math.atan2(dx, dz);
       let d = target - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
       this.heading += d * Math.min(1, dt * 10);
     }
-    else this.runT = 0;
+    // the camera widens a little as the sprint comes on, so it reads as a change of pace
+    this.sprintK += (sprint - this.sprintK) * Math.min(1, dt * 3);
+    const fov = this.fov0 + 7 * this.sprintK;
+    if (Math.abs(this.camera.fov - fov) > 0.01) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     if (this.auto) speed = this.autoWalk(dt);
     if (this.turnTo !== null) {
       let d = this.turnTo - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -825,6 +841,7 @@ class App {
     this.prologue?.update(dt);
     this.dlg.tick(dt);
     this.updateFocus();
+    if (state.hud) this.ui?.minimap.draw();
     // an area that freezes its static world (the harbor) updates matrices here, once, instead of the
     // renderer doing the whole scene at every render call (reflection, scene, normals)
     const sc = this.built.scene;
@@ -993,6 +1010,8 @@ class App {
 }
 
 const ROOM_CENTER = new THREE.Vector3(0, 0, 0);
+/** seconds the run can be let go (changing keys, a wobble of the thumb) without losing the sprint */
+const SPRINT_GAP = 0.3;
 
 // ------------------------------------------------------------------------------ UI
 function el(tag: string, cls: string, html = '') { const e = document.createElement(tag); e.className = cls; e.innerHTML = html; return e; }
@@ -1036,6 +1055,7 @@ class UI {
   btns = el('div', 'hudbtns', `
     <button class="mapbtn" aria-label="Map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z M9 4v13.5 M15 6.5V20"/></svg></button>
     <button class="pausebtn" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14 M16 5v14"/></svg></button>`);
+  minimap: Minimap;
   constructor(private a: App) {
     this.root.innerHTML = `
       <div class="brand"><div class="b1">QUIET MACHINES</div><div class="b2">Prologue · Static</div></div>
@@ -1044,6 +1064,7 @@ class UI {
     const tap = (sel: string, f: () => void) => this.btns.querySelector(sel)!.addEventListener('click', (e) => { e.preventDefault(); a.enableAudio(); f(); });
     tap('.pausebtn', () => a.openPause());
     tap('.mapbtn', () => a.openMap(true));
+    this.minimap = new Minimap(this.root, () => ({ x: a.pos.x, z: a.pos.z, heading: a.heading, yaw: a.yaw }), () => { a.enableAudio(); a.openMap(true); });
     this.sync();
   }
   sync() {
@@ -1054,6 +1075,9 @@ class UI {
     this.btns.classList.toggle('nomap', !this.a.built.map);
     this.root.querySelector('.b2')!.textContent = this.a.built.brand ?? (this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static');
     this.bars.classList.toggle('on', state.cam === 'cinematic' && !this.a.interior);
+    // the cinematic camera's shots have no hero to follow
+    this.minimap.attach(this.a.built.map);
+    this.minimap.root.classList.toggle('off', state.cam === 'cinematic' && !this.a.interior);
   }
   setScan(k: number) { this.scanEl.style.opacity = String(k > 0.05 ? Math.min(1, k * 1.4) * (0.75 + 0.25 * Math.sin(performance.now() / 90)) : 0); this.scanVig.style.opacity = String(k * 0.9); }
   cineFade(k: number) { this.cine.style.opacity = String(k); }
