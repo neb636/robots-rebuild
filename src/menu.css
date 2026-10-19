@@ -51,6 +51,8 @@
 .ts-item.info .ts-val { color: var(--ink-mid); text-transform: none; letter-spacing: 0.06em; font-size: max(16px, calc(var(--t) * 1.75)); }
 .ts-label { min-width: 0; text-align: left; white-space: nowrap; }
 .ts-item.opt .ts-label, .ts-item.info .ts-label { width: calc(var(--t) * 14); }
+/* (the settings' long names: Ambient occlusion, Dynamic resolution) */
+.ts[data-page^='opt-'] .ts-item.opt .ts-label { width: calc(var(--t) * 19); }
 .ts-val { display: inline-flex; align-items: center; gap: calc(var(--u) * 1.2); letter-spacing: 0.12em; }
 .ts-val em { font-style: normal; min-width: calc(var(--t) * 11); text-align: center; }
 .ts-val b { font-weight: 400; opacity: 0.45; padding: 0 calc(var(--u) * 0.6); transition: opacity 0.2s; }
@@ -77,6 +79,41 @@
 .ts-keys span { display: inline-flex; align-items: center; gap: 2px; }
 .ts-keys kbd { display: inline-block; margin-right: 2px; padding: 1px 5px; border: 1px solid rgba(220, 216, 208, 0.55); border-radius: 2px; font: 400 max(11px, calc(var(--t) * 0.95)) / 1.2 var(--body-font); color: #dedad2; }
 
+/* a setting that waits on a reload */
+.ts-tag { font: 600 max(10px, calc(var(--t) * 0.85)) / 1 var(--body-font); letter-spacing: 0.2em; text-transform: uppercase; color: #e08a52; border: 1px solid rgba(224, 138, 82, 0.55); padding: 3px 6px 2px; border-radius: 2px; margin-left: calc(var(--u) * -1); }
+.ts-tag:empty { display: none; }
+
+/* long pages (the graphics settings): the brand steps aside and the list rises into its space, rows
+   shrinking to fit what's left above the description */
+.ts-list { --avail: 54vh; }
+.ts.long .ts-brand { opacity: 0 !important; transition: opacity 0.25s ease !important; }
+.ts.long .ts-list { top: max(11%, calc(var(--u) * 9)); --avail: calc(78vh - max(11vh, calc(var(--u) * 9))); }
+.ts .ts-item { height: min(calc(var(--t) * 5.2), calc(var(--avail) / var(--n, 6))); }
+.ts .ts-item.info { height: min(calc(var(--t) * 4.2), calc(var(--avail) / var(--n, 6))); }
+
+/* ---------------------------------------------------------------- the pause menu
+   The title menu's list over the frozen game: a heavier shade, quick entrances, the area for a brand
+   and the objective on the right. */
+.ts.pause { opacity: 0; visibility: hidden; transition: opacity 0.22s ease, visibility 0s linear 0.22s; z-index: 45; }
+.ts.pause.in { opacity: 1; visibility: visible; transition: opacity 0.22s ease; }
+.ts.pause.mapping { opacity: 0; pointer-events: none; }
+.ts.pause.mapping .ts-list { pointer-events: none; }
+.ts.pause .ts-shade { background:
+  linear-gradient(90deg, rgba(4, 5, 7, 0.82) 0%, rgba(4, 5, 7, 0.55) 34%, rgba(4, 5, 7, 0.2) 70%),
+  linear-gradient(0deg, rgba(4, 5, 7, 0.55) 0%, rgba(4, 5, 7, 0) 30%); }
+.ts.pause .ts-black { opacity: 0; transition: opacity 0.85s ease; pointer-events: none; }
+.ts.pause.leaving .ts-black { opacity: 1; }
+.ts.pause .ts-brand, .ts.pause .ts-foot, .ts.pause .ts-keys { transition-delay: 0s; transition-duration: 0.3s; }
+.ts.pause .ts-item { transform: translateX(-6px); }
+.ts.pause.in .ts-item { transition-delay: 0s, calc(0.04s + var(--i) * 0.025s), calc(0.04s + var(--i) * 0.025s); transition-duration: 0.25s, 0.3s, 0.35s; }
+.ts.pause.in .ts-brush { transition: top 0.18s cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.3s ease 0.1s; }
+.ts.pause .ts-brand h1 { font-size: calc(var(--t) * 2.6); }
+.pz-obj { position: absolute; right: calc(var(--u) * 7 + env(safe-area-inset-right)); top: calc(var(--u) * 7 + env(safe-area-inset-top)); max-width: 36vw; text-align: right;
+  font: 500 max(14px, calc(var(--t) * 1.45)) / 1.35 var(--body-font); color: #e8e3d8; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); opacity: 0; transition: opacity 0.3s ease 0.1s; }
+.ts.pause.in .pz-obj { opacity: 1; }
+.pz-obj small { display: block; margin-bottom: 4px; font: 600 max(10px, calc(var(--t) * 0.9)) / 1 var(--body-font); letter-spacing: 0.4em; text-transform: uppercase; color: #d7854f; }
+.pz-obj span { color: #d7854f; margin-right: 4px; }
+
 /* tall screens (phones and portrait tablets): the hand stands in the middle, the menu sits below it */
 @media (max-aspect-ratio: 9 / 10) {
   .ts { --u: min(1vh, 2.3vw); --t: calc(min(1vh, 2.3vw) * 1.2); --brush-w: calc(var(--t) * 34); }
@@ -89,4 +126,11 @@
   .ts-desc { max-width: 86vw; width: auto; }
   .ts-item.opt .ts-label, .ts-item.info .ts-label { width: calc(var(--t) * 11); }
   .ts-keys { display: none; }
+  .ts-list { --avail: 52vh; }
+  .ts.long .ts-list { top: auto; --avail: 66vh; }
+  .ts[data-page^='opt-'] .ts-item.opt .ts-label { width: calc(var(--t) * 14.5); }
+  .ts-val em { min-width: calc(var(--t) * 8); }
+  .ts.pause .ts-shade { background: linear-gradient(0deg, rgba(4, 5, 7, 0.85) 0%, rgba(4, 5, 7, 0.6) 50%, rgba(4, 5, 7, 0.35) 100%); }
+  .pz-obj { left: 7vw; right: auto; top: calc(7% + var(--u) * 9); max-width: 86vw; text-align: left; }
+  .ts.long .pz-obj { opacity: 0 !important; }
 }

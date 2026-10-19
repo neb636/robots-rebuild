@@ -18,7 +18,12 @@ import { Prologue } from './prologue';
 import { wind } from './foliage';
 import { ash, embers, rain, fogBanks } from './fx';
 import { audio } from './audio';
-import { state, saveSettings, params, isTouch, CAMS, CamMode, skipTitleOnce, consumeSkipTitle } from './settings';
+import { state, saveSettings, params, isTouch, CAMS, CamMode, skipTitleOnce, consumeSkipTitle, consumeResume, lockBuildSettings, basePixelRatio, Resume } from './settings';
+import { applyVolumes } from './options';
+import { PauseMenu } from './pause';
+import { MapView } from './map';
+import { setPaused, sleep } from './clock';
+import { pauseSpeech } from './speech';
 import { TitleScreen } from './title';
 import { frameLoop } from './frameloop';
 import { perf } from './perf';
@@ -36,10 +41,11 @@ const setLoad = (p: number, msg: string) => { (loader.querySelector('.bar i') as
 async function boot() {
   // Best effort autoplay: browsers may keep Web Audio suspended until a gesture.
   // The menu and game input handlers call init() again to resume in that case.
+  applyVolumes();
   try { audio.init(); audio.ambience('wind'); } catch { /* audio is optional */ }
   await document.fonts.ready.catch(() => {});
   const gl = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
-  gl.setPixelRatio(Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1));
+  gl.setPixelRatio(basePixelRatio());
   gl.setSize(innerWidth, innerHeight, false);
   gl.shadowMap.enabled = true;
   gl.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -47,18 +53,23 @@ async function boot() {
   gl.toneMapping = THREE.NoToneMapping;
   setAnisotropy(Math.min(8, gl.capabilities.getMaxAnisotropy()));
 
-  // Title screen first (skipped with ?menu=0, and when a quality change reloads straight into the game).
-  // The street is built only after New Game, so the title's slow weather never stutters under loading.
-  const skipTitle = params.get('menu') === '0' || consumeSkipTitle();
+  // Title screen first (skipped with ?menu=0, and when a settings reload goes straight back into the
+  // game, to the area and spot it left). The street is built only after New Game, so the title's slow
+  // weather never stutters under loading.
+  const reloaded = consumeSkipTitle();
+  const resume = reloaded ? consumeResume() : null;
+  const skipTitle = params.get('menu') === '0' || reloaded;
   if (!skipTitle) await new TitleScreen(gl, app).run();
   app.appendChild(loader);
   if (!skipTitle) loader.classList.add('quick');
-  // the player may have changed quality in the title's options
-  gl.setPixelRatio(Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1));
+  // the player may have changed graphics in the title's options; from here on, the ones the build
+  // depends on wait on a reload
+  lockBuildSettings();
+  gl.setPixelRatio(basePixelRatio());
 
   // the game opens on Day Zero in the apartment; ?start=street jumps to Acorn Lane, two years later,
   // and ?start=harbor to the harbor district (its own area for now, loaded on demand)
-  const start = params.get('start');
+  const start = resume?.area ?? params.get('start');
   const area = start === 'street' ? 'street' : start === 'harbor' ? 'harbor' : 'apartment';
   const outdoors = area !== 'apartment';
   const harbor = area === 'harbor' ? await import('./harbor') : null;
@@ -75,7 +86,7 @@ async function boot() {
   setLoad(0.85, 'Waking Theo…');
   const theo = await loadTheo(state.quality);
   setLoad(0.9, outdoors ? 'Waking the machines…' : 'Hitting snooze…'); await nextFrame();
-  const app3 = new App(gl, built, theo);
+  const app3 = new App(gl, built, theo, area, resume);
   if (params.has('debug')) { (window as any).__app = app3; (window as any).__perf = perf; }
   setLoad(1, ''); await nextFrame();
   // compile shaders up front so the first frames don't hitch
@@ -152,19 +163,42 @@ class App {
   focus: Interactable | null = null;
   padA = false; padUp = false; padDown = false;
   built!: Built;
+  /** the pause menu is up (the frame loop stops; game time and scripted waits stop with it) */
+  paused = false;
+  pauseMenu: PauseMenu;
+  mapView: MapView;
+  private padPrev = new Set<number>();
 
-  constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset) {
+  constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset, public area: string, private resume: Resume | null) {
+    this.resumedFrom = !!resume;
     const pm = params.get('perf');
     perf.init(gl, params.get('debug') === 'stats' || params.has('bench'), params.has('bench') ? 'sync' : pm === 'timer' || pm === 'sync' ? pm : undefined);
     this.player = new Theo(theo, Math.min(8, gl.capabilities.getMaxAnisotropy()));
-    this.post = new Post(gl, built.scene, this.camera, state.quality);
+    this.post = new Post(gl, built.scene, this.camera);
     this.pmrem = new THREE.PMREMGenerator(gl);
     this.dlg.onInteract = () => void this.interact();
     if (params.get('debug') === 'stats') { this.stats = new StatsOverlay(); app.appendChild(this.stats.el); }
-    this.applyQuality();
+    this.post.applySettings();
     this.attach(built);
+    // (before the pause menu and the map: its keydown must run first, see bindInput)
     this.bindInput();
     this.ui = new UI(this);
+    this.pauseMenu = new PauseMenu(app, {
+      area: () => this.built.card,
+      objective: () => this.dlg.objectiveText,
+      hasMap: () => !!this.built.map,
+      openMap: () => this.openMap(false),
+      resume: () => this.pause(false),
+      toTitle: () => this.toTitle(),
+      reload: () => this.reloadHere(),
+      reloadNote: () => (this.interior ? 'Day Zero starts over from the beginning.' : 'You pick up right where you are standing.'),
+      changed: (k) => this.applySetting(k),
+      cams: () => (this.interior ? ['follow', 'jrpg'] : CAMS.filter((c) => c !== 'cinematic' || this.built.cine)),
+      setCam: (c) => this.setCam(c),
+      setMood: (m) => this.setMood(m),
+      interior: () => this.interior,
+    });
+    this.mapView = new MapView(app, () => ({ x: this.pos.x, z: this.pos.z, heading: this.heading, yaw: this.yaw }), () => this.built.card);
     this.ui.sync();
     addEventListener('resize', () => this.resize());
     this.resize();
@@ -196,8 +230,9 @@ class App {
     this.embers = built.emberOrigin ? embers(built.emberOrigin, 90) : null;
     if (this.embers) s.add(this.embers.obj);
     this.post.setScene(s);
-    // ?at=name starts at one of the area's named spots
-    const sp = built.spots?.[params.get('at') ?? ''] ?? built.spawn;
+    // ?at=name starts at one of the area's named spots; a settings reload, where the hero stood
+    const r = this.resume; this.resume = null;
+    const sp = r?.x !== undefined && r.z !== undefined ? { x: r.x, z: r.z, heading: r.heading ?? 0 } : built.spots?.[params.get('at') ?? ''] ?? built.spawn;
     const sy = built.heightAt(sp.x, sp.z);
     this.pos.set(sp.x, isNaN(sy) ? 0 : sy, sp.z); this.heading = sp.heading;
     this.player.group.position.copy(this.pos);
@@ -233,6 +268,7 @@ class App {
     await nextFrame();
     const next = buildScene(state.quality);
     await nextFrame();
+    this.area = 'street';
     const old = this.built;
     this.player.group.removeFromParent();
     this.focus = null; this.dlg.setPrompt(null); this.dlg.objective(null); this.actions.set(null);
@@ -244,24 +280,26 @@ class App {
     if (state.sound) { audio.ambience(next.ambience); audio.playMusic(next.music, 4); }
     // open on the cinematic shots (not saved: the player's own camera setting comes back after)
     this.setCam('cinematic', false);
-    setTimeout(() => this.ui?.titleCard(), 2400);
+    void sleep(2400).then(() => this.ui?.titleCard());
   }
 
   /** Acorn Lane's opening: 30 s of the cinematic shots, then a quick fade into the follow camera. */
   async streetIntro() {
-    const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
     this.cutscene = true;
-    await wait(30000);
+    await sleep(30000);
     await this.dlg.fade(1, 700);
     this.setCam('follow', false);
     this.cutscene = false;
-    await wait(200);
+    await sleep(200);
     await this.dlg.fade(0, 1000);
   }
 
   start() {
     let last = performance.now();
     frameLoop((now) => {
+      this.pollPause();
+      // paused: nothing moves and nothing is drawn (the last frame stays up behind the menu)
+      if (this.paused) { if (!this.mapView.isOpen) this.pauseMenu.update(); last = now; return; }
       const real = (now - last) / 1000; last = now;
       // (not counting the interval after a frame the profiler serialized: ?debug=stats)
       const skewed = perf.serialized;
@@ -271,7 +309,9 @@ class App {
       if (!skewed && !perf.serialized) this.drs.tick(real * 1000, performance.now() - t0, now);
       this.benchTick?.(real * 1000);
     });
-    if (params.get('card') !== '0') this.ui?.titleCard();
+    // (a settings reload comes back without the card)
+    const reloaded = this.resumed;
+    if (params.get('card') !== '0' && !reloaded) this.ui?.titleCard();
     if (this.prologue) {
       if (params.get('card') === '0') { void this.dlg.fade(0, 10).then(() => { this.dlg.objective('Start your day. Look around.'); }); return; }
       this.dlg.fade(1, 0);
@@ -279,8 +319,8 @@ class App {
     }
   }
 
-  /** the quality's pixel ratio, times the dynamic-resolution scale */
-  pixelRatio() { return Math.min(devicePixelRatio, state.quality === 'high' ? 1.5 : 1) * drs.scale; }
+  /** the Detail's pixel ratio and the render scale, times the dynamic-resolution scale */
+  pixelRatio() { return basePixelRatio() * drs.scale; }
 
   resize() {
     const w = innerWidth, h = innerHeight;
@@ -288,6 +328,92 @@ class App {
     this.gl.setSize(w, h, false);
     this.post.setSize(w, h);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    // resizing clears the canvas: put the frozen frame back behind the pause menu
+    if (this.paused) this.redraw();
+  }
+
+  /** draw the current frame again without moving anything (a setting changed under the pause menu) */
+  redraw() {
+    const sc = this.built.scene;
+    if (!sc.matrixWorldAutoUpdate) sc.updateMatrixWorld();
+    this.built.beforeRender?.(this.gl, this.camera);
+    this.post.render(0);
+  }
+
+  // ---------------------------------------------------------------- pause, map
+  /** came back from a settings reload */
+  get resumed() { return this.resumedFrom; }
+  private resumedFrom = false;
+
+  pause(on: boolean) {
+    if (on === this.paused) return;
+    this.paused = on;
+    setPaused(on);
+    audio.pause(on);
+    pauseSpeech(on);
+    app.classList.toggle('paused', on);
+    // nothing carries through the menu: no held keys, stick or look, and buttons held through it
+    // don't count as fresh presses after
+    this.keys.clear(); this.stick.x = this.stick.y = 0; this.look.dx = this.look.dy = 0;
+    if (!on) { this.padA = this.padUp = this.padDown = true; return; }
+    // paint the map behind the menu, so it opens at once
+    if (this.built.map) setTimeout(() => { if (this.paused) this.built.map?.(); }, 600);
+  }
+
+  openPause() {
+    if (this.paused) return;
+    this.pause(true);
+    this.pauseMenu.open();
+  }
+
+  /** the area's map; `direct` (M, the map button, View) comes back to the game, otherwise to the menu */
+  openMap(direct: boolean) {
+    const get = this.built.map;
+    if (!get || this.mapView.isOpen) return;
+    if (direct) { if (this.paused) return; this.pause(true); } else this.pauseMenu.mapping(true);
+    this.mapView.show(get, () => { if (direct) this.pause(false); else this.pauseMenu.mapping(false); });
+  }
+
+  /** gamepad: Start pauses (and resumes), View opens the map */
+  private pollPause() {
+    const p = [...(navigator.getGamepads?.() ?? [])].find(Boolean);
+    const down = new Set(p ? p.buttons.map((b, i) => (b.pressed ? i : -1)).filter((i) => i >= 0) : []);
+    const pressed = (i: number) => down.has(i) && !this.padPrev.has(i);
+    if (!this.mapView.isOpen) {
+      if (pressed(9)) { if (this.paused) this.pauseMenu.close(); else this.openPause(); }
+      else if (pressed(8) && !this.paused) this.openMap(true);
+    }
+    this.padPrev = down;
+  }
+
+  /** a setting changed in the pause menu: apply what applies live */
+  applySetting(k: keyof typeof state) {
+    if (k === 'dof' || k === 'fog' || k === 'grain') { this.post.applySettings(); if (this.paused) this.redraw(); }
+    if (k === 'scale') this.resize();
+    if (k === 'drs' && !state.drs) this.drs.reset();
+    if (k === 'hud') this.ui?.sync();
+  }
+
+  /** reload into this area at this spot, for the settings that are fixed when an area is built */
+  reloadHere() {
+    // drop setting params from the URL so they don't override what was just saved
+    const p = new URLSearchParams(location.search);
+    for (const k of ['q', 'mood', 'cam', 'at', 'walk', 'bench']) p.delete(k);
+    if (!saveSettings()) { p.set('q', state.quality); p.set('mood', state.mood); p.set('cam', state.cam); }
+    const pose = this.savedPose ?? { pos: this.pos, heading: this.heading };
+    skipTitleOnce(this.interior ? { area: this.area } : { area: this.area, x: pose.pos.x, z: pose.pos.z, heading: pose.heading });
+    const qs = p.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    location.reload();
+  }
+
+  /** back to the title screen: the same page without the params that skip it */
+  toTitle() {
+    const p = new URLSearchParams(location.search);
+    for (const k of ['menu', 'card', 'at', 'walk', 'bench']) p.delete(k);
+    const qs = p.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    location.reload();
   }
 
   // ---------------------------------------------------------------- settings
@@ -329,14 +455,8 @@ class App {
     b.applyMood?.(m);
   }
 
-  applyQuality() {
-    const q = state.quality;
-    this.post.setQuality(q);
-    this.resize?.();
-  }
-
   setMood(k: keyof typeof MOODS) { state.mood = k; if (!this.interior) this.applyMood(); this.ui?.sync(); saveSettings(); }
-  private savedPose: { pos: THREE.Vector3; heading: number } | null = null;
+  savedPose: { pos: THREE.Vector3; heading: number } | null = null;
   setCam(c: CamMode, persist = true) {
     if (this.interior) { state.cam = c === 'cinematic' ? 'follow' : c; this.resetCamera(); this.ui?.sync(); if (persist) saveSettings(); return; }
     if (c === 'cinematic' && !this.built.cine) c = 'follow';
@@ -349,19 +469,6 @@ class App {
       this.pos.copy(this.savedPose.pos); this.heading = this.savedPose.heading; this.savedPose = null;
     }
     state.cam = c; this.cinT = 0; this.resetCamera(); this.ui?.sync(); if (persist) saveSettings();
-  }
-  setQuality(q: 'high' | 'low') {
-    if (q === state.quality) return;
-    // MSAA and shadow-map sizes are fixed at construction: save, then reload into the new setting.
-    // Drop setting params from the URL so they don't override what was just saved.
-    state.quality = q;
-    const p = new URLSearchParams(location.search);
-    for (const k of ['q', 'mood', 'cam']) p.delete(k);
-    if (!saveSettings()) { p.set('q', q); p.set('mood', state.mood); p.set('cam', state.cam); }
-    skipTitleOnce();
-    const qs = p.toString();
-    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
-    location.reload();
   }
 
   resetCamera() {
@@ -381,9 +488,14 @@ class App {
 
   // ---------------------------------------------------------------- input
   bindInput() {
+    // This listener is registered before the pause menu's and the map's. Paused, it does nothing and
+    // they take the key; otherwise, the key that opens one stops here, so it doesn't also reach it.
     addEventListener('keydown', (e) => {
-      this.player.poke();
       this.enableAudio();
+      if (this.paused) return;
+      if (e.code === 'Escape' || e.code === 'KeyP') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.openPause(); return; }
+      if (e.code === 'KeyM' && this.built.map) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.openMap(true); return; }
+      this.player.poke();
       // while the action menu is up, Up / Down / Enter drive it (W / S still walk)
       if (!this.dlg.open && ['ArrowUp', 'ArrowDown', 'Enter', 'NumpadEnter'].includes(e.code) && this.actions.open) {
         e.preventDefault();
@@ -402,10 +514,12 @@ class App {
         const cams = CAMS.filter((c) => c !== 'cinematic' || this.built.cine);
         this.setCam(this.interior ? (state.cam === 'jrpg' ? 'follow' : 'jrpg') : cams[(cams.indexOf(state.cam) + 1) % cams.length]);
       }
-      if (e.code === 'KeyH') { state.ui = !state.ui; this.ui?.sync(); }
+      if (e.code === 'KeyH') { state.hud = !state.hud; this.ui?.sync(); saveSettings(); }
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
+    // switching away (another app on iPad, another tab) pauses
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.openPause(); });
     canvas.addEventListener('wheel', (e) => { this.zoom(e.deltaY * 0.004); this.player.poke(); e.preventDefault(); }, { passive: false });
     this.bindTouch();
   }
@@ -722,12 +836,13 @@ class App {
   }
 
   updateCamera(dt: number, speed: number) {
-    const L = this.look; L.dx *= 1; L.dy *= 1;
+    // look speed and inverted look (Settings → Game)
+    const L = this.look, ls = state.look; L.dx *= ls; L.dy *= ls * (state.invert ? -1 : 1);
     if (this.indoorFollow) {
       this.yaw -= L.dx * 0.005;
       this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.004, 0.05, 0.75);
-      if (this.keys.has('KeyQ')) { this.yaw += dt * 1.6; this.lastLook = this.t; }
-      if (this.keys.has('KeyE')) { this.yaw -= dt * 1.6; this.lastLook = this.t; }
+      if (this.keys.has('KeyQ')) { this.yaw += dt * 1.6 * ls; this.lastLook = this.t; }
+      if (this.keys.has('KeyE')) { this.yaw -= dt * 1.6 * ls; this.lastLook = this.t; }
       // swing back behind the hero while walking, a little quicker than outdoors (rooms are small)
       if (speed > 0.5 && this.t - this.lastLook > 1.5) {
         let d = this.heading + Math.PI - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -735,13 +850,13 @@ class App {
       }
     } else if (this.interior) {
       // overhead camera: orbit a little around the room, never behind the back wall
-      this.yaw = THREE.MathUtils.clamp(this.yaw - L.dx * 0.004 + (this.keys.has('KeyQ') ? dt * 1.2 : 0) - (this.keys.has('KeyE') ? dt * 1.2 : 0), -0.85, 0.85);
+      this.yaw = THREE.MathUtils.clamp(this.yaw - L.dx * 0.004 + (this.keys.has('KeyQ') ? dt * 1.2 * ls : 0) - (this.keys.has('KeyE') ? dt * 1.2 * ls : 0), -0.85, 0.85);
       this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.003, 0.45, 1.0);
     } else if (state.cam !== 'cinematic') {
       this.yaw -= L.dx * 0.005;
       this.pitch = THREE.MathUtils.clamp(this.pitch + L.dy * 0.004, state.cam === 'jrpg' ? 0.45 : -0.05, state.cam === 'jrpg' ? 1.1 : 0.75);
-      if (this.keys.has('KeyQ')) { this.yaw += dt * 1.6; this.lastLook = this.t; }
-      if (this.keys.has('KeyE')) { this.yaw -= dt * 1.6; this.lastLook = this.t; }
+      if (this.keys.has('KeyQ')) { this.yaw += dt * 1.6 * ls; this.lastLook = this.t; }
+      if (this.keys.has('KeyE')) { this.yaw -= dt * 1.6 * ls; this.lastLook = this.t; }
       // drift back behind the hero while walking, unless the player is steering the camera
       if (state.cam === 'follow' && speed > 0.5 && this.t - this.lastLook > 1.8) {
         const behind = this.heading + Math.PI;
@@ -917,16 +1032,26 @@ class UI {
   scanVig = el('div', 'scanvig');
   cine = el('div', 'cinefade');
   bars = el('div', 'bars', '<i></i><i></i>');
+  /** pause and map, top right: the way into the menu on a touch screen (Esc and M on a keyboard) */
+  btns = el('div', 'hudbtns', `
+    <button class="mapbtn" aria-label="Map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z M9 4v13.5 M15 6.5V20"/></svg></button>
+    <button class="pausebtn" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14 M16 5v14"/></svg></button>`);
   constructor(private a: App) {
     this.root.innerHTML = `
       <div class="brand"><div class="b1">QUIET MACHINES</div><div class="b2">Prologue · Static</div></div>
       <div class="help">${isTouch ? '<b>Left thumb</b> move (push to the edge to run, keep going to sprint) · <b>right thumb</b> look · <b>pinch</b> zoom · <b>!</b> interact' : '<b>WASD</b> move · <b>Shift</b> run (keep going to sprint) · <b>Space</b> jump / interact · <b>drag</b> / <b>Q E</b> look · <b>wheel</b> zoom'}</div>`;
-    app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl);
+    app.append(this.scanVig, this.cine, this.bars, this.root, this.scanEl, this.btns);
+    const tap = (sel: string, f: () => void) => this.btns.querySelector(sel)!.addEventListener('click', (e) => { e.preventDefault(); a.enableAudio(); f(); });
+    tap('.pausebtn', () => a.openPause());
+    tap('.mapbtn', () => a.openMap(true));
     this.sync();
   }
   sync() {
-    this.root.classList.toggle('hidden', !state.ui);
-    this.a.actions.root.classList.toggle('off', !state.ui);
+    this.root.classList.toggle('hidden', !state.hud);
+    this.a.actions.root.classList.toggle('off', !state.hud);
+    // on a touch screen the pause button is the only way to the menu, so it stays
+    this.btns.classList.toggle('off', !state.hud && !isTouch);
+    this.btns.classList.toggle('nomap', !this.a.built.map);
     this.root.querySelector('.b2')!.textContent = this.a.built.brand ?? (this.a.interior ? 'Prologue · Day Zero' : 'Prologue · Static');
     this.bars.classList.toggle('on', state.cam === 'cinematic' && !this.a.interior);
   }
@@ -936,9 +1061,9 @@ class UI {
     const [t1, t2] = this.a.built.card;
     const c = el('div', 'titlecard', `<div class="t1">${t1}</div><div class="rule"></div><div class="t2">${t2}</div>`);
     app.appendChild(c);
-    setTimeout(() => c.classList.add('show'), 600);
-    setTimeout(() => c.classList.remove('show'), 5200);
-    setTimeout(() => c.remove(), 7000);
+    void sleep(600).then(() => c.classList.add('show'));
+    void sleep(5200).then(() => c.classList.remove('show'));
+    void sleep(7000).then(() => c.remove());
   }
 }
 

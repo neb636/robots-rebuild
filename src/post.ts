@@ -10,6 +10,7 @@ import {
 } from 'postprocessing';
 import { latticeNoise3D } from './noisetex';
 import { perf } from './perf';
+import { state } from './settings';
 
 export const MAX_LIGHTS = 12;
 
@@ -407,14 +408,16 @@ export class Post {
   chroma: ChromaticAberrationEffect;
   private aoPass: EffectPass;
   private dofPass: EffectPass;
-  quality: 'high' | 'low' = 'high';
   private ao: boolean;
+  /** the mood's grain, before Film effects turns it off */
+  private grain = 0.08;
   private pong = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
   /** each pass's name in the profiler (perf.ts) */
   private labels = new Map<object, string>();
 
-  constructor(private gl: THREE.WebGLRenderer, scene: THREE.Scene, private camera: THREE.PerspectiveCamera, quality: 'high' | 'low') {
-    this.composer = new EffectComposer(gl, { frameBufferType: THREE.HalfFloatType, multisampling: quality === 'high' ? 4 : 0 });
+  /** Antialiasing and Ambient occlusion are fixed here (settings.ts); the rest follow applySettings() */
+  constructor(private gl: THREE.WebGLRenderer, scene: THREE.Scene, private camera: THREE.PerspectiveCamera) {
+    this.composer = new EffectComposer(gl, { frameBufferType: THREE.HalfFloatType, multisampling: state.aa ? 4 : 0 });
     // effect passes never need MSAA or depth: give them single-sample buffers (see render())
     this.composer.outputBuffer.dispose();
     this.composer.outputBuffer = this.pong.clone();
@@ -445,9 +448,9 @@ export class Post {
     this.noise.blendMode.opacity.value = 0.08;
     this.chroma = new ChromaticAberrationEffect({ offset: new THREE.Vector2(0.0006, 0.0004), radialModulation: true, modulationOffset: 0.35 });
 
-    // Low has no SSAO: leave it out of the stack rather than skip its blend, since a skipped SSAOEffect
-    // still renders its passes every frame
-    const ao = this.ao = quality === 'high';
+    // without ambient occlusion, leave SSAO out of the stack rather than skip its blend, since a
+    // skipped SSAOEffect still renders its passes every frame
+    const ao = this.ao = state.ao;
     this.aoPass = ao ? new EffectPass(camera, this.ssao, this.fogMix) : new EffectPass(camera, this.fogMix);
     this.dofPass = new EffectPass(camera, this.dof);
     const passes: [Pass, string][] = [
@@ -464,10 +467,12 @@ export class Post {
     this.composer.setMainScene(scene);
   }
 
-  setQuality(q: 'high' | 'low') {
-    this.quality = q;
-    this.dofPass.enabled = q === 'high';
-    this.fog.set('steps', q === 'high' ? 14 : 6);
+  /** the settings that apply live: depth of field, fog steps, film grain and lens fringe */
+  applySettings() {
+    this.dofPass.enabled = state.dof;
+    this.fog.set('steps', state.fog === 'high' ? 14 : 6);
+    this.noise.blendMode.opacity.value = state.grain ? this.grain : 0;
+    this.chroma.offset.set(state.grain ? 0.0006 : 0, state.grain ? 0.0004 : 0);
   }
 
   applyGrade(g: Grade) {
@@ -485,7 +490,8 @@ export class Post {
     this.bloom.intensity = g.bloom;
     this.bloom.luminanceMaterial.threshold = g.bloomThreshold;
     this.vignette.darkness = g.vignette;
-    this.noise.blendMode.opacity.value = g.grain;
+    this.grain = g.grain;
+    this.noise.blendMode.opacity.value = state.grain ? g.grain : 0;
   }
 
   applyFog(f: FogSettings) {

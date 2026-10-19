@@ -15,6 +15,8 @@ import { tree, leafCards, bushCards, Card } from './foliage';
 import { rng } from './noise';
 import * as D from './decor';
 import type { Built, Mood } from './scene';
+import { basePixelRatio } from './settings';
+import { drs } from './drs';
 
 const H = 3.0; // wall height (a gut-renovated Beacon Hill walk-up: tall ceilings)
 const T = 0.16; // wall thickness
@@ -1626,7 +1628,7 @@ export function buildApartment(quality: 'high' | 'low'): Apartment {
   // Motes wander lazily around a home point. Each one traces back toward the sun to the window wall:
   // if it lands inside a window it's in a sunbeam and lights up. Some start in the beams, so they glitter.
   const sunWins = [winBed, winL1, winL2, winK].map((o) => new THREE.Vector4(o.a0 + 0.05, o.a1 - 0.05, o.y0, o.y1));
-  const pxScale = () => innerHeight * Math.min(devicePixelRatio, quality === 'high' ? 1.5 : 1) / 1000;
+  const pxScale = () => innerHeight * basePixelRatio() * drs.scale / 1000;
   const motes = (n: number, o: { colors: string[]; shade: number; lit: number; sparkle: number; size: number; drift: number; bokeh: number; inBeams: number }) => {
     const y0 = 0.1, y1 = H - 0.15;
     const p = new Float32Array(n * 3), r = new Float32Array(n * 4), c = new Float32Array(n * 3), col = new THREE.Color();

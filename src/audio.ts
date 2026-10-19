@@ -238,6 +238,11 @@ class AudioEngine {
   sfxBus!: GainNode;
   ambBus!: GainNode;
   voiceBus!: GainNode;
+  /** menu sounds: straight to the master, so they stay clear while the pause menu muffles the world */
+  uiBus!: GainNode;
+  /** everything in the world (music, ambience, effects, voices) on its way to the master */
+  private world!: GainNode;
+  private worldLP!: BiquadFilterNode;
   reverbSend!: GainNode;
   noiseBuf!: AudioBuffer;
   ready = false;
@@ -257,7 +262,9 @@ class AudioEngine {
   private field: ((l: HarborField) => void) | null = null;
   private ambName: string | null = null;
   private clips = new Map<string, Promise<AudioBuffer | null>>();
-  private voiceSrc: { src: AudioBufferSourceNode; g: GainNode } | null = null;
+  private voiceSrc: { src: AudioBufferSourceNode; g: GainNode; buf: AudioBuffer; room: boolean; vol: number; t0: number } | null = null;
+  /** a voice line stopped by the pause menu: where to pick it up again */
+  private voiceHeld: { buf: AudioBuffer; room: boolean; vol: number; at: number } | null = null;
   private voiceTok = 0;
   private duck!: GainNode;
 
@@ -274,10 +281,15 @@ class AudioEngine {
     this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = this.volSfx;
     this.ambBus = this.ctx.createGain(); this.ambBus.gain.value = this.volSfx * 0.8;
     this.voiceBus = this.ctx.createGain(); this.voiceBus.gain.value = this.volVoice;
+    this.uiBus = this.ctx.createGain(); this.uiBus.gain.value = this.volSfx;
+    this.uiBus.connect(this.master);
+    this.world = this.ctx.createGain();
+    this.worldLP = this.ctx.createBiquadFilter(); this.worldLP.type = 'lowpass'; this.worldLP.frequency.value = 20000; this.worldLP.Q.value = 0.5;
+    this.world.connect(this.worldLP).connect(this.master);
     // music dips under a voice line
     this.duck = this.ctx.createGain();
-    this.musicBus.connect(this.duck).connect(this.master); this.sfxBus.connect(this.master); this.ambBus.connect(this.master);
-    this.voiceBus.connect(this.master);
+    this.musicBus.connect(this.duck).connect(this.world); this.sfxBus.connect(this.world); this.ambBus.connect(this.world);
+    this.voiceBus.connect(this.world);
 
     // Reverb from generated impulse
     const conv = this.ctx.createConvolver();
@@ -289,7 +301,7 @@ class AudioEngine {
     }
     conv.buffer = ir;
     this.reverbSend = this.ctx.createGain(); this.reverbSend.gain.value = 0.35;
-    this.reverbSend.connect(conv).connect(this.master);
+    this.reverbSend.connect(conv).connect(this.world);
 
     this.noiseBuf = this.ctx.createBuffer(1, this.ctx.sampleRate * 2, this.ctx.sampleRate);
     const nd = this.noiseBuf.getChannelData(0);
@@ -302,8 +314,27 @@ class AudioEngine {
     if (!this.ready) return;
     this.musicBus.gain.value = music;
     this.sfxBus.gain.value = sfx;
+    this.uiBus.gain.value = sfx;
     this.ambBus.gain.value = sfx * 0.8;
     this.voiceBus.gain.value = voice;
+  }
+
+  /** The pause menu: the world drops back and goes muffled, as if heard through a wall, and a voice
+   *  line stops where it is (resumed from there). Menu sounds stay clear. */
+  pause(on: boolean) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    this.world.gain.setTargetAtTime(on ? 0.35 : 1, t, 0.12);
+    this.worldLP.frequency.setTargetAtTime(on ? 520 : 20000, t, on ? 0.08 : 0.2);
+    if (on) {
+      const v = this.voiceSrc;
+      if (!v) return;
+      this.stopVoice();
+      this.voiceHeld = { buf: v.buf, room: v.room, vol: v.vol, at: t - v.t0 };
+    } else if (this.voiceHeld) {
+      const h = this.voiceHeld; this.voiceHeld = null;
+      if (h.at < h.buf.duration - 0.05) this.startVoice(h.buf, h.room, h.vol, h.at);
+    }
   }
 
   // ------------------------------------------------ voice-over
@@ -329,6 +360,10 @@ class AudioEngine {
     const buf = await this.load(path);
     // the player may have moved on while it loaded
     if (!buf || tok !== this.voiceTok) return;
+    this.startVoice(buf, room, vol, 0);
+  }
+
+  private startVoice(buf: AudioBuffer, room: boolean, vol: number, offset: number) {
     const c = this.ctx, t = c.currentTime;
     const src = c.createBufferSource(); src.buffer = buf;
     const g = c.createGain(); g.gain.value = vol;
@@ -336,8 +371,8 @@ class AudioEngine {
     if (room) { const s = c.createGain(); s.gain.value = 0.25; g.connect(s).connect(this.reverbSend); }
     this.duck.gain.setTargetAtTime(0.55, t, 0.08);
     src.onended = () => { if (this.voiceSrc?.src === src) { this.voiceSrc = null; this.duck.gain.setTargetAtTime(1, c.currentTime, 0.4); } };
-    src.start(t);
-    this.voiceSrc = { src, g };
+    src.start(t, offset);
+    this.voiceSrc = { src, g, buf, room, vol, t0: t - offset };
   }
 
   /** play a recorded effect on the SFX bus; `hold` loops it for that many seconds, then fades it out */
@@ -402,6 +437,7 @@ class AudioEngine {
   /** fade out the voice line that's playing, if any */
   stopVoice() {
     this.voiceTok++;
+    this.voiceHeld = null;
     const v = this.voiceSrc;
     if (!v) return;
     this.voiceSrc = null;
@@ -799,7 +835,7 @@ class AudioEngine {
   sfx(name: string, vol = 1) {
     if (!this.ready) return;
     const c = this.ctx, t = c.currentTime;
-    const g = c.createGain(); g.gain.value = vol; g.connect(this.sfxBus);
+    const g = c.createGain(); g.gain.value = vol; g.connect(name.startsWith('menu') ? this.uiBus : this.sfxBus);
     const o = (type: OscillatorType, f: number, start = t, dur = 0.3) => {
       const x = c.createOscillator(); x.type = type; x.frequency.setValueAtTime(f, start); x.start(start); x.stop(start + dur + 0.1); return x;
     };

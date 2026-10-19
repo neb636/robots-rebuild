@@ -3,10 +3,11 @@
 // browser scales the canvas up. Steps down after about a second and a half of missed frames, never
 // when the CPU is what's slow (fewer pixels wouldn't help); steps back up after a stretch of clean
 // frames, waiting twice as long each time a step up fails at once. Without a GPU timer in every
-// browser, missed frames are the signal. Off in automated browsers (screenshots and the bench want a
-// fixed size) and with ?drs=0; ?drs=1 turns it on there.
+// browser, missed frames are the signal. The player can turn it off (Settings → Graphics); it's also
+// off in automated browsers (screenshots and the bench want a fixed size) and with ?drs=0; ?drs=1
+// turns it on there.
 import { pace, automated } from './frameloop';
-import { params } from './settings';
+import { params, state } from './settings';
 
 export const LEVELS = [1, 0.85, 0.7];
 /** the current scale (planar reflections divide it back out to keep their resolution) */
@@ -14,7 +15,8 @@ export const drs = { scale: 1 };
 
 export class DynamicRes {
   level = 0;
-  enabled = params.get('drs') === '1' || (params.get('drs') !== '0' && !automated && !params.has('bench'));
+  private allowed = params.get('drs') === '1' || (params.get('drs') !== '0' && !automated && !params.has('bench'));
+  get enabled() { return this.allowed && (state.drs || params.get('drs') === '1'); }
   private win: { t: number; slow: boolean; cpu: number }[] = [];
   private changed = 0; private upAt = -Infinity; private wait = 8000; private evalAt = 0;
   constructor(private apply: (scale: number) => void) {}
@@ -38,6 +40,8 @@ export class DynamicRes {
       this.set(this.level - 1, now);
     }
   }
+  /** back to full scale (the setting was turned off) */
+  reset() { if (this.level > 0) this.set(0, performance.now()); }
   private set(level: number, now: number) {
     this.level = level; this.changed = now; this.win.length = 0;
     drs.scale = LEVELS[level];

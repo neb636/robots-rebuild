@@ -2,6 +2,7 @@
 // the end of Long Wharf. Built from real map data (scripts/harbor/), loaded on demand.
 import * as THREE from 'three';
 import type { Built, CineShot } from '../scene';
+import type { AreaMap } from '../map';
 import { skyDome, spire } from '../sky';
 import { loadHarbor } from './data';
 import { WalkMesh } from './walk';
@@ -11,6 +12,7 @@ import { buildBuildings, parts, type Part } from './buildings';
 import { LANDMARKS } from './landmarks';
 import { buildWaterfront, buildLadders, type Ladder } from './waterfront';
 import { debugMap, autopilot } from './debug';
+import { harborMap } from './map';
 import { buildCordon } from './cordon';
 import { ChunkBuilder, type Chunk } from './chunks';
 import { buildLamps, lightLOD } from './lights';
@@ -300,6 +302,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   let pilot = walkArg ? autopilot(walkArg === 'tour' ? Object.keys(spots) : walkArg.split(','), spots, heightAt, blocked) : null;
   const map = params.get('debug') === 'map' ? debugMap(d, collide, (i) => (flags[i] & 1) === 1) : null;
   let mapT = 0;
+  let paper: AreaMap | undefined;
 
   progress(1, 'Lighting the lamps…');
   return {
@@ -404,6 +407,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
       (cordon.lamps.material as THREE.MeshStandardMaterial).emissiveIntensity = Math.sin(t * 2.2) > 0.4 ? 7 : 0.6;
     },
     dispose() { refl?.dispose(); map?.dispose(); },
+    map: () => (paper ??= harborMap(d, all)),
     // walk(names): the hero walks these spots on autopilot (the bench; ?walk= does the same at load)
     ...({ harbor, __water: waterUniforms, walk: (names: string[]) => (pilot = autopilot(names, spots, heightAt, blocked)) } as object),
   };
