@@ -106,7 +106,10 @@ export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGr
       flickerUpdate(s.fog, t, i * 3.7);
     });
   }
-  return { lamps, pool: pool.map((s) => s.fog), group, update, addSources: (ls: LightSource[]) => { lit.push(...ls); } };
+  return { lamps, pool: pool.map((s) => s.fog), group, update,
+    /** daylight puts the lit lamps' glass out */
+    setOn: (on: boolean) => { glassOn.emissiveIntensity = on ? 3.2 : 0; },
+    addSources: (ls: LightSource[]) => { lit.push(...ls); } };
 }
 
 /** a Boston pedestrian lamp: tapered fluted post, collar, a lantern with a cap and finial */

@@ -135,7 +135,7 @@ export function controlsPage(back: Row, inGame: boolean): Page {
         infoRow('Zoom', 'Pinch'), infoRow('Pause', 'The ❙❙ button, top right'), infoRow('Map', 'The map button, where there is one'),
       ] : [
         infoRow('Move', 'W A S D · Arrows'), infoRow('Run', 'Shift'), infoRow('Look', 'Mouse drag · Q E'), infoRow('Zoom', 'Wheel'),
-        infoRow('Pause', 'Esc'), infoRow('Map', 'M'), infoRow('Mood', '1 2 3'), infoRow('Camera', 'C'), infoRow('Hide UI', 'H'),
+        infoRow('Pause', 'Esc'), infoRow('Map', 'M'), infoRow('Mood', '1 2 3 4'), infoRow('Camera', 'C'), infoRow('Hide UI', 'H'),
       ]),
       infoRow('Gamepad', 'Sticks · A interact · Start pause · View map'),
       { ...back, desc: () => (inGame ? 'Return to the pause menu.' : 'Return to the title.') },

@@ -446,6 +446,7 @@ class App {
     b.puddles.visible = m.wet;
     this.banks.mat.color.set(m.fogBank);
     this.banks.mat.opacity = state.mood === 'pall' ? 0.3 : 0.2;
+    this.banks.obj.visible = !!b.fogBanks?.length && state.mood !== 'day';
     // image-based lighting from this mood's sky (for glass, wet stone, metal)
     const envScene = new THREE.Scene();
     const skyCopy = b.sky.mesh.clone(); skyCopy.position.set(0, 0, 0); envScene.add(skyCopy);
@@ -513,6 +514,7 @@ class App {
       if (e.code === 'Digit1') this.setMood('ashfall');
       if (e.code === 'Digit2') this.setMood('curfew');
       if (e.code === 'Digit3') this.setMood('pall');
+      if (e.code === 'Digit4') this.setMood('day');
       if (e.code === 'KeyC') {
         const cams = CAMS.filter((c) => c !== 'cinematic' || this.built.cine);
         this.setCam(this.interior ? (state.cam === 'jrpg' ? 'follow' : 'jrpg') : cams[(cams.indexOf(state.cam) + 1) % cams.length]);
@@ -992,7 +994,7 @@ class App {
     f.u<THREE.Vector3>('spotDir').copy(st.sub(sp).normalize());
     f.set('spotTan', Math.tan(s.angle));
     f.set('spotLen', 14);
-    f.u<THREE.Color>('spotCol').set('#ff5a48').multiplyScalar(state.mood === 'pall' ? 0.06 : state.mood === 'curfew' ? 0.2 : 0.12);
+    f.u<THREE.Color>('spotCol').set('#ff5a48').multiplyScalar(state.mood === 'pall' || state.mood === 'day' ? 0.06 : state.mood === 'curfew' ? 0.2 : 0.12);
   }
 
   updateScan(dt: number) {
