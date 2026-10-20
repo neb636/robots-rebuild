@@ -38,15 +38,16 @@
   "unionOysterHouse": 0,
   "columbusTrellis": 0,
   "oldNorthChurch": 5,
-  "hongKong": 2
+  "hongKong": 2,
+  "aquariumStation": 1
  },
  "ground": {
-  "landArea": 476365,
+  "landArea": 476307,
   "classes": {
    "road": 163253,
    "crosswalk": 11451,
    "parking": 29968,
-   "lot": 80312,
+   "lot": 80255,
    "sidewalkBrick": 51557,
    "sidewalkConcrete": 47737,
    "pavers": 14294,
@@ -57,8 +58,8 @@
    "deckConcrete": 0
   }
  },
- "groundTriangles": 93451,
- "curbs": 17161,
+ "groundTriangles": 93472,
+ "curbs": 17156,
  "seawallRuns": 1,
  "decks": 24,
  "piles": 851,
@@ -69,7 +70,8 @@
  "cordonGapLength": 1167,
  "furniture": {
   "tree": 210,
-  "bench": 286,
+  "bench": 267,
+  "picnic": 19,
   "bollard": 9,
   "hydrant": 41,
   "bin": 67,
@@ -84,8 +86,8 @@
  "streets": 338,
  "shops": 188,
  "bytes": {
-  "json": 220777,
-  "bin": 4584128,
-  "binGz": 2005837
+  "json": 221637,
+  "bin": 4584796,
+  "binGz": 2006372
  }
 }
