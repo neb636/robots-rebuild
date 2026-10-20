@@ -21,6 +21,7 @@ import { buildStation } from './station';
 import { buildStreetscape } from './streetscape';
 import { buildSigns } from './signs';
 import { buildMarketplace } from './marketplace';
+import { buildAquariumPlaza } from './aquariumplaza';
 import { buildWharfSigns } from './wharfsigns';
 import { buildWharf } from './wharf';
 import { LAYERS } from './texarray';
@@ -138,6 +139,9 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const market = buildMarketplace(d, root, collide, walk, quality);
   chunks.push(...market.chunks);
   console.info('harbor marketplace', JSON.stringify(market.counts));
+  const plaza = buildAquariumPlaza(d, root, collide, walk, { parts: all, lamps: lamps.lamps, quality });
+  chunks.push(...plaza.chunks, ...plaza.water);
+  console.info('harbor aquarium plaza', JSON.stringify(plaza.counts));
   // Long Wharf: the ferry landings' signs and rails first, then the edge's bollards, chains and
   // patios, which keep clear of them
   const wharfSigns = buildWharfSigns(d, root, collide, walk, { parts: all, quality });
@@ -153,9 +157,10 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   for (const o of [cordon.buoys, cordon.lamps, cordon.eyes]) label(o, 'cordonMarks');
   if (station) label(station.group, 'station');
 
-  // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets)
+  // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets, nor
+  // the aquarium's plaza: only the whale watch's gangway and board at the water's edge)
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
-  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks, ...market.chunks, ...wharfSigns.chunks]);
+  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks, ...market.chunks, ...plaza.chunks, ...wharfSigns.chunks]);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
   for (const o of [sky.mesh, tower.group, cordon.buoys, cordon.lamps, cordon.eyes, ...cordon.drones, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
 
@@ -343,7 +348,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     spots,
     cine: { shots: cine, pose: spawn },
     // for tests: the play area's outline
-    ...({ __boundary: d.h.boundary, __street: street.debug, __signs: signs.debug, __wharf: { signs: wharfSigns.debug, edge: wharf.debug } } as object),
+    ...({ __boundary: d.h.boundary, __street: street.debug, __signs: signs.debug, __aquariumPlaza: plaza.debug, __wharf: { signs: wharfSigns.debug, edge: wharf.debug } } as object),
     onAttach(ctx) { post = ctx.post; reflect(ctx.hero); ctx.fill.layers.enable(REFLECT_LAYER); station?.setDialogue(ctx.dlg); },
     applyMood(m) {
       // rain chops the harbour up; Grey Pall's dead calm stills it

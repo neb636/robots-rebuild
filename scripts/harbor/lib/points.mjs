@@ -1,12 +1,13 @@
 // Street furniture at its real positions: city street lights, and OSM trees, benches, bollards,
-// hydrants, bins, bike docks, statues, subway entrances, signals; and the waterfront's planters,
+// picnic tables, hydrants, bins, bike docks, statues, subway entrances, signals; and the waterfront's planters,
 // flagpoles, compass roses, viewpoints, ferry terminals, ticket booths and outdoor seating.
 import { project } from '../config.mjs';
 import { centroid, absArea } from './geom.mjs';
 
 const KINDS = {
   tree: (t) => t.natural === 'tree',
-  bench: (t) => t.amenity === 'bench' || t.leisure === 'picnic_table',
+  bench: (t) => t.amenity === 'bench',
+  picnic: (t) => t.leisure === 'picnic_table',
   bollard: (t) => t.barrier === 'bollard' || t.barrier === 'block',
   hydrant: (t) => t.emergency === 'fire_hydrant',
   bin: (t) => t.amenity === 'waste_basket' || t.amenity === 'recycling' || t.amenity === 'waste_disposal',

@@ -27,6 +27,17 @@ const DISTRICTS: MapLabel[] = [
   // north of the North Market row, clear of the four buildings' own names below it
   { text: 'Faneuil Hall Marketplace', x: -62, z: -100, kind: 'district' },
 ];
+/** places worth finding that aren't a landmark's own outline (local metres) */
+const PLACES: MapLabel[] = [
+  // the escalator headhouse on State St (the station is a landmark, but a place on the map, like State)
+  { text: 'Aquarium Station', x: 200, z: 23, kind: 'place' },
+  // the boarding float on Central Wharf's north edge
+  { text: 'Whale Watch', x: 329.7, z: 68, kind: 'place' },
+  // the IMAX, one of the Aquarium's extra outlines (so it has no label of its own)
+  { text: 'Simons Theatre', x: 315.5, z: 131.3, kind: 'landmark' },
+];
+/** landmarks the map names as a place instead (PLACES) */
+const UNLABELLED = new Set(['aquariumStation']);
 
 export function harborMap(d: HarborData, parts: Part[]): AreaMap {
   const b = d.h.bounds, ppm = Math.min(2.4, 3072 / Math.max(b.x1 - b.x0, b.z1 - b.z0));
@@ -137,12 +148,12 @@ export function harborMap(d: HarborData, parts: Part[]): AreaMap {
   g.fillStyle = burn; g.fillRect(0, 0, W, H);
   g.globalCompositeOperation = 'source-over';
 
-  return { x0: b.x0, z0: b.z0, x1: b.x1, z1: b.z1, base: cv, labels: [...DISTRICTS, ...landmarkLabels(d), { text: 'State Station', ...d.h.spots.state, kind: 'place' }, { text: 'Freedom Trail', x: -118, z: -322, kind: 'place' }] };
+  return { x0: b.x0, z0: b.z0, x1: b.x1, z1: b.z1, base: cv, labels: [...DISTRICTS, ...landmarkLabels(d), ...PLACES, { text: 'State Station', ...d.h.spots.state, kind: 'place' }, { text: 'Freedom Trail', x: -118, z: -322, kind: 'place' }] };
 }
 
 /** each landmark's name at the middle of its biggest outline */
 function landmarkLabels(d: HarborData): MapLabel[] {
-  return d.h.landmarks.map((lm) => {
+  return d.h.landmarks.filter((lm) => !UNLABELLED.has(lm.key)).map((lm) => {
     const pts = lm.outline.length ? lm.outline.reduce((a, r) => (Math.abs(area(r)) > Math.abs(area(a)) ? r : a)) : lm.path ?? [];
     const [x, z] = lm.outline.length ? centroid(pts) : pts[Math.floor(pts.length / 2)] ?? [0, 0];
     return { text: lm.name.replace(/\s*\(.*\)$/, '').replace(/ labyrinth$/, '').replace(/^Boston Marriott /, ''), x, z, kind: 'landmark' as const };

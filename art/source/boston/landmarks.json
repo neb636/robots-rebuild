@@ -22,5 +22,6 @@
   "unionOysterHouse": { "name": "Union Oyster House", "osm": ["w405520328"] },
   "columbusTrellis": { "name": "Christopher Columbus Park trellis", "osm": [], "path": "w563978436" },
   "oldNorthChurch": { "name": "Old North Church", "osm": ["w29650592"] },
-  "hongKong": { "name": "The Hong Kong", "osm": ["w1280705644"] }
+  "hongKong": { "name": "The Hong Kong", "osm": ["w1280705644"] },
+  "aquariumStation": { "name": "Aquarium Station", "osm": ["w240311347", "w240311444", "w240311383", "w240311448", "w212122931", "w240311348"] }
 }

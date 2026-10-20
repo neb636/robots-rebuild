@@ -9,6 +9,7 @@ import { paulRevere, oldStateHouse, cityHall, carousel } from './historic';
 import { holocaustMemorial, armenianPark, ringsFountain, columbusTrellis, unionOysterHouse } from './parks';
 import { oldNorthChurch } from './northend';
 import { hongKong } from './hongkong';
+import { aquariumStation } from './aqstation';
 import { longWharfPavilion } from './pavilion';
 
 export const LANDMARKS: Record<string, LandmarkBuilder> = {
@@ -20,4 +21,5 @@ export const LANDMARKS: Record<string, LandmarkBuilder> = {
   holocaustMemorial, armenianPark, ringsFountain, columbusTrellis, unionOysterHouse,
   oldNorthChurch,
   hongKong,
+  aquariumStation,
 };
