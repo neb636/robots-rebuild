@@ -22,6 +22,8 @@ import { buildStreetscape } from './streetscape';
 import { buildSigns } from './signs';
 import { buildMarketplace } from './marketplace';
 import { buildAquariumPlaza } from './aquariumplaza';
+import { buildWharfSigns } from './wharfsigns';
+import { buildWharf } from './wharf';
 import { LAYERS } from './texarray';
 import { groundUniforms } from './groundmat';
 import { facadeUniforms } from './facade';
@@ -140,6 +142,14 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const plaza = buildAquariumPlaza(d, root, collide, walk, { parts: all, lamps: lamps.lamps, quality });
   chunks.push(...plaza.chunks, ...plaza.water);
   console.info('harbor aquarium plaza', JSON.stringify(plaza.counts));
+  // Long Wharf: the ferry landings' signs and rails first, then the edge's bollards, chains and
+  // patios, which keep clear of them
+  const wharfSigns = buildWharfSigns(d, root, collide, walk, { parts: all, quality });
+  chunks.push(...wharfSigns.chunks);
+  console.info('harbor wharf signs', JSON.stringify(wharfSigns.counts));
+  const wharf = buildWharf(d, root, collide, walk, quality);
+  chunks.push(...wharf.chunks);
+  console.info('harbor wharf', JSON.stringify(wharf.counts));
 
   // name what isn't a chunk or a landmark, so the stats and profiles can tell it apart
   const label = (o: THREE.Object3D, name: string) => o.traverse((m) => { if ((m as THREE.Mesh).isMesh && !m.name) m.name = name; });
@@ -150,7 +160,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets, nor
   // the aquarium's plaza: only the whale watch's gangway and board at the water's edge)
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
-  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks, ...market.chunks, ...plaza.chunks]);
+  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks, ...market.chunks, ...plaza.chunks, ...wharfSigns.chunks]);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
   for (const o of [sky.mesh, tower.group, cordon.buoys, cordon.lamps, cordon.eyes, ...cordon.drones, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
 
@@ -338,7 +348,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     spots,
     cine: { shots: cine, pose: spawn },
     // for tests: the play area's outline
-    ...({ __boundary: d.h.boundary, __street: street.debug, __signs: signs.debug, __aquariumPlaza: plaza.debug } as object),
+    ...({ __boundary: d.h.boundary, __street: street.debug, __signs: signs.debug, __aquariumPlaza: plaza.debug, __wharf: { signs: wharfSigns.debug, edge: wharf.debug } } as object),
     onAttach(ctx) { post = ctx.post; reflect(ctx.hero); ctx.fill.layers.enable(REFLECT_LAYER); station?.setDialogue(ctx.dlg); },
     applyMood(m) {
       // rain chops the harbour up; Grey Pall's dead calm stills it

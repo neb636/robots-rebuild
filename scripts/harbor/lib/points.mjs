@@ -1,7 +1,8 @@
 // Street furniture at its real positions: city street lights, and OSM trees, benches, bollards,
-// picnic tables, hydrants, bins, bike docks, statues, subway entrances, signals.
+// picnic tables, hydrants, bins, bike docks, statues, subway entrances, signals; and the waterfront's planters,
+// flagpoles, compass roses, viewpoints, ferry terminals, ticket booths and outdoor seating.
 import { project } from '../config.mjs';
-import { centroid } from './geom.mjs';
+import { centroid, absArea } from './geom.mjs';
 
 const KINDS = {
   tree: (t) => t.natural === 'tree',
@@ -16,7 +17,16 @@ const KINDS = {
   signal: (t) => t.highway === 'traffic_signals',
   fountain: (t) => t.amenity === 'fountain',
   lampOsm: (t) => t.highway === 'street_lamp',
+  planter: (t) => t.barrier === 'planter',
+  flagpole: (t) => t.man_made === 'flagpole',
+  compass: (t) => t.man_made === 'compass_rose',
+  viewpoint: (t) => t.tourism === 'viewpoint',
+  ferry: (t) => t.amenity === 'ferry_terminal',
+  ticket: (t) => t.shop === 'ticket',
+  seating: (t) => t.leisure === 'outdoor_seating',
 };
+// what's mapped as an area as often as a point: kept by its centroid (outdoor seating with its rough radius)
+const AREAS = ['statue', 'fountain', 'planter', 'compass', 'ferry', 'ticket', 'seating'];
 
 /**
  * lights: city GeoJSON point features; osm: parsed; inZone(x, z) -> boolean.
@@ -40,13 +50,13 @@ export function points({ lights, osm, inZone }) {
     if (!inZone(p.x, p.z)) continue;
     for (const [k, test] of Object.entries(KINDS)) if (test(p.tags)) out[k].push({ x: r2(p.x), z: r2(p.z), id: p.id, ...(p.tags.name ? { name: p.tags.name } : {}) });
   }
-  // statues and fountains drawn as areas
+  // the same drawn as areas
   for (const p of osm.polys) {
-    const t = p.tags;
-    if (!(KINDS.statue(t) || KINDS.fountain(t))) continue;
+    const t = p.tags, k = AREAS.find((a) => KINDS[a](t));
+    if (!k) continue;
     const [x, z] = centroid(p.outer);
     if (!inZone(x, z)) continue;
-    out[KINDS.fountain(t) ? 'fountain' : 'statue'].push({ x: r2(x), z: r2(z), id: p.id, ...(t.name ? { name: t.name } : {}) });
+    out[k].push({ x: r2(x), z: r2(z), id: p.id, ...(t.name ? { name: t.name } : {}), ...(k === 'seating' ? { r: r2(Math.sqrt(absArea(p.outer) / Math.PI)) } : {}) });
   }
   for (const k of Object.keys(out)) out[k].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return out;
