@@ -62,6 +62,10 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
         ${VNOISE_2D_GLSL}
         float h11(float x) { return fract(sin(x * 127.1) * 43758.5453); }
         float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        // how much of a pixel w metres across lies inside an edge, d metres in from it (negative: outside);
+        // the facade's parts are blended by this instead of cut with hard ifs, which only MSAA's triangle
+        // edges would smooth, so frames and sills crawled with jaggies whenever the camera moved
+        float cover(float d, float w) { return clamp(d / w + 0.5, 0.0, 1.0); }
         // a room behind a window, by interior mapping: o is the point on the glass (room space, floor at
         // y = 0, glass at z = 0), d the view ray; returns the colour of whatever wall it meets
         vec3 room(vec3 o, vec3 d, vec2 hsz, float depth, float floorH, float id, bool lit) {
@@ -90,6 +94,8 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
         float L = vFac.x, seed = vFac.z, H = vFac.w;
         vec4 A = uSA[style], B = uSB[style], C = uSC[style], D = uSD[style];
         float u = vWuv.x, v = vWuv.y;
+        // the pixel's footprint on the wall, in metres along and up it (taken here, before any branch)
+        vec2 fw = max(sqrt(dFdx(vWuv) * dFdx(vWuv) + dFdy(vWuv) * dFdy(vWuv)), vec2(1e-4));
         bool party = (flags & 1) != 0, front = (flags & 2) != 0;
         int kind = int(C.w + 0.5);
         float r1 = h11(seed * 0.013), r2 = h11(seed * 0.017 + 1.3), r3 = h11(seed * 0.019 + 2.7);
@@ -106,7 +112,7 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
         vec3 N = normalize(vNW), T = normalize(vec3(-N.z, 0.0, N.x));
         vec3 vd = normalize(vWP - cameraPosition);
         vec3 td = vec3(dot(vd, T), vd.y, -dot(vd, N));
-        bool glass = false;
+        float glass = 0.0;
         float topLimit = H - (kind == 0 ? 1.1 : 0.6);
         if (!party && v > 0.25 && v < topLimit) {
           float gH = A.y, fH = A.x;
@@ -134,7 +140,7 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
                   col = mix(vec3(0.32, 0.33, 0.33), vec3(0.36, 0.2, 0.1), smoothstep(0.4, 0.8, vnoise(vec2(u * 2.0, fy * 3.0) + seed)));
                   col *= 0.75 + corr * 0.3; bump = vec2(0.0, (corr - 0.5) * 0.8); rough = 0.6; metal = 0.3;
                 } else {
-                  glass = true;
+                  glass = 1.0;
                   bool lit = hs > 0.93;
                   vec3 o = vec3(cx, fy, 0.0);
                   vec3 inside = ${interior ? `room(o, normalize(td), vec2(sp * 0.5, 0.0), 5.0, gH, seed + bi * 7.0, lit)` : `vec3(0.05)`};
@@ -149,11 +155,12 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
           } else if (kind == 1) {
             // curtain wall: mullions every 1.5 m, a spandrel band at every floor line
             float mu = abs(fract(u / B.x) - 0.5) * B.x;
-            bool spand = fy < 1.05 || (gfl && fy < 0.5);
-            if (fract(u / B.x) < 0.035 || fract(u / B.x) > 0.965) { col = vec3(0.12, 0.13, 0.14); rough = 0.4; metal = 0.6; }
-            else if (spand) { col = vec3(0.2, 0.22, 0.24) * (0.9 + r1 * 0.2); rough = 0.35; metal = 0.5; }
-            else {
-              glass = true;
+            float mull = cover(mu - (0.5 - 0.035) * B.x, fw.x);
+            // the spandrel band spans the floor line, so measure it from both sides of the wrap
+            float spTop = gfl ? 0.5 : 1.05, flH = gfl ? gH : fH;
+            float fy2 = fy > (flH + spTop) * 0.5 ? fy - flH : fy;
+            float spd = cover(min(fy2, spTop - fy2), fw.y);
+            if (mull < 1.0 && spd < 1.0) {
               float hs = h21(vec2(fl + seed, floor(u / B.x)));
               bool lit = hs < D.x, broken = hs > 1.0 - D.y;
               vec3 o = vec3(mu - B.x * 0.5, fy, 0.0);
@@ -162,6 +169,10 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
               rough = broken ? 0.9 : 0.04;
               if (lit) emit = inside * vec3(1.0, 0.85, 0.65) * 1.8;
             }
+            col = mix(col, vec3(0.2, 0.22, 0.24) * (0.9 + r1 * 0.2), spd); rough = mix(rough, 0.35, spd); metal = mix(metal, 0.5, spd);
+            col = mix(col, vec3(0.12, 0.13, 0.14), mull); rough = mix(rough, 0.4, mull); metal = mix(metal, 0.6, mull);
+            float pane = (1.0 - spd) * (1.0 - mull);
+            emit *= pane; glass = pane;
           } else if (kind == 2) {
             // parking garage: open bays between spandrels and columns
             float c7 = mod(u, 7.6);
@@ -173,40 +184,57 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
             float wy0 = gfl ? gH * 0.3 : B.y, wy1 = gfl ? min(gH - 0.5, wy0 + A.w) : B.y + A.w;
             if (kind == 3) { hw = sp * 0.5 - 0.06; wy0 = 0.9; wy1 = fH - 0.55; }
             if (ci >= 0.0 && ci < nw && L > 1.6) {
-              if (abs(cx) < hw && fy > wy0 && fy < wy1) {
-                float ex = hw - abs(cx), ey = min(fy - wy0, wy1 - fy);
+              float ex = hw - abs(cx), ey = min(fy - wy0, wy1 - fy);
+              float win = cover(ex, fw.x) * cover(ey, fw.y);
+              if (kind == 0) {
+                // stone lintel and sill
+                float lint = cover(ex + 0.14, fw.x) * max(cover(min(fy - wy1, wy1 + 0.24 - fy), fw.y), cover(min(fy - wy0 + 0.13, wy0 - fy), fw.y)) * (1.0 - win);
+                if (lint > 0.0) {
+                  col = mix(col, stoneCol * (0.8 + r2 * 0.25) * (0.9 + 0.1 * vnoise(vec2(u, fy) * 8.0)), lint);
+                  rough = mix(rough, 0.85, lint);
+                }
+              }
+              if (win > 0.0) {
                 float hs = h21(vec2(fl * 13.0 + seed, ci));
                 bool lit = hs < D.x, broken = !lit && hs < D.x + D.y, boarded = !lit && !broken && hs < D.x + D.y + D.z;
-                if (ex < 0.07 || ey < 0.07 || (kind == 0 && abs(fy - (wy0 + wy1) * 0.5) < 0.025 && !broken)) { col = trimCol; rough = 0.55; }
+                float frame = 1.0 - cover(ex - 0.07, fw.x) * cover(ey - 0.07, fw.y);
+                if (kind == 0 && !broken) frame = max(frame, cover(0.025 - abs(fy - (wy0 + wy1) * 0.5), fw.y));
+                vec3 pc = trimCol, pe = vec3(0.0); float pr = 0.55, pg = 0.0; vec2 pb = bump;
+                if (frame >= 1.0) {}
                 else if (boarded) {
                   vec4 wd = texture(uAlb, vec3(cx * 1.4, fy * 0.5, ${layer('wood')}.0));
-                  col = wd.rgb * 0.75; rough = 0.9;
-                  col *= 1.0 - 0.5 * step(0.985, h21(floor(vec2(cx, fy) * 6.0)));
+                  pc = wd.rgb * 0.75; pr = 0.9;
+                  pc *= 1.0 - 0.5 * step(0.985, h21(floor(vec2(cx, fy) * 6.0)));
                 } else {
-                  glass = !broken;
+                  pg = broken ? 0.0 : 1.0;
                   vec3 o = vec3(cx, fy, 0.0);
                   vec3 inside = ${interior ? `room(o, normalize(td), vec2(sp * 0.5, 0.0), 4.0, fH, seed + fl * 31.0 + ci, lit)` : `vec3(lit ? 0.6 : 0.04)`};
                   float hc = h21(vec2(ci * 3.1 + seed, fl * 1.7));
                   // curtains and blinds: drawn partway across many windows, glowing in the lit ones
-                  float cur = hc < 0.45 ? step(1.0 - hc * 2.2, abs(cx) / hw) : (hc < 0.6 ? step(wy1 - (wy1 - wy0) * (hc - 0.45) * 6.0, fy) : 0.0);
+                  float cur = hc < 0.45 ? cover(abs(cx) - (1.0 - hc * 2.2) * hw, fw.x) : (hc < 0.6 ? cover(fy - (wy1 - (wy1 - wy0) * (hc - 0.45) * 6.0), fw.y) : 0.0);
                   vec3 cloth = mix(vec3(0.5, 0.42, 0.32), vec3(0.32, 0.36, 0.4), h11(hc * 9.0));
                   inside = mix(inside, cloth * (lit ? 0.9 : 0.12), cur * 0.9);
-                  col = inside * (broken ? 0.25 : 0.3);
+                  pc = inside * (broken ? 0.25 : 0.3);
                   // old glass: every pane a little different, so a facade doesn't mirror the sky as one sheet
-                  rough = broken ? 0.95 : 0.05 + hc * hc * 0.4;
-                  bump = (vec2(h11(hc + 1.0), h11(hc + 2.0)) - 0.5) * 0.12;
-                  if (lit) emit = inside * mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.86, 0.7), hc) * (1.4 + hc * 1.6);
-                  if (broken) col = mix(col, vec3(0.0), smoothstep(0.08, 0.3, min(ex, ey)));
+                  pr = broken ? 0.95 : 0.05 + hc * hc * 0.4;
+                  pb = (vec2(h11(hc + 1.0), h11(hc + 2.0)) - 0.5) * 0.12;
+                  if (lit) pe = inside * mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.86, 0.7), hc) * (1.4 + hc * 1.6);
+                  if (broken) pc = mix(pc, vec3(0.0), smoothstep(0.08, 0.3, min(ex, ey)));
                 }
-              } else if (kind == 0 && abs(cx) < hw + 0.14 && ((fy > wy1 && fy < wy1 + 0.24) || (fy > wy0 - 0.13 && fy < wy0))) {
-                // stone lintel and sill
-                col = stoneCol * (0.8 + r2 * 0.25) * (0.9 + 0.1 * vnoise(vec2(u, fy) * 8.0)); rough = 0.85;
+                // the frame over the wall, then the pane inside it
+                float pane = win * (1.0 - frame);
+                col = mix(col, trimCol, win); rough = mix(rough, 0.55, win);
+                col = mix(col, pc, pane); rough = mix(rough, pr, pane); bump = mix(bump, pb, pane);
+                emit = pe * pane; glass = pg * pane;
               }
             }
           }
         }
         // cornice / coping band at the top of older buildings
-        if (!party && kind == 0 && v > H - 1.1 && v < H - 0.15) { col = mix(col, trimCol * 1.1, 0.85); rough = 0.7; }
+        if (!party && kind == 0) {
+          float corn = cover(min(v - (H - 1.1), H - 0.15 - v), fw.y);
+          col = mix(col, trimCol * 1.1, 0.85 * corn); rough = mix(rough, 0.7, corn);
+        }
         // party walls: plain, the odd ghost sign
         if (party && r3 < 0.12 && v > 4.0 && v < min(H - 2.0, 12.0)) {
           vec2 q = vec2(u / L, (v - 4.0) / 8.0);
@@ -219,9 +247,9 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
         col *= 1.0 - streak * 0.35;
         float damp = smoothstep(1.4, 0.0, v) * (0.5 + 0.5 * vnoise(vec2(u * 2.0, v * 3.0)));
         col = mix(col, col * vec3(0.55, 0.6, 0.45), damp * 0.6);
-        if (r2 < 0.1) { float soot = smoothstep(0.35, 0.75, vnoise(vec2(u * 0.4 + seed, v * 0.12))) * smoothstep(2.0, 6.0, v); col *= 1.0 - soot * 0.8; if (glass) emit *= 0.0; }
+        if (r2 < 0.1) { float soot = smoothstep(0.35, 0.75, vnoise(vec2(u * 0.4 + seed, v * 0.12))) * smoothstep(2.0, 6.0, v); col *= 1.0 - soot * 0.8; emit *= 1.0 - glass; }
         // ivy climbing the older brick
-        if (!glass && kind == 0 && r3 > 0.78) {
+        if (glass < 0.5 && kind == 0 && r3 > 0.78) {
           float reach = H * (0.3 + 0.6 * h11(seed + 9.0));
           float ivy = smoothstep(0.1, 0.0, v / reach - (vnoise(vec2(u * 0.35, v * 0.2) + seed) * 1.2 - 0.2));
           float leaf = vnoise(vec2(u, v) * 9.0);
@@ -239,7 +267,7 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
         // old, grimy glass mirrors the sky at about half strength
         #if defined( RE_IndirectSpecular )
-        if (glass) radiance *= 0.5;
+        radiance *= 1.0 - 0.5 * glass;
         #endif`);
   };
   mat.customProgramCacheKey = () => `harbor-facade-${quality}-${far}-${n}`;
