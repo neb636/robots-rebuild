@@ -476,10 +476,33 @@ const decalTex = () => once('lw-decals', () => {
 });
 const DECAL = { rust: 0, grime: 1, guano: 2, soot: 3, damp: 4, salt: 5, graffiti: 6, poster: 7 } as const;
 
-/** lettering: CUSTOM HOUSE BLOCK. (raised granite letters), CHART HOUSE (gilt on a black board),
- *  MARRIOTT and LONG WHARF (white) */
-const signTex = () => once('lw-signs', () => {
-  const [cv, x] = canvas(1024, 512);
+/** a glyph of the hotel's entrance letters on the sign sheet: its cell, and width over height */
+interface Glyph { ch: string; uv: [number, number, number, number]; aspect: number }
+/** bronze: a cast plate, its raised rim, and verdigris run down from the letters */
+function bronze(x: CanvasRenderingContext2D, x0: number, y0: number, w: number, h: number) {
+  x.fillStyle = lin(x, 0, y0, 0, y0 + h, [[0, '#76552a'], [1, '#553a1c']]); x.fillRect(x0, y0, w, h);
+  x.strokeStyle = '#9a7840'; x.lineWidth = 5; x.strokeRect(x0 + 6, y0 + 6, w - 12, h - 12);
+  x.strokeStyle = 'rgba(30,20,10,0.6)'; x.lineWidth = 1.5; x.strokeRect(x0 + 10, y0 + 10, w - 20, h - 20);
+}
+function patina(x: CanvasRenderingContext2D, x0: number, y0: number, w: number, h: number, R: () => number) {
+  x.save(); x.beginPath(); x.rect(x0, y0, w, h); x.clip();
+  for (let k = 0; k < 26; k++) { const px = x0 + R() * w, py = y0 + R() * h * 0.7; x.fillStyle = lin(x, 0, py, 0, py + h * 0.4, [[0, `rgba(78,150,118,${0.25 + R() * 0.3})`], [1, 'rgba(78,150,118,0)']]); x.fillRect(px, py, 2 + R() * 6, h * 0.4); }
+  for (let k = 0; k < 14; k++) { x.fillStyle = `rgba(30,22,12,${R() * 0.25})`; x.beginPath(); x.arc(x0 + R() * w, y0 + R() * h, 4 + R() * 18, 0, 7); x.fill(); }
+  x.restore();
+}
+/** raised letters on bronze: a dark shadow below-right, the face, a lit lip */
+function castText(x: CanvasRenderingContext2D, t: string, cx: number, cy: number, font: string, maxW: number) {
+  x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = 'rgba(24,16,8,0.8)'; x.fillText(t, cx + 1.5, cy + 2, maxW);
+  x.fillStyle = '#d4b06a'; x.fillText(t, cx, cy, maxW);
+}
+/** lettering, one sheet with a glow twin for what still lights (1024 x 1024). The top half: CUSTOM HOUSE
+ *  BLOCK. (raised granite letters), CHART HOUSE (gilt on a black board), MARRIOTT and LONG WHARF (white).
+ *  The bottom: the Chart House's valance and blade sign, the Gardiner Building's plaque, the National
+ *  Historic Landmark plaque, and the hotel's entrance letters one by one (LONG WHARF backlit) */
+const signSheet = () => once('lw-signs', () => {
+  const [cv, x] = canvas(1024, 1024), [ce, e] = canvas(1024, 1024);
+  e.fillStyle = '#000'; e.fillRect(0, 0, 1024, 1024);
   x.textAlign = 'center'; x.textBaseline = 'middle';
   // raised letters: a shadow below-right, a lit edge above-left
   x.font = 'bold 84px "Copperplate", "Rockwell", Georgia, serif';
@@ -499,10 +522,87 @@ const signTex = () => once('lw-signs', () => {
   for (let i = 0; i < m.length; i++) { if (i !== 2) x.fillText(m[i], px, 320); px += 74; }
   x.font = 'bold 64px "Helvetica Neue", Helvetica, Arial, sans-serif';
   x.fillText('LONG WHARF', 512, 448, 960);
-  return canvasTex(cv);
+
+  // the Chart House's valance: cream letters on black canvas, the left end torn away, a few holes
+  const R2 = rng(1812);
+  x.fillStyle = '#141414'; x.fillRect(0, 512, 1024, 80);
+  x.fillStyle = '#262626'; x.fillRect(0, 512, 1024, 6); x.fillRect(0, 584, 1024, 8);
+  x.font = 'bold 48px Georgia, "Times New Roman", serif'; x.fillStyle = '#e2dccb';
+  x.fillText('C H A R T   H O U S E', 540, 553, 760);
+  x.save(); x.globalCompositeOperation = 'destination-out';
+  x.beginPath(); x.moveTo(0, 512); x.lineTo(120, 512); for (let k = 0; k <= 8; k++) x.lineTo(120 - k * 9 - R2() * 30, 512 + k * 10); x.lineTo(0, 592); x.fill();
+  for (let k = 0; k < 5; k++) { x.beginPath(); x.ellipse(160 + R2() * 840, 560 + R2() * 26, 4 + R2() * 10, 3 + R2() * 6, R2() * 3, 0, 7); x.fill(); }
+  x.restore();
+  x.save(); x.globalCompositeOperation = 'source-atop';
+  for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(150,140,120,${R2() * 0.12})`; x.beginPath(); x.arc(R2() * 1024, 512 + R2() * 80, 6 + R2() * 24, 0, 7); x.fill(); }
+  x.restore();
+
+  // the Chart House's blade: gilt on a black board
+  x.fillStyle = '#101211'; x.fillRect(0, 600, 320, 200);
+  x.strokeStyle = '#a07a30'; x.lineWidth = 6; x.strokeRect(10, 610, 300, 180);
+  x.font = 'bold 66px Georgia, "Times New Roman", serif'; x.fillStyle = '#c8a050';
+  x.fillText('CHART', 160, 660, 280); x.fillText('HOUSE', 160, 744, 280);
+  x.fillRect(80, 700, 160, 3);
+  x.save(); x.beginPath(); x.rect(0, 600, 320, 200); x.clip(); x.globalCompositeOperation = 'source-atop';
+  for (let i = 0; i < 30; i++) { x.fillStyle = `rgba(70,58,44,${R2() * 0.35})`; x.beginPath(); x.arc(R2() * 320, 600 + R2() * 200, 4 + R2() * 18, 0, 7); x.fill(); }
+  x.restore();
+
+  // the Gardiner Building's plaque
+  bronze(x, 330, 600, 300, 200);
+  castText(x, 'GARDINER BUILDING', 480, 648, 'bold 30px Georgia, "Times New Roman", serif', 260);
+  castText(x, '1763', 480, 704, 'bold 52px Georgia, "Times New Roman", serif', 200);
+  castText(x, 'LONG WHARF · BOSTON', 480, 760, '20px Georgia, "Times New Roman", serif', 250);
+  patina(x, 330, 600, 300, 200, R2);
+
+  // the National Historic Landmark plaque (Long Wharf and Customhouse Block, 1966)
+  bronze(x, 640, 600, 360, 260);
+  const nhl: [string, number, boolean][] = [
+    ['LONG WHARF AND', 638, true], ['CUSTOMHOUSE BLOCK', 666, true], ['HAS BEEN DESIGNATED A', 694, false], ['NATIONAL HISTORIC LANDMARK', 720, true],
+    ['THIS SITE POSSESSES NATIONAL SIGNIFICANCE', 748, false], ['IN COMMEMORATING THE HISTORY OF THE', 764, false], ['UNITED STATES OF AMERICA', 780, false],
+    ['1966', 804, true], ['NATIONAL PARK SERVICE', 826, false], ['UNITED STATES DEPARTMENT OF THE INTERIOR', 842, false],
+  ];
+  for (const [t, y, big] of nhl) castText(x, t, 820, y, `${big ? 'bold 22px' : '12px'} Georgia, "Times New Roman", serif`, 320);
+  patina(x, 640, 600, 360, 260, R2);
+
+  // the hotel's entrance letters, one cell each so they can fall one at a time; LONG WHARF is backlit
+  const glyphs = { a: [] as Glyph[], b: [] as Glyph[] };
+  const LIT = new Set([0, 1, 2, 4, 7, 8]); // of LONGWHARF: the G hangs dead, the H is gone, the A has failed
+  x.font = '600 62px Georgia, "Times New Roman", serif'; e.font = x.font; e.textAlign = 'center'; e.textBaseline = 'middle';
+  for (const [row, word, y0] of [['a', 'BOSTONMARRIOTT', 868], ['b', 'LONGWHARF', 946]] as const) {
+    let gx = 4;
+    [...word].forEach((ch, i) => {
+      const w = Math.ceil(x.measureText(ch).width) + 8, cx = gx + w / 2, cy = y0 + 40;
+      const lit = row === 'b' && LIT.has(i);
+      x.fillStyle = 'rgba(30,26,22,0.6)'; x.fillText(ch, cx + 1.5, cy + 2);
+      x.fillStyle = lit ? '#f6eedc' : '#dcd8ce'; x.fillText(ch, cx, cy);
+      if (lit) { e.shadowColor = '#ffd9a0'; e.shadowBlur = 6; e.fillStyle = '#ffe6c0'; e.fillText(ch, cx, cy); e.shadowBlur = 0; }
+      glyphs[row].push({ ch, uv: [gx / 1024, 1 - (y0 + 76) / 1024, (gx + w) / 1024, 1 - y0 / 1024], aspect: w / 76 });
+      gx += w + 6;
+    });
+  }
+  return { map: canvasTex(cv), glow: canvasTex(ce), glyphs };
 });
-/** sign atlas rows: [v0, v1] */
-const SIGN = { chb: [1 - 128 / 512, 1], chart: [1 - 256 / 512, 1 - 128 / 512], marriott: [1 - 384 / 512, 1 - 256 / 512], longwharf: [0, 1 - 384 / 512] } as const;
+/** sign sheet rows (pixels from the top) as [v0, v1] */
+const rowV = (p0: number, p1: number) => [1 - p1 / 1024, 1 - p0 / 1024] as const;
+const SIGN = { chb: rowV(0, 128), chart: rowV(128, 256), marriott: rowV(256, 384), longwharf: rowV(384, 512), valance: rowV(512, 592) } as const;
+/** sign sheet cells: [u0, v0, u1, v1] */
+const cellUV = (x0: number, y0: number, x1: number, y1: number): [number, number, number, number] => [x0 / 1024, 1 - y1 / 1024, x1 / 1024, 1 - y0 / 1024];
+const SCELL = { blade: cellUV(2, 602, 318, 798), gardiner: cellUV(332, 602, 628, 798), nhl: cellUV(642, 602, 998, 858) } as const;
+/** a two-sided board standing out from a wall at s (a blade sign): out0..out1 from the face, yb..yt */
+function blade(g: Geo, W: Wall, s: number, yb: number, yt: number, out0: number, out1: number, uv: [number, number, number, number]) {
+  const [u0, v0, u1, v1] = uv, d = W.dir;
+  for (const side of [1, -1]) {
+    const at = (o: number, y: number) => W.at(s + side * 0.025, y, -o), n: V3 = [d[0] * side, 0, d[2] * side];
+    // seen from +s the right hand points out from the wall; from -s, back toward it
+    const ua = side > 0 ? u0 : u1, ub = side > 0 ? u1 : u0;
+    g.quad(at(out0, yb), at(out1, yb), at(out1, yt), at(out0, yt), n, [ua, v0, ub, v0, ub, v1, ua, v1]);
+  }
+}
+/** a plate flat on a wall: centred on s, from yb to yt, `out` in front of the face */
+function plate(g: Geo, W: Wall, s: number, yb: number, yt: number, w: number, out: number, uv: [number, number, number, number]) {
+  const [u0, v0, u1, v1] = uv;
+  g.quad(W.at(s + w / 2, yb, -out), W.at(s - w / 2, yb, -out), W.at(s - w / 2, yt, -out), W.at(s + w / 2, yt, -out), W.n, [u0, v0, u1, v0, u1, v1, u0, v1]);
+}
 
 /** slate: staggered courses, a few rust-brown and green slates, lichen, the odd one slipped */
 const slateTex = () => once('lw-slate', () => {
@@ -606,7 +706,7 @@ const M = {
   panes: () => mat('panes', () => { const a = paneAtlas(); return new THREE.MeshStandardMaterial({ map: a.map, emissiveMap: a.emissive, emissive: '#ffffff', emissiveIntensity: 1.6, roughnessMap: a.rough, roughness: 1, metalness: 0.1, vertexColors: true }); }),
   sash: () => mat('sash', () => { const a = sashAtlas(); return new THREE.MeshStandardMaterial({ map: a.map, emissiveMap: a.emissive, emissive: '#ffffff', emissiveIntensity: 1.5, roughnessMap: a.rough, roughness: 1, metalness: 0.1, vertexColors: true, side: THREE.DoubleSide }); }),
   decal: () => mat('decal', () => new THREE.MeshStandardMaterial({ map: decalTex(), transparent: true, depthWrite: false, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, vertexColors: true })),
-  sign: () => mat('sign', () => new THREE.MeshStandardMaterial({ map: signTex(), transparent: true, alphaTest: 0.08, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })),
+  sign: () => mat('sign', () => { const t = signSheet(); return new THREE.MeshStandardMaterial({ map: t.map, emissiveMap: t.glow, emissive: '#ffffff', emissiveIntensity: 1.8, transparent: true, alphaTest: 0.08, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }); }),
   fabric: () => mat('fabric', () => new THREE.MeshStandardMaterial({ map: fabricTex(), roughness: 0.9, side: THREE.DoubleSide, vertexColors: true })),
   grass: () => mat('grass', () => new THREE.MeshStandardMaterial({ map: leafTex('grass'), color: '#a8b078', alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true })),
   ivy: () => mat('ivy', () => new THREE.MeshStandardMaterial({ map: leafTex('ivy'), color: '#6e8a4c', alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, vertexColors: true })),
@@ -985,8 +1085,28 @@ export const chartHouse: LandmarkBuilder = (ctx) => {
       const p = (ss: number, a: number, dy = 0) => W.at(ss, y + Math.sin(a) * 0.65 - dy, -Math.cos(a) * 1.4);
       fabric.quad(p(s - 1.25, a0), p(s + 1.25, a0), p(s + 1.25, a1, sag), p(s - 1.25, a1, sag), undefined, [0, 0.75, 2, 0.75, 2, 0.77, 0, 0.77]);
     }
-    fabric.quad(W.at(s + 1.25, y - 0.35, -1.42), W.at(s - 0.2, y - 0.4, -1.42), W.at(s - 0.2, y, -1.41), W.at(s + 1.25, y, -1.41), undefined, [0, 0.75, 1.5, 0.75, 1.5, 0.77, 0, 0.77]);
     fabric.col = [1, 1, 1];
+    // its valance, lettered, sagging a little in the middle and torn off at one end
+    {
+      const [v0, v1] = SIGN.valance, n = 8;
+      for (let k = 0; k < n; k++) {
+        const ta = k / n, tb = (k + 1) / n, sa = s + 1.25 - 2.5 * ta, sb = s + 1.25 - 2.5 * tb;
+        const da = Math.sin(ta * Math.PI) * 0.04, db = Math.sin(tb * Math.PI) * 0.04;
+        sign.quad(W.at(sa, y - 0.32 - da, -1.43), W.at(sb, y - 0.32 - db, -1.43), W.at(sb, y - db * 0.3, -1.42), W.at(sa, y - da * 0.3, -1.42), W.n, [ta, v0, tb, v0, tb, v1, ta, v1]);
+      }
+    }
+    // the blade on its bracket beyond the canopy, readable up and down the wharf
+    {
+      const sb = s + 1.65, yb = PL + 2.98, yt = yb + 0.6;
+      blade(sign, W, sb, yb, yt, 0.32, 1.28, SCELL.blade);
+      rod(iron, W.at(sb, yt + 0.12, 0), W.at(sb, yt + 0.12, -1.38), 0.022);
+      rod(iron, W.at(sb, yt - 0.25, 0), W.at(sb, yt + 0.12, -0.55), 0.016);
+      for (const o of [0.4, 1.2]) rod(iron, W.at(sb, yt + 0.12, -o), W.at(sb, yt, -o), 0.008);
+      decal(dec, W, sb, yb - 1.6, 0.4, 1.7, DECAL.rust, 0.03);
+    }
+    // the building's own plaque by the door
+    plate(sign, W, s + 1.45, PL + 1.45, PL + 1.75, 0.45, 0.03, SCELL.gardiner);
+    ledge(iron, W, s + 1.45 - 0.235, s + 1.45 + 0.235, PL + 1.44, PL + 1.76, 0.025, 0, 1 | 2 | 4 | 8 | 16);
     // a bracket lantern beside the door, still lit
     const ls = s - 1.35, ly = PL + 2.45;
     const lantern = new THREE.Group();
@@ -1075,6 +1195,11 @@ export const customHouseBlock: LandmarkBuilder = (ctx) => {
       const h: Hole = { s0: sa, s1: sb, y0: PL, y1: y0 + 3.5, rise: 0.75 };
       ground.get(W)!.push(h);
       reveal(gran, W, h, 3.6, seg, true);
+      // the National Historic Landmark plaque, on the passage wall just inside the arch
+      {
+        const [u0, v0, u1, v1] = SCELL.nhl, sj = sb - 0.02, d = W.dir, yb = PL + 1.3, yt = yb + 0.6 * (256 / 356);
+        sign.quad(W.at(sj, yb, 0.55), W.at(sj, yb, 1.15), W.at(sj, yt, 1.15), W.at(sj, yt, 0.55), [-d[0], 0, -d[2]], [u0, v0, u1, v0, u1, v1, u0, v1]);
+      }
       dark.quad(W.at(sa, PL, 3.6), W.at(sb, PL, 3.6), W.at(sb, h.y1, 3.6), W.at(sa, h.y1, 3.6), W.n);
       const ap = archPts(h, seg), sc = (sa + sb) / 2, hw = (sb - sa) / 2, Rr = (hw * hw + 0.75 * 0.75) / 1.5, cy = h.y1 - Rr;
       for (let k = 0; k < seg; k++) {
@@ -1549,6 +1674,35 @@ export const marriott: LandmarkBuilder = (ctx) => {
       metal.quad([ua, y0c - 0.06, wOf(side, c0)], [ub, y0c - 0.06, wOf(side, c0)], [ub, y0c + 0.14, wOf(side, c0)], [ua, y0c + 0.14, wOf(side, c0)], [0, 0, -dir[2]]);
       if (R() < 0.12) nest(wood, FIN[i], slopeY(ST * (1 + Math.floor(R() * 4))) + 0.14, wOf(side, ST * (1 + Math.floor(R() * 4))), R);
     }
+  }
+
+  // ---------------------------------------------------------------- the name over the main entrance
+  // BOSTON MARRIOTT LONG WHARF in letters standing off the brick band above the fourth-floor ribbons, on
+  // the south face over the glass vault (the drop-off on the Long Wharf road): the T of BOSTON and the H
+  // of WHARF gone, the G of LONG hanging by one fixing; LONG WHARF is backlit, and most of it still lights
+  {
+    const c = (FIN[ENTRY] + FIN[ENTRY + 1]) / 2, { W: B, s: bs } = along('S', 0, 0, uE), G = signSheet().glyphs;
+    const lh = 0.62, yb = y0 + 13.72, yt = yb + lh, space = 0.38, kern = 0.05;
+    const words = [G.a.slice(0, 6), G.a.slice(6), G.b.slice(0, 4), G.b.slice(4)];
+    const width = words.reduce((t, wd) => t + wd.reduce((a, g) => a + g.aspect * lh + kern, 0), 0) + space * (words.length - 1);
+    const gone = new Set(['a3', 'b5']), askew = 'b3';
+    let sc = bs(c) + width / 2, ai = 0, bi = 0;
+    words.forEach((wd, wi) => {
+      for (const g of wd) {
+        const row = wi < 2 ? 'a' : 'b', key = `${row}${row === 'a' ? ai++ : bi++}`, w = g.aspect * lh, [u0, v0, u1, v1] = g.uv;
+        if (gone.has(key)) {
+          // two fixings left, and the rust they've run
+          for (const f of [0.3, 0.7]) { const q = B.at(sc - w * f, yb + lh * 0.5, -0.07); iron.box(q[0] - 0.05, q[1] - 0.02, q[2] - 0.05, q[0] + 0.05, q[1] + 0.02, q[2] + 0.05); }
+          decal(dec, B, sc - w / 2, yb - 1.7, 0.35, 1.9, DECAL.rust, 0.03);
+        } else if (key === askew) {
+          // swung down from its top-left fixing
+          const a = 0.55, p = (x: number, y: number): V3 => { const xr = x * Math.cos(a) + y * Math.sin(a), yr = -x * Math.sin(a) + y * Math.cos(a); return B.at(sc - xr, yt + yr, -0.13); };
+          sign.quad(p(0, -lh), p(w, -lh), p(w, 0), p(0, 0), B.n, [u0, v0, u1, v0, u1, v1, u0, v1]);
+        } else sign.quad(B.at(sc, yb, -0.12), B.at(sc - w, yb, -0.12), B.at(sc - w, yt, -0.12), B.at(sc, yt, -0.12), B.n, [u0, v0, u1, v0, u1, v1, u0, v1]);
+        sc -= w + kern;
+      }
+      sc -= space;
+    });
   }
 
   // ---------------------------------------------------------------- the gable ends

@@ -9,8 +9,17 @@
 //
 // It also takes over the plaza pieces when the bake gives them to it (add their OpenStreetMap ways
 // to this landmark in landmarks.json): the West Wing's big angled canopy and glass lantern (w29877140),
-// the harbor seal pool (w32600260) and the Simons IMAX Theatre (w29833421). Without them those stay
-// generic buildings.
+// the harbor seal pool (w32600260) and the Simons Theatre (w29833421; IMAX until 2020). Without them
+// those stay generic buildings.
+//
+// What says it's the Aquarium from Atlantic Avenue: the round striped logo and "New England / Aquarium"
+// in raised navy letters high on the old building's plaza face (the l and r gone, ghosts and bolt holes
+// left, the w hanging off one stud, rust run down the concrete), and again on the harbour face. Under
+// the canopy, the box office: six numbered windows under blue panels, dead screens but one, belts
+// sagging between the stanchions, the A-frame saying it's closed today. Exhibit posters bleached
+// behind the glass, Enter and Exit on the doors. The seal pool's rail, its panels, and the notice
+// that the seals are off exhibit. SIMONS THEATRE where IMAX was, the old letters' ghost below, and a
+// dead LED ticker with a few characters stuck lit. All of that is on the wharf's own sheet (aqsheet.ts).
 import * as THREE from 'three';
 import earcut from 'earcut';
 import type { LandmarkBuilder, LandmarkCtx } from './types';
@@ -19,6 +28,8 @@ import { ironMat, pbrMat, flickerUpdate, type FogLight } from '../../props';
 import { leafCards, type Card } from '../../foliage';
 import { rng, vnoise, vnoise2, fbm, clamp01, sstep } from '../../noise';
 import { latticeNoise2D, VNOISE_2D_GLSL } from '../../noisetex';
+import { aquariumSheet } from '../aqsheet';
+import { fitText, weather as wear, roundRect, measure, type SignAtlas } from '../signs';
 
 type P2 = [number, number];
 type P3 = [number, number, number];
@@ -342,36 +353,19 @@ function glassAtlas(clear: boolean) {
 
 /** where things sit in the sign atlas, in canvas pixels [x0, y0, x1, y1] */
 const SIGN = {
-  logo: [0, 0, 256, 256], name: [256, 0, 1024, 256], roof: [0, 256, 640, 400], banner: [0, 400, 640, 640],
+  roof: [0, 256, 640, 400], banner: [0, 400, 640, 640],
   poster: [640, 256, 832, 544], cafe: [640, 544, 1024, 640], graffiti: [0, 640, 1024, 800],
-  seals: [0, 800, 512, 900], imax: [512, 800, 1024, 900], simons: [0, 900, 1024, 960], flag: [832, 256, 1024, 352],
+  seals: [0, 800, 512, 900], simons: [0, 900, 1024, 960], flag: [832, 256, 1024, 352],
 } as const;
 type SignKey = keyof typeof SIGN;
 const signUV = (k: SignKey): [number, number, number, number] => { const [x0, y0, x1, y1] = SIGN[k]; return [x0 / 1024, 1 - y1 / 1024, x1 / 1024, 1 - y0 / 1024]; };
 
-function drawLogo(c: CanvasRenderingContext2D, x: number, y: number, r: number) {
-  c.fillStyle = '#2c5c93'; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
-  c.strokeStyle = '#f2efe6'; c.lineCap = 'round'; c.lineWidth = r * 0.12;
-  c.beginPath(); c.moveTo(x - r * 0.62, y); c.quadraticCurveTo(x - r * 0.02, y - r * 0.68, x + r * 0.52, y + r * 0.3); c.stroke();
-  c.beginPath(); c.moveTo(x - r * 0.62, y); c.quadraticCurveTo(x - r * 0.02, y + r * 0.68, x + r * 0.52, y - r * 0.3); c.stroke();
-  c.lineWidth = r * 0.085; c.beginPath(); c.arc(x - r * 0.3, y, r * 0.12, 0, Math.PI * 2); c.stroke();
-}
-
-/** Logo and lettering, the faded banner, a machine poster, the café letters, graffiti, the seal and
+/** The roof's lettering, the faded banner, a machine poster, the café letters, graffiti, the seal and
  *  theatre signs: everything printed or painted, in one alpha-tested texture. */
 function signAtlas() {
   const { cv, c } = canvas(1024, 1024);
   const R = rng(1998);
-  drawLogo(c, 128, 128, 118);
   c.textBaseline = 'alphabetic'; c.textAlign = 'left';
-  // "New England Aquarium", the g long gone (its ghost stays, a shade darker than the concrete)
-  c.font = 'bold 96px Helvetica, Arial, sans-serif'; c.fillStyle = '#1d2b45';
-  let x = 272;
-  for (const ch of 'New England') {
-    if (ch === 'g') { c.fillStyle = 'rgba(64,60,52,0.62)'; c.fillText(ch, x, 112); c.fillStyle = '#1d2b45'; } else c.fillText(ch, x, 112);
-    x += c.measureText(ch).width;
-  }
-  c.fillText('Aquarium', 272, 228);
   // the roof sign
   c.fillStyle = '#34322e'; c.font = '600 120px Helvetica, Arial, sans-serif'; c.fillText('Aquarium', 22, 368);
   // the banner: faded blue vinyl, a shark, torn along the bottom
@@ -418,7 +412,6 @@ function signAtlas() {
   c.restore();
   c.textAlign = 'left'; c.textBaseline = 'alphabetic';
   c.fillStyle = '#e8e6de'; c.font = 'bold 50px Helvetica, Arial, sans-serif'; c.fillText('Atlantic Harbor Seals', 12, 868);
-  c.fillStyle = '#5ec0f0'; c.font = 'bold 82px Helvetica, Arial, sans-serif'; c.fillText('IMAX', 530, 878); c.fillStyle = '#e8eef4'; c.font = 'bold 44px Helvetica, Arial, sans-serif'; c.fillText('THEATRE', 760, 872);
   c.fillStyle = '#3a3c3e'; c.font = '600 44px Helvetica, Arial, sans-serif'; c.fillText('MATTHEW AND MARCIA SIMONS THEATRE', 14, 946);
   // the roof flag, sun-rotted to pinks and greys, its fly end in rags
   {
@@ -475,6 +468,237 @@ function muralTex() {
   }
   return canvasTex(cv);
 }
+
+// ------------------------------------------------------------------ the wharf's own sign sheet (aqsheet.ts)
+// What came after the first pass is drawn on Central Wharf's shared sheet, in two heights (122 and
+// 256 px) so it packs into few shelves: the raised letters, their ghosts and rust runs, the logo, the
+// box office's panels and screens, posters, the seal pool's panel and notice, the A-frame, the ticker.
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const NAVY = '#1d2b45';
+/** the raised letters' cells: font size, baseline from the top, height (px); Helvetica's caps are 0.72 em */
+const GF = 110, GBASE = 92, GH = 122;
+const gFont = `bold ${GF}px ${SANS}`;
+const gAdv = (ch: string) => measure(ch, gFont);
+const gW = (ch: string) => Math.ceil(gAdv(ch)) + 8;
+type Q4 = [number, number, number, number];
+
+/** the round logo: horizontal stripes of the two blues and white, a white outlined fish with an eye */
+function drawLogo2(c: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  c.save(); c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.clip();
+  c.fillStyle = '#f4f6f4'; c.fillRect(x - r, y - r, r * 2, r * 2);
+  const n = 7, bh = (r * 2) / n;
+  for (let i = 0; i < n; i++) { c.fillStyle = i % 2 ? '#6CB2DC' : '#007AC2'; c.fillRect(x - r, y - r + i * bh + bh * 0.09, r * 2, bh * 0.82); }
+  c.restore();
+  c.strokeStyle = '#f7f8f6'; c.lineWidth = r * 0.075; c.lineJoin = 'round';
+  c.beginPath(); c.arc(x, y, r - c.lineWidth / 2, 0, Math.PI * 2); c.stroke();
+  c.lineWidth = r * 0.09;
+  c.beginPath(); c.moveTo(x - r * 0.6, y); c.quadraticCurveTo(x - r * 0.1, y - r * 0.52, x + r * 0.3, y);
+  c.quadraticCurveTo(x - r * 0.1, y + r * 0.52, x - r * 0.6, y); c.closePath(); c.stroke();
+  c.beginPath(); c.moveTo(x + r * 0.3, y); c.lineTo(x + r * 0.62, y - r * 0.3); c.lineTo(x + r * 0.62, y + r * 0.3); c.closePath(); c.stroke();
+  c.fillStyle = '#f7f8f6'; c.beginPath(); c.arc(x - r * 0.33, y - r * 0.06, r * 0.08, 0, Math.PI * 2); c.fill();
+  c.fillStyle = NAVY; c.beginPath(); c.arc(x - r * 0.33, y - r * 0.06, r * 0.035, 0, Math.PI * 2); c.fill();
+}
+const cellWhite = (A: SignAtlas) => A.add('aq-white', 8, 8, (c, w, h) => { c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); });
+const cellPaper = (A: SignAtlas) => A.add('aq-paper', 8, 8, (c, w, h) => { c.fillStyle = '#ddd5c0'; c.fillRect(0, 0, w, h); });
+const cellLogo = (A: SignAtlas) => A.add('aq-logo', 256, 256, (c, w, h) => { drawLogo2(c, w / 2, h / 2, 124); wear(c, w, h, rng(1969), 0.45); });
+/** one letter cut from navy-painted aluminium, grimed */
+const cellGlyph = (A: SignAtlas, ch: string) => A.add(`aq-gl:${ch}`, gW(ch), GH, (c, w, h) => {
+  c.font = gFont; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  const g = c.createLinearGradient(0, GBASE - 84, 0, GBASE + 24);
+  g.addColorStop(0, '#2c4064'); g.addColorStop(0.3, NAVY); g.addColorStop(1, '#131c2e');
+  c.fillStyle = g; c.fillText(ch, 4, GBASE);
+  wear(c, w, h, rng(ch.charCodeAt(0) * 7 + 3), 0.5);
+});
+/** where a letter came off: the concrete it sheltered, paler, a grime line round it, the studs' holes */
+const cellGhost = (A: SignAtlas, ch: string) => A.add(`aq-gh:${ch}`, gW(ch), GH, (c, w, h) => {
+  const R = rng(ch.charCodeAt(0) * 13 + 5);
+  c.font = gFont; c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.lineJoin = 'round';
+  c.strokeStyle = '#6c645a'; c.lineWidth = 5; c.strokeText(ch, 4, GBASE);
+  c.fillStyle = '#c8c1b3'; c.fillText(ch, 4, GBASE);
+  c.save(); c.globalCompositeOperation = 'source-atop';
+  for (let i = 0; i < 40; i++) { c.fillStyle = `rgba(${150 + R() * 40},${144 + R() * 36},${130 + R() * 30},0.5)`; c.fillRect(R() * w, R() * h, 2 + R() * 5, 2 + R() * 5); }
+  c.restore();
+  for (const [fx, fy] of [[0.3, 0.55], [0.7, 0.55], [0.5, 0.85]]) {
+    const x = w * fx, y = GBASE - 60 * fy;
+    c.fillStyle = '#7a4a2a'; c.beginPath(); c.arc(x, y + 1.5, 6, 0, 7); c.fill();
+    c.fillStyle = '#25211d'; c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.fill();
+  }
+});
+/** rust run from a stud: tapering, browning toward the concrete's own colour */
+const cellDrip = (A: SignAtlas, i: number) => A.add(`aq-drip:${i}`, 40, GH, (c, w, h) => {
+  const R = rng(500 + i * 31);
+  for (let k = 0; k < 1 + i; k++) {
+    const x = 8 + R() * 24, w0 = 5 + R() * 6, len = h * (0.55 + R() * 0.45);
+    const g = c.createLinearGradient(0, 0, 0, len);
+    g.addColorStop(0, '#53301c'); g.addColorStop(0.45, '#77513a'); g.addColorStop(1, '#93826f');
+    c.fillStyle = g; c.beginPath(); c.moveTo(x - w0 / 2, 0);
+    c.quadraticCurveTo(x - w0 * 0.25 + (R() - 0.5) * 4, len * 0.6, x, len); c.quadraticCurveTo(x + w0 * 0.25, len * 0.6, x + w0 / 2, 0); c.fill();
+  }
+});
+/** the IMAX letters' ghost on the bronze: brighter metal where they kept the weather off, bolt holes */
+const cellImaxGhost = (A: SignAtlas) => A.add('aq-imaxghost', 520, 110, (c, w, h) => {
+  const R = rng(2020);
+  c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.lineJoin = 'round';
+  // only a shade off the bronze, and patchy (the decal is alpha-cut, so the weather eats holes in it)
+  for (const [t, x, f] of [['IMAX', 6, 'bold 88px'], ['THEATRE', 262, 'bold 46px']] as const) {
+    c.font = `${f} ${SANS}`; c.strokeStyle = '#a07f55'; c.lineWidth = 2; c.strokeText(t, x, 92);
+    c.fillStyle = '#b8966a'; c.fillText(t, x, 92);
+  }
+  c.save(); c.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 900; i++) { c.fillStyle = '#000'; c.fillRect(R() * w, R() * h, 2 + R() * 7, 2 + R() * 5); }
+  c.restore();
+  for (let i = 0; i < 22; i++) { const x = 16 + R() * (w - 32), y = 40 + R() * 46; c.fillStyle = '#7d4f2c'; c.beginPath(); c.arc(x, y + 1, 5, 0, 7); c.fill(); c.fillStyle = '#1e1a16'; c.beginPath(); c.arc(x, y, 3, 0, 7); c.fill(); }
+});
+/** the theatre's LED ticker, black and dead but for a run stuck lit mid-word; in two halves, one above
+ *  the other (the band is long and thin) */
+const cellTicker = (A: SignAtlas) => A.add('aq-ticker', 512, GH, (c, w, h) => {
+  c.fillStyle = '#0a0908'; c.fillRect(0, 0, w, h);
+  const msg = ' NOW SHOWING  •  SHOWTIMES AT THE BOX OFFICE  •  MEMBERS SAVE ';
+  const cols = 200, rows = 7, sc = 3;
+  const off = document.createElement('canvas'); off.width = cols * sc; off.height = (rows + 2) * sc;
+  const o = off.getContext('2d')!;
+  o.fillStyle = '#fff'; o.font = `bold ${Math.round((rows * sc) / 0.72)}px Menlo, Consolas, monospace`; o.textBaseline = 'alphabetic';
+  o.fillText(msg, 0, rows * sc);
+  const px = o.getImageData(0, 0, off.width, off.height).data;
+  const half = cols / 2, pitchX = w / half, pitchY = h / 2 / (rows + 2);
+  for (let col = 0; col < cols; col++) for (let row = 0; row < rows; row++) {
+    const on = px[(((row + 0.5) * sc | 0) * off.width + ((col + 0.5) * sc | 0)) * 4 + 3] > 110;
+    const lit = on && col >= 30 && col < 57;
+    const hx = col % half, hy = col < half ? 0 : h / 2;
+    const x = (hx + 0.5) * pitchX, y = hy + (row + 1.5) * pitchY;
+    c.fillStyle = lit ? '#ff8a1e' : on ? '#2c1c10' : '#17130f';
+    c.beginPath(); c.arc(x, y, pitchX * 0.36, 0, 7); c.fill();
+  }
+});
+/** a window's blue header: its number in a white disc, TICKETS; 0 is the end panel, BOX OFFICE */
+const cellTix = (A: SignAtlas, n: number) => A.add(`aq-tix:${n}`, n ? 240 : 480, 100, (c, w, h) => {
+  c.fillStyle = '#1f62ad'; c.fillRect(0, 0, w, h);
+  c.strokeStyle = 'rgba(240,244,248,0.8)'; c.lineWidth = 3; c.strokeRect(5, 5, w - 10, h - 10);
+  if (n) {
+    c.fillStyle = '#f2f4f6'; c.beginPath(); c.arc(50, 50, 32, 0, 7); c.fill();
+    fitText(c, String(n), 50, 53, 50, `bold 48px ${SANS}`, '#1f62ad');
+    fitText(c, 'TICKETS', 160, 53, 140, `bold 34px ${SANS}`, '#f2f4f6');
+  } else { drawLogo2(c, 50, 50, 34); fitText(c, 'BOX OFFICE', 270, 53, 360, `bold 52px ${SANS}`, '#f2f4f6'); }
+  c.fillStyle = 'rgba(214,220,214,0.3)'; c.fillRect(0, 0, w, h);
+  wear(c, w, h, rng(80 + n), 0.75);
+});
+/** a screen over a window: dead (black glass, a sheen, one cracked) or the one still on */
+const cellScreen = (A: SignAtlas, lit: boolean) => A.add(`aq-scr:${lit}`, 160, 100, (c, w, h) => {
+  const R = rng(lit ? 7 : 8);
+  if (lit) {
+    c.fillStyle = '#0c2142'; c.fillRect(0, 0, w, h);
+    fitText(c, 'THIS WINDOW', w / 2, 30, w - 20, `20px ${SANS}`, '#e8eef8');
+    fitText(c, 'CLOSED', w / 2, 62, w - 20, `bold 34px ${SANS}`, '#ffffff');
+    for (let i = 0; i < 5; i++) { c.fillStyle = ['#ff3a7a', '#3affc8', '#ffffff'][i % 3]; c.fillRect(R() * w * 0.6, 78 + R() * 18, 20 + R() * 60, 2); }
+  } else {
+    c.fillStyle = '#101316'; c.fillRect(0, 0, w, h);
+    const g = c.createLinearGradient(0, 0, w, h); g.addColorStop(0.3, 'rgba(255,255,255,0)'); g.addColorStop(0.45, 'rgba(255,255,255,0.08)'); g.addColorStop(0.6, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.strokeStyle = 'rgba(170,176,180,0.7)'; c.lineWidth = 1;
+    for (let k = 0; k < 6; k++) { c.beginPath(); c.moveTo(118, 30); c.lineTo(118 + (R() - 0.5) * 90, 30 + (R() - 0.5) * 70); c.stroke(); }
+  }
+});
+/** white vinyl on a glass door */
+const cellDoor = (A: SignAtlas, word: 'Enter' | 'Exit') => A.add(`aq-door:${word}`, 160, 100, (c, w) => {
+  fitText(c, word, w / 2, 44, w - 16, `bold 50px ${SANS}`, '#f2f2ee');
+  c.strokeStyle = '#f2f2ee'; c.lineWidth = 5; c.lineCap = 'round';
+  const dir = word === 'Enter' ? 1 : -1, x0 = w / 2 - dir * 32, x1 = w / 2 + dir * 32;
+  c.beginPath(); c.moveTo(x0, 82); c.lineTo(x1, 82); c.moveTo(x1 - dir * 12, 72); c.lineTo(x1, 82); c.lineTo(x1 - dir * 12, 92); c.stroke();
+});
+type PosterKind = 'penguins' | 'tank' | 'rays' | 'jellies';
+/** an exhibit poster, sun-faded */
+const cellPoster = (A: SignAtlas, kind: PosterKind) => A.add(`aq-poster:${kind}`, 176, 256, (c, w, h) => {
+  const R = rng(kind.length * 977);
+  const bg = (a: string, b: string) => { const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, a); g.addColorStop(1, b); c.fillStyle = g; c.fillRect(0, 0, w, h); };
+  const title = (lines: string[], col: string) => lines.forEach((t, i) => fitText(c, t, w / 2, 28 + i * 30, w - 18, `bold 27px ${SANS}`, col));
+  if (kind === 'penguins') {
+    bg('#7fbad8', '#e6f0f2');
+    c.fillStyle = '#f6f8f8'; c.beginPath(); c.moveTo(0, 200); c.lineTo(60, 186); c.lineTo(140, 192); c.lineTo(w, 180); c.lineTo(w, 228); c.lineTo(0, 228); c.fill();
+    for (const [x, s] of [[48, 1], [92, 1.2], [134, 0.9]]) {
+      const y = 196 - 50 * s;
+      c.fillStyle = '#16191d'; c.beginPath(); c.ellipse(x, y, 17 * s, 40 * s, 0, 0, 7); c.fill(); c.beginPath(); c.arc(x, y - 40 * s, 12 * s, 0, 7); c.fill();
+      c.fillStyle = '#f2f2ee'; c.beginPath(); c.ellipse(x + 3 * s, y + 6 * s, 11 * s, 30 * s, 0, 0, 7); c.fill();
+      c.fillStyle = '#16191d'; c.fillRect(x - 8 * s, y - 14 * s, 18 * s, 3 * s);
+      c.fillStyle = '#e38a3a'; c.beginPath(); c.moveTo(x + 10 * s, y - 42 * s); c.lineTo(x + 22 * s, y - 39 * s); c.lineTo(x + 10 * s, y - 36 * s); c.fill();
+    }
+    title(['PENGUINS'], NAVY);
+  } else if (kind === 'tank') {
+    bg('#0d5a86', '#05213a');
+    c.fillStyle = 'rgba(255,255,255,0.07)'; for (let i = 0; i < 4; i++) { const x = 20 + i * 44; c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 18, 0); c.lineTo(x + 50, h); c.lineTo(x + 20, h); c.fill(); }
+    c.fillStyle = '#4f7d55'; c.beginPath(); c.ellipse(88, 140, 40, 28, -0.15, 0, 7); c.fill();
+    c.fillStyle = '#6f9a6a'; c.beginPath(); c.ellipse(126, 130, 12, 9, 0, 0, 7); c.fill();
+    for (const [x, y, a] of [[60, 112, -0.9], [116, 160, 0.7], [56, 166, 2.4], [118, 116, -2.2]]) { c.save(); c.translate(x, y); c.rotate(a); c.beginPath(); c.ellipse(16, 0, 18, 6, 0, 0, 7); c.fill(); c.restore(); }
+    c.fillStyle = '#e9c13c'; for (let i = 0; i < 9; i++) { const x = 16 + R() * 144, y = 80 + R() * 120; c.beginPath(); c.ellipse(x, y, 7, 3.5, 0, 0, 7); c.fill(); c.beginPath(); c.moveTo(x + 6, y); c.lineTo(x + 11, y - 4); c.lineTo(x + 11, y + 4); c.fill(); }
+    c.fillStyle = '#b4584a'; for (let i = 0; i < 8; i++) { c.beginPath(); c.arc(i * 24 + R() * 8, 222, 14 + R() * 10, Math.PI, 0); c.fill(); }
+    title(['GIANT', 'OCEAN TANK'], '#f2f4f2');
+  } else if (kind === 'rays') {
+    bg('#1e8a96', '#0d4656');
+    c.fillStyle = '#d6cfba'; c.beginPath(); c.moveTo(88, 96); c.quadraticCurveTo(150, 130, 160, 142); c.quadraticCurveTo(120, 150, 88, 190); c.quadraticCurveTo(56, 150, 16, 142); c.quadraticCurveTo(26, 130, 88, 96); c.fill();
+    c.strokeStyle = '#d6cfba'; c.lineWidth = 3; c.beginPath(); c.moveTo(88, 186); c.quadraticCurveTo(96, 214, 82, 240); c.stroke();
+    fitText(c, 'Touch gently, with two fingers', w / 2, 236, w - 16, `13px ${SANS}`, '#e8f0ee');
+    title(['SHARK & RAY', 'TOUCH TANK'], '#f6f6f0');
+  } else {
+    bg('#1a0f2e', '#2c1846');
+    for (const [x, y, s] of [[52, 120, 1], [120, 150, 0.8], [84, 196, 0.6]]) {
+      c.fillStyle = 'rgba(244,150,190,0.85)'; c.beginPath(); c.ellipse(x, y, 26 * s, 20 * s, 0, Math.PI, 0); c.fill();
+      c.strokeStyle = 'rgba(250,190,214,0.8)'; c.lineWidth = 1.6;
+      for (let k = 0; k < 6; k++) { const tx = x - 20 * s + k * 8 * s; c.beginPath(); c.moveTo(tx, y); c.bezierCurveTo(tx + 8, y + 24 * s, tx - 8, y + 40 * s, tx + 4, y + 64 * s); c.stroke(); }
+    }
+    title(['SEA JELLIES'], '#f6e4ee');
+  }
+  drawLogo2(c, 20, h - 14, 9);
+  fitText(c, 'NEW ENGLAND AQUARIUM', 98, h - 13, 140, `bold 11px ${SANS}`, kind === 'penguins' ? NAVY : '#eef0ee');
+  // two summers through south-west glass
+  c.fillStyle = 'rgba(234,228,210,0.36)'; c.fillRect(0, 0, w, h);
+  wear(c, w, h, R, 0.5);
+});
+/** the interpretive panel on the seal pool's rail: seals, a title, paragraphs gone to grey lines */
+const cellSealPanel = (A: SignAtlas) => A.add('aq-sealpanel', 410, 256, (c, w, h) => {
+  const R = rng(1674);
+  c.fillStyle = '#1f4a5a'; c.fillRect(0, 0, w, h);
+  c.fillStyle = '#163846'; c.fillRect(0, 0, w, 58);
+  fitText(c, 'Atlantic Harbor Seals', w / 2 + 20, 26, w - 80, `bold 32px ${SANS}`, '#f0f2ee');
+  fitText(c, 'Phoca vitulina', w / 2 + 20, 48, 200, `italic 15px ${SANS}`, '#bcd2d6');
+  drawLogo2(c, 30, 29, 20);
+  for (const [x, y, s, f] of [[80, 196, 1, 1], [150, 218, 0.75, -1]]) {
+    c.fillStyle = '#a7aeac'; c.save(); c.translate(x, y); c.scale(f * s, s);
+    c.beginPath(); c.ellipse(0, 0, 50, 17, 0, 0, 7); c.fill(); c.beginPath(); c.ellipse(-46, -12, 16, 13, -0.3, 0, 7); c.fill();
+    c.beginPath(); c.moveTo(44, -4); c.lineTo(66, -14); c.lineTo(62, 4); c.lineTo(66, 16); c.lineTo(44, 6); c.fill();
+    c.fillStyle = '#1f2a2e'; c.beginPath(); c.arc(-52, -16, 2.5, 0, 7); c.fill();
+    c.restore();
+  }
+  c.fillStyle = 'rgba(226,234,230,0.8)';
+  for (const [x0, cw, y0, y1] of [[18, 170, 72, 160], [212, 180, 72, 236]]) for (let y = y0; y < y1; y += 9) c.fillRect(x0, y, cw * (y + 9 >= y1 || R() < 0.15 ? 0.4 + R() * 0.4 : 0.9 + R() * 0.1), 3.5);
+  c.fillStyle = 'rgba(210,214,200,0.22)'; c.fillRect(0, 0, w, h);
+  wear(c, w, h, R, 0.7);
+});
+/** the notice taped inside the pool's glass, its top right corner peeled off and folded down */
+const NOTICE_CUT = 54;
+const cellNotice = (A: SignAtlas) => A.add('aq-notice', 300, 220, (c, w, h) => {
+  const R = rng(2026);
+  c.fillStyle = '#ece5d2'; c.fillRect(0, 0, w, h);
+  drawLogo2(c, 34, 34, 20);
+  fitText(c, 'NEW ENGLAND AQUARIUM', 160, 34, 200, `bold 15px ${SANS}`, NAVY);
+  ['The harbor seals are', 'off exhibit while we', 'improve their habitat.'].forEach((t, i) => fitText(c, t, w / 2, 84 + i * 30, w - 30, `bold 25px ${SANS}`, '#173052'));
+  fitText(c, 'Thank you for your patience.', w / 2, 184, w - 60, `15px ${SANS}`, '#304660');
+  c.fillStyle = '#d3cfbf'; c.fillRect(-6, 4, 40, 14); c.fillRect(w - 34, h - 18, 40, 14); c.fillRect(-6, h - 18, 40, 14);
+  const g = c.createRadialGradient(w / 2, h / 2, 40, w / 2, h / 2, w * 0.7);
+  g.addColorStop(0, 'rgba(200,170,110,0)'); g.addColorStop(1, 'rgba(170,130,70,0.4)'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+  wear(c, w, h, R, 0.45);
+  c.globalCompositeOperation = 'destination-out';
+  c.beginPath(); c.moveTo(w - NOTICE_CUT, 0); c.lineTo(w, 0); c.lineTo(w, NOTICE_CUT); c.closePath(); c.fill();
+  c.globalCompositeOperation = 'source-over';
+});
+/** the blue A-frame out on the plaza, still telling people the box office is closed */
+const cellAFrame = (A: SignAtlas) => A.add('aq-aframe', 176, 256, (c, w, h) => {
+  c.fillStyle = '#2163a8'; c.fillRect(0, 0, w, h);
+  c.strokeStyle = '#eef2f4'; c.lineWidth = 3; roundRect(c, 7, 7, w - 14, h - 14, 8); c.stroke();
+  drawLogo2(c, w / 2, 34, 17);
+  const L: [string, number, string][] = [['The Box Office', 70, 'bold 19px'], ['is closed today.', 94, 'bold 19px'], ['Please purchase', 132, '16px'], ['tickets inside at the', 152, '16px'], ['INFORMATION', 186, 'bold 22px'], ['DESK', 210, 'bold 22px']];
+  for (const [t, y, f] of L) fitText(c, t, w / 2, y, w - 26, `${f} ${SANS}`, '#f4f6f6');
+  c.fillStyle = 'rgba(226,222,206,0.32)'; c.fillRect(0, 0, w, h);
+  wear(c, w, h, rng(311), 0.85);
+});
 
 // ------------------------------------------------------------------ materials
 const f3 = (x: number) => x.toFixed(3);
@@ -603,12 +827,15 @@ interface Mats {
   sign: THREE.MeshStandardMaterial; glow: THREE.MeshBasicMaterial; tar: THREE.Material; floor: THREE.Material; rust: THREE.Material;
   rock: THREE.Material; water: { m: THREE.MeshStandardMaterial; uT: { value: number } }; lamp: THREE.MeshBasicMaterial;
   murk: THREE.MeshStandardMaterial; mural: () => THREE.MeshStandardMaterial;
+  /** the wharf sheet: painted and printed things (vertex-tinted, alpha-cut), and the few still lit */
+  paint: THREE.MeshStandardMaterial; lit: THREE.MeshStandardMaterial;
 }
 const matCache = new Map<string, Mats>();
 function mats(q: 'high' | 'low'): Mats {
   let m = matCache.get(q);
   if (m) return m;
   const cm = concreteMaps(q === 'high' ? 512 : 256);
+  const sheet = aquariumSheet(q).tex;
   const concrete = new THREE.MeshStandardMaterial({ map: cm.map, normalMap: cm.normalMap, roughnessMap: cm.roughnessMap, color: '#efe9dd', roughness: 1 });
   weather(concrete, 'concrete', { streak: 0.4, damp: 0.75, moss: 0.85 });
   m = {
@@ -629,6 +856,8 @@ function mats(q: 'high' | 'low'): Mats {
     water: waterMat(),
     lamp: new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.3, 0.5) }),
     murk: new THREE.MeshStandardMaterial({ color: '#17301f', roughness: 0.9 }),
+    paint: new THREE.MeshStandardMaterial({ map: sheet, vertexColors: true, alphaTest: 0.5, roughness: 0.72, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
+    lit: new THREE.MeshStandardMaterial({ map: sheet, emissiveMap: sheet, emissive: '#ffffff', emissiveIntensity: 1.4, roughness: 0.3, alphaTest: 0.5 }),
     mural: (() => { let mm: THREE.MeshStandardMaterial | null = null; return () => (mm ??= new THREE.MeshStandardMaterial({ map: muralTex(), roughness: 0.8, metalness: 0.2 })); })(),
   };
   matCache.set(q, m);
@@ -819,6 +1048,86 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
     }
   };
 
+  // ---------------------------------------------------------------- the wharf sheet: letters, decals, pipe
+  const AS = aquariumSheet(ctx.quality);
+  const PA = G(M.paint, 1, true), LT = G(M.lit, 1);
+  const q8 = (uv: Q4) => [uv[0], uv[1], uv[2], uv[1], uv[2], uv[3], uv[0], uv[3]];
+  const flatUV = (uv: Q4) => { const u = (uv[0] + uv[2]) / 2, v = (uv[1] + uv[3]) / 2; return [u, v, u, v, u, v, u, v]; };
+  const WHITE = flatUV(cellWhite(AS)), PAPER = flatUV(cellPaper(AS));
+  /** a quad on an edge's face centred (s, y), w x h as seen (s falls to the right), d out; turned `rot`
+   *  (counter-clockwise as seen) about (px, py) from its centre, `lean` more standoff at the top, `grow` scaled */
+  const decal = (g: Geo, E: Edge, s: number, y: number, w: number, h: number, d: number, uv: Q4, o: { rot?: number; px?: number; py?: number; lean?: number; grow?: number } = {}) => {
+    const cr = Math.cos(o.rot ?? 0), sr = Math.sin(o.rot ?? 0), px = o.px ?? 0, py = o.py ?? 0, k = o.grow ?? 1, ln = o.lean ?? 0;
+    const pt = (x: number, yy: number): P3 => {
+      const fy = yy / h + 0.5; x *= k; yy *= k;
+      return at3(E, s - (px + (x - px) * cr - (yy - py) * sr), y + py + (x - px) * sr + (yy - py) * cr, d + ln * fy);
+    };
+    g.quad(pt(-w / 2, -h / 2), pt(w / 2, -h / 2), pt(w / 2, h / 2), pt(-w / 2, h / 2), q8(uv));
+  };
+  /** a square tube from a to b in the sheet's plain white, tinted by the current colour */
+  const pipe = (a: P3, b: P3, r: number) => {
+    const t = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    if (t.length() < 1e-4) return;
+    t.normalize();
+    const c1 = new THREE.Vector3().crossVectors(t, Math.abs(t.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize(), c2 = new THREE.Vector3().crossVectors(t, c1);
+    const o = [0, 1, 2, 3].map((i) => { const a2 = (i * Math.PI) / 2; return c1.clone().multiplyScalar(Math.cos(a2) * r).addScaledVector(c2, Math.sin(a2) * r); });
+    for (let i = 0; i < 4; i++) {
+      const p = o[i], q = o[(i + 1) % 4];
+      PA.quad([a[0] + p.x, a[1] + p.y, a[2] + p.z], [b[0] + p.x, b[1] + p.y, b[2] + p.z], [b[0] + q.x, b[1] + q.y, b[2] + q.z], [a[0] + q.x, a[1] + q.y, a[2] + q.z], WHITE);
+    }
+  };
+  /** a poster taped inside glass (d just behind it), `curl` metres of its top peeled back into the room */
+  const poster = (E: Edge, s: number, y: number, w: number, h: number, d: number, uv: Q4, curl = 0) => {
+    PA.color(1, 1, 1);
+    if (!curl) { decal(PA, E, s, y, w, h, d, uv); return; }
+    const ym = y + h * 0.22, vm = uv[1] + (uv[3] - uv[1]) * 0.72, p = (x: number, yy: number, dd: number) => at3(E, s - x, yy, dd);
+    PA.quad(p(-w / 2, y - h / 2, d), p(w / 2, y - h / 2, d), p(w / 2, ym, d), p(-w / 2, ym, d), [uv[0], uv[1], uv[2], uv[1], uv[2], vm, uv[0], vm]);
+    PA.quad(p(-w / 2, ym, d), p(w / 2, ym, d), p(w * 0.47, y + h / 2 - curl * 0.4, d - curl), p(-w * 0.5, y + h / 2 - curl * 0.15, d - curl * 0.6), [uv[0], vm, uv[2], vm, uv[2], uv[3], uv[0], uv[3]]);
+  };
+  /** a rust run down a wall from y */
+  const drip = (E: Edge, s: number, y: number, len: number, wd = 0) => decal(PA.color(1, 1, 1), E, s, y - len / 2, 0.26, len, wd + 0.02, cellDrip(AS, Math.floor(R() * 3)));
+  /** the logo as a raised disc: its face off the wall over a darker back that shows as its edge */
+  const disc = (E: Edge, s: number, y: number, r: number, wd = 0) => {
+    const uv = cellLogo(AS);
+    decal(PA.color(0.24, 0.26, 0.3), E, s - 0.015, y - 0.02, 2 * r, 2 * r, wd + 0.05, uv, { grow: 1.025 });
+    decal(PA.color(1, 1, 1), E, s, y, 2 * r, 2 * r, wd + 0.11, uv);
+  };
+  /** A line of raised letters on an edge's face, from s = sL (s falls to the right as seen) on baseline
+   *  y: each cut out and standing off the wall on studs over a darker back that shows as its edge, rust
+   *  run down the wall (no lower than `floor`) under some. The `gone` ones leave their ghost and bolt
+   *  holes; `hang` dropped off all but one stud and swung round on it. */
+  const letters = (E: Edge, text: string, sL: number, y: number, cap: number, o: { gone?: number[]; hang?: number; floor?: number; wd?: number } = {}) => {
+    const k = cap / (GF * 0.72), wd = o.wd ?? 0, floor = o.floor ?? -Infinity;
+    let x = 0;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch !== ' ') {
+        const wp = gW(ch), w = wp * k, h = GH * k, uv = cellGlyph(AS, ch);
+        const cs = sL - x - (wp / 2 - 4) * k, cy = y + (GBASE - GH / 2) * k;
+        const gone = o.gone?.includes(i), hang = o.hang === i;
+        if (gone || hang) decal(PA.color(1, 1, 1), E, cs, cy, w, h, wd + 0.035, cellGhost(AS, ch));
+        if (!gone) {
+          const t = hang ? { rot: -0.65, px: -w * 0.28, py: h * 0.18, lean: 0.07 } : {};
+          decal(PA.color(0.3, 0.32, 0.36), E, cs - 0.012, cy - 0.018, w, h, wd + 0.055, uv, { ...t, grow: 1.025 });
+          decal(PA.color(1, 1, 1), E, cs, cy, w, h, wd + 0.11, uv, t);
+        }
+        const len = Math.min(0.5 + R() * 1.5, y + cap * 0.3 - floor - 0.05);
+        if (R() < (gone || hang ? 0.95 : 0.5) && len > 0.2) drip(E, cs + (R() - 0.5) * w * 0.4, y + cap * 0.3, len, wd);
+      }
+      x += gAdv(ch) * k;
+    }
+  };
+  /** the logo and "New England / Aquarium" in two lines across the crown band, between s = sL and sR */
+  const nameBlock = (E: Edge, sL: number, sR: number, capMax: number, o: { gone1?: number[]; gone2?: number[]; hang1?: number } = {}) => {
+    const wN = [...'New England'].reduce((a, ch) => a + gAdv(ch), 0) / (GF * 0.72);
+    const cap = Math.min(capMax, (sL - sR - 0.1) / (2.52 + wN));
+    const top = TOP - 0.3, B1 = top - cap, B2 = B1 - 1.22 * cap, lr = (top - B2) / 2 + 0.05;
+    disc(E, sL - lr, (top + B2) / 2, lr);
+    const x0 = sL - 2 * lr - 0.3 * cap;
+    letters(E, 'New England', x0, B1, cap, { gone: o.gone1, hang: o.hang1, floor: BAND });
+    letters(E, 'Aquarium', x0, B2, cap, { gone: o.gone2, floor: BAND });
+  };
+
   // ---------------------------------------------------------------- 1969: the concrete box
   const RECESS = 0.42;
   const mainEdges = edgesOf(mr);
@@ -871,18 +1180,18 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
     if (side === 'north') { climb(E, 0, E.L * 0.45, gy, 7.5); climb(E, E.L * 0.7, E.L, gy, 4); }
     if (side === 'south') climb(E, 0, E.L, gy, 5, 0, 5);
     if (side === 'east') {
-      // the logo and the name on the crown band, toward the north end (s runs north to south, so the
-      // name, which reads on from the logo, lies at smaller s)
-      const ly = (BAND + TOP) / 2, lr = 1.55, ls = Math.min(E.L * 0.3, 15);
-      eQuad(SG, E, ls - lr, ls + lr, ly - lr, ly + lr, 0.04, signUV('logo'));
-      const nameW = 2 * lr * (768 / 256);
-      eQuad(SG, E, ls - lr - 0.35 - nameW, ls - lr - 0.35, ly - lr, ly + lr, 0.04, signUV('name'));
+      // the logo and the name in raised letters on the crown band, toward the north end (s runs north
+      // to south, so the name, which reads on from the logo, lies at smaller s); the g long gone
+      nameBlock(E, Math.min(E.L * 0.3, 15) + 1.55, 1.0, 1.35, { gone1: [6] });
       climb(E, 0, E.L, gy + 4.6, 3.5, 0, 4);
     }
     if (side === 'west') {
-      // the banner, hung from the crown band over the lobby; its south fixing failed and that end
-      // has dropped and folded forward
-      const sN = sOn(E, W(0, 6)), sS = sOn(E, W(0, 15.5));
+      // the name over the plaza, high on the crown band beside the entrance canopy: the logo, then
+      // "New England / Aquarium" in raised navy letters, the l and the r gone, the w hanging off one stud
+      nameBlock(E, sOn(E, W(0, 11.8)), sOn(E, W(0, 30.3)), 1.6, { gone1: [7], gone2: [4], hang1: 2 });
+      // the banner, hung from the crown band north of it, over the low wing; its south fixing failed
+      // and that end has dropped and folded forward
+      const sN = sOn(E, W(0, 1.8)), sS = sOn(E, W(0, 11.3));
       if (Math.min(sN, sS) > 0 && Math.max(sN, sS) < E.L) {
         const [u0, v0, u1, v1] = signUV('banner'), y1 = BAND - 0.25, y0 = y1 - 3.4, nx = 8, ny = 4;
         const pt = (i: number, j: number): P3 => {
@@ -981,6 +1290,9 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
         }
         eBox(FE, E, s0, s1, g0 + 3.25, g0 + 3.35, -0.2, -0.1, 'ftb');
         eQuad(SG, E, s0 + 0.25, s0 + 0.25 + 4.2, g0 + 3.5, g0 + 3.5 + 4.2 * (96 / 384), -0.12, signUV('cafe'));
+        // posters inside the bay, bleached by every afternoon since; the tank's has come half away
+        poster(E, s0 + pw * 0.5, g0 + 1.5, 0.62, 0.9, -0.21, cellPoster(AS, 'jellies'));
+        poster(E, s0 + pw * 2.5, g0 + 1.45, 0.62, 0.9, -0.21, cellPoster(AS, 'tank'), 0.24);
       } else cBox(S, E, cov, 0, E.L, blockBase, skirtTop, -0.3, 0, 'ft');
       // the leaning facet from the skirt to the roof; on the south faces, a band of glass across it
       const pA = at3(E, 0, skirtTop, 0), pB = at3(E, E.L, skirtTop, 0);
@@ -1127,6 +1439,19 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
     // a machine poster on the glass, the exit sign inside, stanchions still lined up on the porch
     const ps = 0.35 + pw * 1.5, [pu0, pv0, pu1, pv1] = signUV('poster');
     SG.quad(at3(E, ps + 0.42, yF + 1.2, -SET + 0.012), at3(E, ps - 0.42, yF + 1.2, -SET + 0.012), at3(E, ps - 0.42, yF + 2.46, -SET + 0.012), at3(E, ps + 0.42, yF + 2.46, -SET + 0.012), [pu0, pv0, pu1, pv0, pu1, pv1, pu0, pv1]);
+    // Enter and Exit on the two leaves that kept their glass
+    decal(PA.color(1, 1, 1), E, 0.35 + pw * (doorsAt[1] + 0.25), yF + 1.5, 0.4, 0.25, -SET + 0.015, cellDoor(AS, 'Enter'));
+    decal(PA, E, 0.35 + pw * (doorsAt[0] + 0.75), yF + 1.5, 0.4, 0.25, -SET + 0.015, cellDoor(AS, 'Exit'));
+    // the exhibits' posters taped inside the glass, sun-faded, one curling off it, one fallen on the floor
+    const pk = (k: number) => k >= 0 && k < nP && !doorsAt.includes(k) && k !== 1;
+    const PW = 0.62, PH = 0.9;
+    if (pk(0)) poster(E, 0.35 + pw * 0.5, yF + 1.45, PW, PH, -SET - 0.04, cellPoster(AS, 'penguins'));
+    if (pk(nP - 3)) poster(E, 0.35 + pw * (nP - 2.5), yF + 1.45, PW, PH, -SET - 0.04, cellPoster(AS, 'tank'));
+    if (pk(nP - 2)) poster(E, 0.35 + pw * (nP - 1.5), yF + 1.42, PW, PH, -SET - 0.04, cellPoster(AS, 'rays'), 0.2);
+    if (pk(nP - 1)) {
+      const s = 0.35 + pw * (nP - 0.5), uv = cellPoster(AS, 'jellies'), f = (a: number, b: number) => at3(E, s + a, yF + 0.012, -SET - 0.3 - b);
+      PA.color(1, 1, 1).quad(f(PW / 2, 0), f(-PW / 2, 0.12), f(-PW / 2 - 0.1, PH + 0.12), f(PW / 2 - 0.1, PH), q8(uv));
+    }
     const dm = 0.35 + pw * (doorsAt[0] + 1);
     eBox(GW.color(2.4, 0.16, 0.07), E, dm - 0.42, dm + 0.42, tr + 0.25, tr + 0.58, -SET - 0.9, -SET - 0.78);
     for (let i = 0; i < 6; i++) {
@@ -1245,6 +1570,7 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
       C.quad(at3(E, E.L, Math.min(a, b) - 0.45, 0), at3(E, 0, Math.min(a, b) - 0.45, 0), at3(E, 0, a, 0), at3(E, E.L, b, 0));
     }
   };
+  let lantern: Ring | null = null, scrL: FogLight | null = null;
   if (by.canopy.length) {
     for (const p of by.canopy) if (!p.overhead) pave(tidy(ringOf(p.outer)));
     // the roof: a folded steel plate, its tip flung up over the plaza, sloping down to the seal pool
@@ -1281,6 +1607,7 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
     const la = 0.05, ax: P2 = [Math.cos(la), Math.sin(la)], ay: P2 = [-Math.sin(la), Math.cos(la)];
     const lc: P2 = [338.2, 86.4], hw = 2.8, hd = 2.1;
     const lr: Ring = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => [lc[0] + ax[0] * hw * i + ay[0] * hd * j, lc[1] + ax[1] * hw * i + ay[1] * hd * j] as P2);
+    lantern = lr;
     const ltop = (x: number, z: number) => 15.4 - ((x - lc[0]) * ax[0] + (z - lc[1]) * ax[1]) * 0.35;
     const lf = floorAt(...lc);
     for (const E of edgesOf(ringArea(lr) > 0 ? lr : lr.slice().reverse())) {
@@ -1300,7 +1627,9 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
     GL.face(lr.map(([x, z]) => [x, ltop(x, z), z] as P3), UP);
     for (let i = 0; i < lr.length; i++) { const a = lr[i], b = lr[(i + 1) % lr.length]; ctx.collide.addSeg(a[0], a[1], b[0], b[1], ltop(a[0], a[1])); }
     room(IN, FL, edgeOf(lr[0], lr[1]), 0.15, hw * 2 - 0.15, lf, lf + 11, -hd * 2 + 0.15, -0.15, 't');
-    // the ticket booth and the queue lines, stanchions tipped over
+    // the box office: a glass booth, windows 1-3 on its north side and 4-6 on the south, each under a
+    // blue number panel (5's torn away) with a dead screen hung inside the glass; window 2's screen is
+    // still on, flickering, the one thing lit out here
     const tb: P2 = [346.4, 90.9], tE: Edge = { a: [tb[0] - ax[0] * 1.8, tb[1] - ax[1] * 1.8], b: [tb[0] + ax[0] * 1.8, tb[1] + ax[1] * 1.8], L: 3.6, t: ax, n: [ax[1], -ax[0]] };
     const tf = floorAt(...tb);
     eBox(IN, tE, 0, 3.6, tf, tf + 1.0, -1.1, 1.1);
@@ -1309,13 +1638,81 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
       CL.face([p(k * 1.2, tf + 1.0), p(k * 1.2 + 1.2, tf + 1.0), p(k * 1.2 + 1.2, tf + 2.6), p(k * 1.2, tf + 2.6)], [tE.n[0] * d, 0, tE.n[1] * d], glassUV(paneKind(R(), 0.4)));
     }
     eBox(FE, tE, -0.1, 3.7, tf + 2.6, tf + 2.85, -1.2, 1.2);
+    eBox(FE, tE, -0.1, 3.7, tf + 2.85, tf + 3.32, -1.16, 1.16, 'fktlr');
+    const tS = edgeOf(tE.b, tE.a);
+    for (const [side, Ed] of [[0, tE], [1, tS]] as [number, Edge][]) {
+      for (let k = 0; k <= 3; k++) eBox(FE, Ed, k * 1.2 - 0.03, k * 1.2 + 0.03, tf + 1.0, tf + 2.6, 1.06, 1.14, 'flr');
+      for (let k = 0; k < 3; k++) {
+        const n = side * 3 + k + 1, sc = 3.0 - k * 1.2;
+        eBox(FE, Ed, sc - 0.5, sc + 0.5, tf + 1.0, tf + 1.04, 1.1, 1.32);
+        if (n !== 5) decal(PA.color(1, 1, 1), Ed, sc, tf + 3.08, 1.1, 0.42, 1.172, cellTix(AS, n));
+        eBox(FE, Ed, sc - 0.29, sc + 0.29, tf + 2.2, tf + 2.53, 0.94, 0.99);
+        if (n === 2) {
+          decal(LT, Ed, sc, tf + 2.365, 0.5, 0.29, 0.995, cellScreen(AS, true));
+          const hold = new THREE.Object3D(); hold.position.set(...at3(Ed, sc, tf + 2.36, 1.4)); group.add(hold);
+          scrL = { obj: hold, color: new THREE.Color('#8fb4ff'), radius: 0.22, base: 0.12, flicker: 0.6, priority: 2 };
+          lights.push(scrL);
+        } else decal(PA.color(1, 1, 1), Ed, sc, tf + 2.365, 0.5, 0.29, 0.995, cellScreen(AS, false));
+      }
+    }
+    // BOX OFFICE across its west end, facing the queue
+    decal(PA.color(1, 1, 1), edgeOf(at2(tE, -0.1, -1.16), at2(tE, -0.1, 1.16)), 1.16, tf + 3.08, 2.0, 0.42, 0.012, cellTix(AS, 0));
     { const c = [[-0.1, -1.2], [3.7, -1.2], [3.7, 1.2], [-0.1, 1.2]].map(([s, d]) => at2(tE, s, d)); for (let i = 0; i < 4; i++) ctx.collide.addSeg(c[i][0], c[i][1], c[(i + 1) % 4][0], c[(i + 1) % 4][1], tf + 2.85); }
-    for (let row = 0; row < 3; row++) for (let k = 0; k < 7; k++) {
-      const x = 326 + k * 2.6, z = 89.6 + row * 1.0 + k * 0.08, y = floorAt(x, z);
-      if (!by.canopy.some((p) => inRing(x, z, ringOf(p.outer)))) continue;
-      if (R() < 0.3) { const a = R() * 6.28; const fe = edgeOf([x, z], [x + Math.cos(a) * 0.95, z + Math.sin(a) * 0.95]); eBox(FE, fe, 0, fe.L, y + 0.02, y + 0.09, -0.035, 0.035); }
-      else cyl(FE, x, z, 0.03, 0.03, y, y + 0.95, 6);
-      cyl(FE, x, z, 0.16, 0.16, y, y + 0.03, 10, true);
+    // the queue lines: retractable belts between the posts, some posts down and their belts dragged
+    // with them, some sagging to the paving, some unhooked
+    const cols: P2[] = [[325.6, 86.0], [327.4, 89.4], [338.5, 91.4], [345.8, 91.9]];
+    const clear = (a: P2, b: P2) => cols.every(([x, z]) => {
+      const dx = b[0] - a[0], dz = b[1] - a[1], t = clamp01(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1));
+      return Math.hypot(a[0] + dx * t - x, a[1] + dz * t - z) > 0.55;
+    });
+    const belt = (a: P3, b: P3, sag: number) => {
+      PA.color(0.05, 0.05, 0.06);
+      let last: P3 | null = null;
+      for (let i = 0; i <= 8; i++) {
+        const t = i / 8, x = a[0] + (b[0] - a[0]) * t, z = a[2] + (b[2] - a[2]) * t;
+        const p: P3 = [x, Math.max(floorAt(x, z) + 0.01, a[1] + (b[1] - a[1]) * t - sag * 4 * t * (1 - t)), z];
+        if (last) PA.quad(last, p, [p[0], p[1] + 0.05, p[2]], [last[0], last[1] + 0.05, last[2]], WHITE);
+        last = p;
+      }
+    };
+    for (let row = 0; row < 3; row++) {
+      let prev: { x: number; z: number; y: number; up: boolean; head: P3 } | null = null;
+      for (let k = 0; k < 7; k++) {
+        const x = 326 + k * 2.6, z = 89.6 + row * 1.0 + k * 0.08, y = floorAt(x, z);
+        if (!by.canopy.some((p) => inRing(x, z, ringOf(p.outer)))) { prev = null; continue; }
+        const up = R() >= 0.3;
+        let head: P3 = [x, y + 0.87, z];
+        if (!up) { const a = R() * 6.28; const fe = edgeOf([x, z], [x + Math.cos(a) * 0.95, z + Math.sin(a) * 0.95]); eBox(FE, fe, 0, fe.L, y + 0.02, y + 0.09, -0.035, 0.035); head = [x + Math.cos(a) * 0.9, y + 0.03, z + Math.sin(a) * 0.9]; }
+        else { cyl(FE, x, z, 0.03, 0.03, y, y + 0.88, 6); cyl(FE, x, z, 0.045, 0.045, y + 0.86, y + 0.97, 8, true); }
+        cyl(FE, x, z, 0.16, 0.16, y, y + 0.03, 10, true);
+        const cur = { x, z, y, up, head };
+        if (prev && clear([prev.x, prev.z], [x, z])) {
+          const r = R();
+          if (prev.up && up) {
+            if (r < 0.15) belt(prev.head, [prev.x + (x - prev.x) * 0.3, y, prev.z + (z - prev.z) * 0.3], 0.3);
+            else if (r < 0.35) belt(prev.head, head, 0.75 + R() * 0.3);
+            else {
+              belt(prev.head, head, 0.03 + R() * 0.08);
+              if (!Number.isNaN(ctx.heightAt(prev.x, prev.z)) && !Number.isNaN(ctx.heightAt(x, z))) ctx.collide.addSeg(prev.x, prev.z, x, z, Math.max(y, prev.y) + 0.95);
+            }
+          } else if (prev.up || up || r < 0.6) belt(prev.head, head, 0.2);
+        }
+        prev = cur;
+      }
+    }
+    // the A-frame on the paving in front of the booth, its message two summers faded
+    const af: P2 = [342.8, 88.6], afy = ctx.heightAt(...af);
+    if (!Number.isNaN(afy)) {
+      const fd: P2 = [-0.995, -0.1], rt: P2 = [fd[1], -fd[0]], uv = cellAFrame(AS);
+      for (const sgn of [1, -1]) {
+        const f: P2 = [fd[0] * sgn, fd[1] * sgn], r: P2 = [rt[0] * sgn, rt[1] * sgn];
+        const ap = (a: number, b: number, y: number): P3 => [af[0] + f[0] * a + r[0] * b, afy + y, af[1] + f[1] * a + r[1] * b];
+        PA.color(1, 1, 1).quad(ap(0.3, -0.31, 0.02), ap(0.3, 0.31, 0.02), ap(0.03, 0.31, 0.92), ap(0.03, -0.31, 0.92), q8(uv));
+        PA.color(0.12, 0.25, 0.45);
+        for (const b of [-0.32, 0.32]) pipe(ap(0.31, b, 0), ap(0.03, b, 0.95), 0.018);
+      }
+      PA.color(0.12, 0.25, 0.45); pipe([af[0] - rt[0] * 0.34, afy + 0.95, af[1] - rt[1] * 0.34], [af[0] + rt[0] * 0.34, afy + 0.95, af[1] + rt[1] * 0.34], 0.025);
+      ctx.collide.addCircle(af[0], af[1], 0.42, afy + 0.95);
     }
   }
 
@@ -1379,6 +1776,51 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
       const tr = edgeOf(at2(vb, s0, -0.05), at2(vb, s0, -toBack));
       FE.face([[tr.a[0], roofLo - 0.02, tr.a[1]], [tr.b[0], roofHi - 0.02, tr.b[1]], [tr.b[0], roofHi - 0.32, tr.b[1]], [tr.a[0], roofLo - 0.32, tr.a[1]]], [tr.n[0], 0, tr.n[1]]);
     }
+    // the notice taped to the glass for the seals that never came back, its corner peeled and folded down
+    {
+      const w = 0.56, h = 0.41, s = view.L * 0.32, y = g + 1.4, d = -0.035, c = w * (NOTICE_CUT / 300);
+      decal(PA.color(1, 1, 1), view, s, y, w, h, d, cellNotice(AS));
+      const p = (x: number, yy: number, dd: number) => at3(view, s - x, y + yy, d + dd);
+      PA.color(0.85, 0.83, 0.78).tri(p(w / 2 - c, h / 2, 0), p(w / 2, h / 2 - c, 0), p(w / 2 - c, h / 2 - c, 0.04), PAPER.slice(0, 6));
+    }
+    // the plaza rail along the viewing glass: galvanised pipe on posts, a kick rail at the foot, kept
+    // clear of the lantern; a few bays bent in where something hit them, and the interpretive panels on it
+    {
+      const RD = 0.75, n = Math.max(2, Math.round((view.L - 0.6) / 1.8)), st = (view.L - 0.6) / n;
+      // (no rail where it would leave less than a body's width past the lantern)
+      const near = (p: P2) => !!lantern && [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2], [0.85, 0.85], [-0.85, 0.85], [0.85, -0.85], [-0.85, -0.85]].some(([dx, dz]) => inRing(p[0] + dx, p[1] + dz, lantern!));
+      const posts = Array.from({ length: n + 1 }, (_, i) => {
+        const s = 0.3 + i * st, p = at2(view, s, RD), y = ctx.heightAt(p[0], p[1]);
+        return { s, p, y, ok: !Number.isNaN(y) && !near(p) };
+      });
+      const panelAt = [view.L * 0.2, view.L * 0.9];
+      const used = new Set<number>();
+      PA.color(0.64, 0.66, 0.64);
+      for (let i = 0; i < n; i++) {
+        const a = posts[i], b = posts[i + 1];
+        if (!a.ok || !b.ok) continue;
+        used.add(i); used.add(i + 1);
+        const bent = R() < 0.18, sm = (a.s + b.s) / 2, ym = (a.y + b.y) / 2;
+        const A3 = (y: number): P3 => [a.p[0], a.y + y, a.p[1]], B3 = (y: number): P3 => [b.p[0], b.y + y, b.p[1]];
+        for (const [yy, r, dent] of [[1.05, 0.026, 0.3], [0.55, 0.022, 0.18], [0.12, 0.02, 0]] as const) {
+          if (bent && dent) { const m = at3(view, sm, ym + yy - dent, RD - dent * 0.8); pipe(A3(yy), m, r); pipe(m, B3(yy), r); }
+          else pipe(A3(yy), B3(yy), r);
+        }
+        ctx.collide.addSeg(a.p[0], a.p[1], b.p[0], b.p[1], Math.max(a.y, b.y) + 1.05);
+        // a panel on the rail, sloped up toward the reader
+        if (!bent && panelAt.some((q) => q >= a.s && q < b.s)) {
+          const pw2 = Math.min(1.05, b.s - a.s - 0.2), q = (s: number, y: number, d: number) => at3(view, s, ym + y, d);
+          PA.color(1, 1, 1).quad(q(sm + pw2 / 2, 0.95, RD + 0.22), q(sm - pw2 / 2, 0.95, RD + 0.22), q(sm - pw2 / 2, 1.42, RD - 0.2), q(sm + pw2 / 2, 1.42, RD - 0.2), q8(cellSealPanel(AS)));
+          PA.color(0.2, 0.22, 0.22).quad(q(sm - pw2 / 2, 0.94, RD + 0.21), q(sm + pw2 / 2, 0.94, RD + 0.21), q(sm + pw2 / 2, 1.41, RD - 0.21), q(sm - pw2 / 2, 1.41, RD - 0.21), WHITE);
+          for (const ds of [-pw2 * 0.35, pw2 * 0.35]) pipe(q(sm + ds, 1.05, RD), q(sm + ds, 1.15, RD), 0.02);
+          PA.color(0.64, 0.66, 0.64);
+        }
+      }
+      for (const i of used) {
+        const { p, y } = posts[i], tip = R() < 0.12 ? 0.12 : 0;
+        pipe([p[0], y, p[1]], [p[0] - view.n[0] * tip, y + 1.08, p[1] - view.n[1] * tip], 0.03);
+      }
+    }
   }
 
   // ---------------------------------------------------------------- the Simons IMAX Theatre (2001)
@@ -1429,10 +1871,23 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
           for (let k = 0; k < n; k++) for (let y = base + 1; y < eave - 1.5; y += 2.2) GL.quad(at3(E, (k + 1) * w, y, 0.03), at3(E, k * w, y, 0.03), at3(E, k * w, y + 2.2, 0.03), at3(E, (k + 1) * w, y + 2.2, 0.03), glassUV(paneKind(R(), 0.2)));
           for (let y = base + 1, k = 0; y < eave - 3; y += 1.9, k++) { const s0 = k % 2 ? E.L - 1 : 1, s1 = k % 2 ? 1 : E.L - 1; FE.face([at3(E, s0, y, -0.6), at3(E, s1, y + 1.9, -0.6), at3(E, s1, y + 1.6, -0.6), at3(E, s0, y - 0.3, -0.6)], [E.n[0], 0, E.n[1]]); }
         }
-        if (bronze) {
-          const ly = eave - 2.4;
-          eQuad(SG, E, E.L * 0.12, E.L * 0.12 + 2.6, ly - 1.3, ly + 1.3, 0.04, signUV('logo'));
-          eQuad(SG, E, E.L * 0.12 + 3.2, E.L * 0.12 + 3.2 + 6.4, ly - 1.0, ly - 1.0 + 6.4 * (100 / 512), 0.04, signUV('imax'));
+        if (bronze && E.L > 6) {
+          // IMAX left in 2020: the logo and SIMONS / THEATRE in raised letters high on the free corner,
+          // and below them the ghost of the old IMAX THEATRE letters, brighter metal and bolt holes
+          const top = eave - 0.45, cap = Math.min(0.95, (E.L - 1) / 9.9), B1 = top - cap, B2 = B1 - 1.3 * cap, lr = (top - B2) / 2 + 0.05;
+          const sL = E.L - 0.5, x0 = sL - 2 * lr - 0.35;
+          disc(E, sL - lr, (top + B2) / 2, lr);
+          letters(E, 'SIMONS', x0, B1, cap, { floor: base + 3 });
+          letters(E, 'THEATRE', x0, B2, cap, { floor: base + 3 });
+          const gw = Math.min(6.4, x0 - 0.4), gy2 = B2 - 1.7;
+          decal(PA.color(1, 1, 1), E, x0 - gw / 2, gy2, gw, gw * (110 / 520), 0.04, cellImaxGhost(AS));
+          for (let k = 0; k < 5; k++) drip(E, x0 - 0.3 - R() * (gw - 0.6), gy2, 0.6 + R() * 1.4);
+          // the LED ticker over the doors, dead but for a run stuck lit mid-word
+          const ty = groundAlong(E).avg + 4.2, mid = E.L / 2;
+          eBox(FE, E, 0.4, E.L - 0.4, ty - 0.07, ty + 0.57, 0, 0.16);
+          const tk = cellTicker(AS), vm = (tk[1] + tk[3]) / 2;
+          eQuad(LT, E, mid, E.L - 0.5, ty, ty + 0.5, 0.165, [tk[0], vm, tk[2], tk[3]]);
+          eQuad(LT, E, 0.5, mid, ty, ty + 0.5, 0.165, [tk[0], tk[1], tk[2], vm]);
         }
       });
       // roofs: the hall's a low hipped pyramid of standing-seam steel, the annexes flat
@@ -1472,7 +1927,7 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
   }
 
   // ---------------------------------------------------------------- assemble: one mesh per material
-  const noShadow = new Set<THREE.Material>([M.clear, M.glow, M.sign]);
+  const noShadow = new Set<THREE.Material>([M.clear, M.glow, M.sign, M.paint, M.lit]);
   for (const [m, g] of geos) {
     if (!g.tris) continue;
     const mesh = new THREE.Mesh(g.geometry(), m);
@@ -1489,6 +1944,7 @@ function build(ctx: LandmarkCtx, by: Record<Kind, Part[]>, other: Part[]) {
       water.uT.value = t;
       lights.forEach((l, i) => flickerUpdate(l, t, 37 + i * 19));
       if (lamp) { const k = Math.max(0, Math.min(1.5, lights[0]?.k ?? 1)); M.lamp.color.setRGB(2.2 * k, 1.3 * k, 0.5 * k); }
+      if (scrL) M.lit.emissiveIntensity = 1.4 * Math.max(0, Math.min(1.5, scrL.k ?? 1));
     },
   };
 }

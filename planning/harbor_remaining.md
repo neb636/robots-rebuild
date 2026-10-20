@@ -54,6 +54,35 @@ The layout matched Boston but walking it didn't say so. `signs.ts` and `freedomt
 | The Hong Kong | `landmarks/hongkong.ts` (`keepWalls`) on 65 Chatham St (OSM w1280705644; the bar isn't in OSM): red lacquered front, the THE HONG KONG neon band (one letter dead, the G stuttering), the vertical 香港 / HONG KONG blade, lit swaying lanterns, a green tile awning; Sissy K's board on the Commercial St side. Nightclubs now count as bars in the bake (the Wild Rover). Spot `hongkong`. |
 | Atlas | The signs atlas is 4096 x 3072 now: the pylons, banners and names filled the old 2048. |
 
+## Done since: the New England Aquarium in detail
+
+Checked against the real place (2017-2025 photos, neaq.org, OSM) before modelling; nothing invented.
+The area has its own sign sheet, `aqsheet.ts` (2048 x 2048, half on Low; the shared atlas was
+nearly full), drawn on by the three builders below (about 57% of it used); `SignAtlas` now takes a
+label for its "atlas full" warning.
+
+| Piece | What |
+|---|---|
+| The building | `landmarks/aquarium.ts`: the round striped logo and "New England / Aquarium" in raised navy letters high on the plaza face (the l and r gone, ghosts and bolt holes, the w hanging, rust runs), the harbour face's name redone the same way, the shark banner moved aside. The Simons Theatre (IMAX until 2020): SIMONS / THEATRE and the logo, the old IMAX letters' ghost, a dead LED ticker with a few characters stuck lit. Box office windows 1-6 with blue TICKETS panels and dead screens (window 2's lit and flickering: the area's one new fog light), belts on the queue stanchions, the blue A-frame "The Box Office is closed today". Enter / Exit on the lobby doors, exhibit posters behind the lobby and café glass. The seal pool: a pipe railing on the viewing side, two "Atlantic Harbor Seals" panels and the "off exhibit while we improve their habitat" notice (true in 2026). |
+| The plaza | `aquariumplaza.ts` (after the marketplace in `index.ts`): the whale watch's departure board and chained gangway gate on Central Wharf's north edge (its own chunk, mirrored by the water), the Whale Watch and Boston Duck Tours booths dressed on the Atlantic Ave corner (`proudOf` on the baked kiosk walls), five exhibit banners on weighted bases, banners on 15 lamp posts, planters and granite seats along the theatre, 21 yellow bollards, OSM's picnic tables (the bake now keeps `leisure=picnic_table` as `furniture.picnic` instead of a bench), four HarborWalk lectern panels at OSM's information boards, Weems's *Dolphins of the Sea* by the garage, the beer garden's tent come down. Debug: `built.__aquariumPlaza`. |
+| Aquarium station | `landmarks/aqstation.ts` (new landmark `aquariumStation`): the Long Wharf headhouses beside the Marriott. The escalator house was open ground in the bake (no city footprint); now sloped glass on grey steel with a brick spine, stopped escalators and a stair down into the dark (hole `aquarium-escalators`), the west doors cracked and boarded with a scissor gate chained across. The elevator house on the city's footprint, its car jammed open. Blue AQUARIUM / TO TRAINS bands (one lit), the T disc on two poles (one bent). |
+| Spots and map | Spots `whalewatch` and `aquariumstation`; map places Aquarium Station, Whale Watch, Simons Theatre. |
+| Cost | At `?at=aquarium` on High: 390 draws (was 382): scene +5, reflection +1, shadow +2; 0.97 M tris (was 0.89). Low 242 draws. Walkable 305,856 m2, 0 leaks, all 13 spots. No sheet-full warnings. |
+
+## Done since: Long Wharf in detail
+
+Checked against OSM (`osm-detail.json.gz`), Wikipedia, TCLF and the state's Boston Inner Harbor
+guide. Nothing here is invented except the decay.
+
+| Piece | What |
+|---|---|
+| Data | `points.mjs` bakes seven more furniture kinds: `planter`, `flagpole`, `compass` (compass rose), `viewpoint`, `ferry` (terminals, with names), `ticket` (booths, with names) and `seating` (outdoor seating centroids, with a rough radius `r`). New spot `ferry`: on the north HarborWalk by the Boston Harbor Cruise stand, looking at the Long Wharf (North) dock. |
+| The pavilion | `landmarks/pavilion.ts` (`longWharfPavilion`, `overhead` on OSM w29833414, so the ground stays walkable under it). The open-air shelter at the end: brick piers and blocks on granite bases, yellow plaster gables, a dark standing-seam roof with a cross gable and panels gone, granite slab benches, the 13 OSM planters gone wild. On the plaza: the granite-and-bronze compass rose (E gone), the mast with its yard and a faded flag, the lookout at the OSM viewpoint (rail, coin-op viewer with an eyepiece snapped off, granite seat), and granite steps down into the water on the east face. |
+| Lettering | `longwharf.ts`, on its own sheet (1024 x 1024 now): the Chart House's valance, gilt blade and GARDINER BUILDING 1763 plaque; a National Historic Landmark plaque in the Custom House Block's passage; BOSTON MARRIOTT LONG WHARF over the hotel's south entrance (two letters gone, the G swung loose, LONG WHARF still lit except the A). |
+| Ferries and booths | `wharfsigns.ts`, own `SignAtlas` (2048 x 2048, half on Low). At Long Wharf (North) and (South): MBTA ferry signs, a gangway gate, departure boards (the south one an LED board still lit, SERVICE SUSPENDED), steel queue rails with sections knocked down. GATE 4 and an unnamed FERRY gate on the south edge. The Boston Harbor Cruise(s) stand and shed, boards for THE LANDING, HARBORSIDE GIFT and the Boston Waterboat Marina, four HarborWalk history panels. Limited to x 180..560, z -110..80. |
+| The edge | `wharf.ts`, found from the baked seawall lines: granite coping, granite bollards with chains (some broken into the water, a gap every ~18 m), cleats and bitts at the berths, mooring lines (two still tied to floats), life rings (some missing, one on the pavers). The Chart House's and The Landing's patios at OSM's outdoor seating. Mirrored by the water (REFLECT_LAYER). |
+| Cost | Draws against main at the same cinematic views on High: main pass +8 at the end of the wharf (spot), +11 on the plaza, +8 at the pavilion, +1 at the north ferry, +13 at the wharf head, +4 at the Chart House; all passes +4 to +24. The pavilion is 7 draws (brick, granite, vertex colour, metal, compass, flag, halyards). No new lights; the lit letters and the LED board glow by emissive map / `glow`. Walkable area 305,853 m2 (-14), 0 leaks, all spots, 23 ladders as before. |
+
 ## Done since: the Rose Kennedy Greenway in detail
 
 The Greenway read as generic lawn, paths, trees and lamps, and the Harbor Islands Pavilion was a
@@ -74,6 +103,11 @@ widths, and lists their beds and lawns.
 
 ## Follow-ups (not done)
 
+- Long Wharf: the pavilion's heights are a guess (OSM implies a ~7 m ridge, the LiDAR 4.85 m; built at
+  6 m), as are its stepped edge's position and the flag. Tia's (on the Marriott's north annex) isn't in
+  OSM, so it has no sign or patio. The Boston Harbor Islands Welcome Center on the Greenway is left to
+  the Greenway pass.
+
 - Signs: street-number plaques, MBTA bus stops (OSM has them, not baked), wall-mounted corner signs
   in the narrow North End lanes where there's no room for a post. Shop names come from OSM as of the
   snapshot: re-check them (and the brand filter) after a `harbor:fetch`.
@@ -92,6 +126,10 @@ widths, and lists their beds and lawns.
   Greenway plaza; OSM doesn't map the fountain itself. The trellis is the first 104 m of the arched
   path from the Richmond St corner.
 - Union Oyster House and the rest of the Blackstone Block are generic facades apart from the sign.
+- Aquarium: the statue OSM puts just outside the entrance (n5572300074) couldn't be identified, so
+  it's left out. The public toilet and the Central Snack Bar / Ben & Jerry's stands aren't in the
+  bake. The State St headhouse of Aquarium station (183 State St, west of Atlantic Ave) is still
+  generic. The Simons mural is an original stand-in, not Shepard Fairey's 2021 one.
 - Hipped roofs are built as gables.
 - Greenway: OSM maps no fountains or water features in the North End Parks (the real parks have
   them), nor the Greenway's food-truck spots; the trucks stand where the Conservancy's vendor list
@@ -105,7 +143,7 @@ widths, and lists their beds and lawns.
 
 - Dev server: `npx vite --port 5173`. URL params: `?menu=0&card=0&ui=0&start=harbor&q=high|low&mood=curfew|ashfall|pall&at=<spot>&fps=8&debug=stats`.
   Spots: state, faneuil, quincy, longwharf, aquarium, columbus, customhouse, harbortowers, rowes,
-  northsquare, blackstone, hongkong, greenway.
+  northsquare, blackstone, hongkong, ferry, whalewatch, aquariumstation, greenway.
 - `window.app` is the game (`pos`, `heading`, `yaw`, `pitch`, `dist`, `player.group`,
   `resetCamera()`, `placeCamera(1, true)`, `built`). It is a DOM element until boot finishes: wait for
   `.loader` to detach and `window.app.built` to exist.

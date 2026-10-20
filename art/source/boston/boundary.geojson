@@ -378,6 +378,54 @@
    "type": "Feature",
    "properties": {
     "kind": "spot",
+    "name": "aquariumstation",
+    "heading": 125,
+    "note": "on the State St sidewalk at Atlantic Ave, looking at the Aquarium station headhouses beside the Marriott (the escalators' glass box and its doors)"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0516963,
+     42.3597332
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "whalewatch",
+    "heading": 100,
+    "note": "on Central Wharf's north edge at the whale-watch boarding float, looking along the floats past the seal tank to the Aquarium"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0500247,
+     42.3593082
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "ferry",
+    "heading": 110,
+    "note": "on the HarborWalk on the north side of Long Wharf, by the Boston Harbor Cruise ticket booth, looking out to the Long Wharf (North) ferry dock"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0501098,
+     42.360615
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
     "name": "greenway",
     "heading": 160,
     "note": "Wharf District Parks on the Greenway, between the carousel and the Harbor Islands Pavilion, looking south down the park"
@@ -420,6 +468,41 @@
       [
        -71.0566563,
        42.3590848
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "hole",
+    "name": "aquarium-escalators",
+    "note": "the Aquarium station headhouse's escalator and stair well (under OSM w240311444/w240311383): no ground here; src/harbor/landmarks/aqstation.ts builds the pit"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -71.0516166,
+       42.3598155
+      ],
+      [
+       -71.0515068,
+       42.3598314
+      ],
+      [
+       -71.0514922,
+       42.3597757
+      ],
+      [
+       -71.051602,
+       42.3597598
+      ],
+      [
+       -71.0516166,
+       42.3598155
       ]
      ]
     ]

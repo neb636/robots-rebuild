@@ -9,16 +9,19 @@ import { paulRevere, oldStateHouse, cityHall, carousel } from './historic';
 import { holocaustMemorial, armenianPark, ringsFountain, columbusTrellis, unionOysterHouse } from './parks';
 import { oldNorthChurch } from './northend';
 import { hongKong } from './hongkong';
+import { aquariumStation } from './aqstation';
+import { longWharfPavilion } from './pavilion';
 import { harborIslandsPavilion, northEndPergola, turnpikeTollbooth } from './greenway';
 
 export const LANDMARKS: Record<string, LandmarkBuilder> = {
   faneuil, quincy, northMarket, southMarket,
-  marriott, customHouseBlock, chartHouse,
+  marriott, customHouseBlock, chartHouse, longWharfPavilion,
   aquarium,
   customHouse, harborTowers, rowesWharf,
   paulRevere, oldStateHouse, cityHall, carousel,
   holocaustMemorial, armenianPark, ringsFountain, columbusTrellis, unionOysterHouse,
   oldNorthChurch,
   hongKong,
+  aquariumStation,
   harborIslandsPavilion, northEndPergola, turnpikeTollbooth,
 };
