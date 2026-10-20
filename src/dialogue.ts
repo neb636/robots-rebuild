@@ -55,6 +55,8 @@ export class Dialogue {
   /** the current line is spoken (a recorded clip or a browser voice), so the typewriter stays quiet */
   private voiced = false;
   private talker = '';
+  /** the current line comes over a phone (the blips go through its band) */
+  private phone = false;
   open = false;
   /** called when the interact control is pressed while no dialogue is open */
   onInteract: (() => void) | null = null;
@@ -100,6 +102,7 @@ export class Dialogue {
     audio.sfx('cursor', 0.5);
     const v = clip(l);
     this.talker = speaker(l);
+    this.phone = typeof l !== 'string' && l.style === 'phone';
     const text = typeof l === 'string' ? l : l.text;
     // no recorded clip (Audio: Web, or a line not recorded yet): the browser reads it
     const browser = !v && canSpeak(this.talker);
@@ -126,7 +129,7 @@ export class Dialogue {
     const before = Math.floor(this.shown);
     this.shown = Math.min(this.full.length, this.shown + dt * 48);
     this.acc += Math.floor(this.shown) - before;
-    if (this.acc >= 3) { this.acc = 0; if (!this.voiced) audio.talk(this.talker); }
+    if (this.acc >= 3) { this.acc = 0; if (!this.voiced) audio.talk(this.talker, this.phone); }
     if (this.shown >= this.full.length) this.typing = false;
     this.render();
   }

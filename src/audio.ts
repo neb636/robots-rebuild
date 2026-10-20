@@ -220,11 +220,21 @@ const TALK: Record<string, Talk> = {
   aloud: { wave: 'sawtooth', hz: 175, spread: 0.12, dur: 0.07, vol: 0.16, filter: 1700 },
   // warm, calm, a touch of room
   narrator: { wave: 'sine', hz: 300, spread: 0.06, dur: 0.08, vol: 0.16, filter: 1800, room: 0.4 },
-  // urgent, through a phone
-  marcus: { wave: 'sawtooth', hz: 175, spread: 0.18, dur: 0.06, vol: 0.2, filter: [500, 2600] },
+  // quick and bright, talking with his hands (on a phone line the phone band goes over it: talk())
+  marcus: { wave: 'sawtooth', hz: 175, spread: 0.18, dur: 0.06, vol: 0.18, filter: 2300 },
+  // clipped and precise: a narrow, even voice, a little dry
+  maya: { wave: 'triangle', hz: 330, spread: 0.07, dur: 0.055, vol: 0.2, filter: 2800 },
   // perfectly even, robotic: no pitch drift and a metallic buzz
   tv: { wave: 'square', hz: 220, spread: 0, dur: 0.07, vol: 0.17, filter: 2400, buzz: 48 },
 };
+
+/** where the hero is in the tunnel walk (0..1 each): near the drowned platform's water, the stopped
+ *  train and the phone ringing in it (and which side it's on, -1 left .. 1 right), and how deep in
+ *  (the Hum grows toward State) */
+export interface TunnelField { dt: number; water: number; train: number; phone: number; phonePan: number; depth: number }
+
+/** a phone line's band, over any speaker's blips */
+const PHONE_BAND: [number, number] = [500, 2600];
 
 /** how close the hero is to each of the harbor's sound sources (0 far .. 1 on top of it), and which
  *  side the wall and the drone are on (-1 left .. 1 right) */
@@ -260,6 +270,7 @@ class AudioEngine {
   private songT0 = 0;
   private ambNodes: { stop: () => void } | null = null;
   private field: ((l: HarborField) => void) | null = null;
+  private tfield: ((l: TunnelField) => void) | null = null;
   private ambName: string | null = null;
   private clips = new Map<string, Promise<AudioBuffer | null>>();
   private voiceSrc: { src: AudioBufferSourceNode; g: GainNode; buf: AudioBuffer; room: boolean; vol: number; t0: number } | null = null;
@@ -392,8 +403,9 @@ class AudioEngine {
     }
   }
 
-  /** one talk blip in a speaker's synthesized voice (TALK); 'none' is silent, unknown names get the UI blip */
-  talk(name: string) {
+  /** one talk blip in a speaker's synthesized voice (TALK); 'none' is silent, unknown names get the UI
+   *  blip. A `phone` line goes through a phone's narrow band. */
+  talk(name: string, phone = false) {
     if (!this.ready || name === 'none') return;
     const p = TALK[name];
     if (!p) { this.sfx('blip', 0.6); return; }
@@ -413,8 +425,9 @@ class AudioEngine {
       out = out.connect(am);
     }
     const f = c.createBiquadFilter();
-    if (Array.isArray(p.filter)) { f.type = 'bandpass'; f.frequency.value = Math.sqrt(p.filter[0] * p.filter[1]); f.Q.value = Math.sqrt(p.filter[0] * p.filter[1]) / (p.filter[1] - p.filter[0]); }
-    else { f.type = 'lowpass'; f.frequency.value = p.filter; }
+    const band = phone ? PHONE_BAND : p.filter;
+    if (Array.isArray(band)) { f.type = 'bandpass'; f.frequency.value = Math.sqrt(band[0] * band[1]); f.Q.value = Math.sqrt(band[0] * band[1]) / (band[1] - band[0]); }
+    else { f.type = 'lowpass'; f.frequency.value = band; }
     out.connect(f).connect(g).connect(this.voiceBus);
     if (p.room) { const s = c.createGain(); s.gain.value = p.room; g.connect(s).connect(this.reverbSend); }
     o.start(t); o.stop(t + p.dur + 0.05);
@@ -695,6 +708,7 @@ class AudioEngine {
     if (this.ambNodes) { this.ambNodes.stop(); this.ambNodes = null; }
     this.ambName = name;
     this.field = null;
+    this.tfield = null;
     if (!name) return;
     const c = this.ctx;
     const g = c.createGain(); g.gain.setValueAtTime(0, c.currentTime); g.gain.linearRampToValueAtTime(1, c.currentTime + 2);
@@ -719,8 +733,9 @@ class AudioEngine {
       }
     } else if (name === 'tunnel') {
       const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 120;
-      const wg = c.createGain(); wg.gain.value = 0.35; src().connect(lp).connect(wg).connect(g);
-      timer = window.setInterval(() => { if (Math.random() < 0.5) this.sfx('drip'); }, 1400);
+      const wg = c.createGain(); wg.gain.value = 0.3; src().connect(lp).connect(wg).connect(g);
+      lfo(0.05, 0.08, wg.gain);
+      this.tfield = this.tunnelField(g, src, lfo, nodes);
     } else if (name === 'room') {
       const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 300;
       const wg = c.createGain(); wg.gain.value = 0.04; src().connect(lp).connect(wg).connect(g);
@@ -747,6 +762,124 @@ class AudioEngine {
 
   /** the harbor's positional beds, driven every frame by `harbor(levels)` */
   harbor(l: HarborField) { this.field?.(l); }
+
+  /** the tunnel's, driven every frame by `tunnel(levels)` */
+  tunnel(l: TunnelField) { this.tfield?.(l); }
+
+  /**
+   * Under the city: a hiss of moving air over the rumble, the Hum (two detuned saws and a thin
+   * whine, louder the deeper in), water lapping beside the drowned platform, the stopped train's
+   * emergency ballast buzzing, a phone ringing in one of its cars, drips with a long echo down the
+   * tunnel, and now and then a far-off groan of metal.
+   */
+  private tunnelField(out: GainNode, src: () => AudioBufferSourceNode, lfo: (f: number, d: number, p: AudioParam) => void, nodes: AudioScheduledSourceNode[]) {
+    const c = this.ctx;
+    const gain = (v = 0) => { const g = c.createGain(); g.gain.value = v; return g; };
+    const filt = (type: BiquadFilterType, f: number, q = 0.7) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+    // moving air
+    src().connect(filt('bandpass', 420, 0.5)).connect(gain(0.025)).connect(out);
+    // the Hum
+    const humLp = filt('lowpass', 220), humG = gain(), whineG = gain();
+    for (const f of [55, 55.5, 110.3]) { const o = c.createOscillator(); o.type = f > 100 ? 'sine' : 'sawtooth'; o.frequency.value = f; o.connect(humLp); o.start(); nodes.push(o); }
+    humLp.connect(humG).connect(out);
+    const whine = c.createOscillator(); whine.frequency.value = 3150; whine.connect(whineG).connect(out); whine.start(); nodes.push(whine);
+    lfo(0.06, 40, humLp.frequency);
+    // water at the drowned platform
+    const lapMod = gain(0.5), lapG = gain();
+    src().connect(filt('bandpass', 480, 0.8)).connect(filt('lowpass', 1200)).connect(lapMod).connect(lapG).connect(out);
+    lfo(0.19, 0.25, lapMod.gain); lfo(0.37, 0.2, lapMod.gain);
+    // the train's ballast: a 120 Hz buzz that stutters
+    const ball = c.createOscillator(); ball.type = 'square'; ball.frequency.value = 120; ball.start(); nodes.push(ball);
+    const ballG = gain(), ballMod = gain(1);
+    ball.connect(filt('lowpass', 900)).connect(ballMod).connect(ballG).connect(out);
+    // the echo down the tunnel, for the drips and the groans
+    const echo = c.createDelay(1); echo.delayTime.value = 0.29;
+    const fb = gain(0.38), echoLp = filt('lowpass', 2400);
+    echo.connect(echoLp).connect(fb).connect(echo);
+    echoLp.connect(out);
+    const phonePan = c.createStereoPanner(), phoneG = gain();
+    phoneG.connect(filt('lowpass', 1700)).connect(phonePan).connect(out);
+    let ringT = 1, stutter = 0, set = -1;
+    const T = 0.25;
+    return (l: TunnelField) => {
+      const now = c.currentTime;
+      if (now - set >= 1 / 15) {
+        set = now;
+        humG.gain.setTargetAtTime(0.025 + l.depth * 0.06, now, T);
+        whineG.gain.setTargetAtTime(0.0006 + l.depth * l.depth * 0.0025, now, T);
+        lapG.gain.setTargetAtTime(l.water * 0.26, now, T);
+        ballG.gain.setTargetAtTime(l.train * l.train * 0.03, now, T);
+        phoneG.gain.setTargetAtTime(l.phone * l.phone * 0.5, now, T);
+        phonePan.pan.setTargetAtTime(l.phonePan * 0.85, now, T);
+      }
+      // the ballast cuts out for a moment, now and then
+      if ((stutter -= l.dt) <= 0 && Math.random() < l.dt * 0.4) { stutter = 0.1 + Math.random() * 0.3; ballMod.gain.setTargetAtTime(0.1, now, 0.01); }
+      else if (stutter <= 0) ballMod.gain.setTargetAtTime(1, now, 0.02);
+      // the phone: a ringtone's three notes, twice, every four seconds
+      if (l.phone > 0.01 && (ringT -= l.dt) <= 0) {
+        ringT = 4;
+        for (let r = 0; r < 2; r++) [1319, 1568, 1976].forEach((f, i) => {
+          const st = now + r * 0.62 + i * 0.13, o = c.createOscillator(), og = c.createGain();
+          o.type = 'triangle'; o.frequency.value = f; o.connect(og).connect(phoneG);
+          og.gain.setValueAtTime(0.0001, st); og.gain.linearRampToValueAtTime(0.12, st + 0.01); og.gain.exponentialRampToValueAtTime(0.0001, st + 0.22);
+          o.start(st); o.stop(st + 0.25);
+        });
+      }
+      if (Math.random() < l.dt * 0.75) this.tunnelHit(echo, 'drip', 0.4 + Math.random() * 0.6);
+      if (Math.random() < l.dt * l.water * 0.8) this.harborHit(out, 'lap', 0.4 + l.water * 0.4);
+      if (Math.random() < l.dt * 0.035) this.tunnelHit(echo, 'groan', 0.5 + Math.random() * 0.5);
+    };
+  }
+
+  private tunnelHit(echo: AudioNode, kind: 'drip' | 'groan', vol: number) {
+    const c = this.ctx, t = c.currentTime, g = c.createGain(), p = c.createStereoPanner();
+    p.pan.value = (Math.random() - 0.5) * 1.6;
+    g.connect(p); p.connect(this.ambBus); p.connect(echo);
+    const env = (peak: number, a: number, dec: number) => { g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak * vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + dec); };
+    if (kind === 'drip') {
+      // a drop into a puddle: a quick downward chirp
+      const o = c.createOscillator(); const f = 1500 + Math.random() * 1400;
+      o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.35, t + 0.09);
+      o.connect(g); o.start(t); o.stop(t + 0.15);
+      g.connect(this.reverbSend); env(0.05, 0.003, 0.11);
+    } else {
+      // metal far down the line, settling: a slow grinding groan
+      const o = c.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(62 + Math.random() * 30, t); o.frequency.linearRampToValueAtTime(40 + Math.random() * 10, t + 2.2);
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 260 + Math.random() * 200; bp.Q.value = 3;
+      o.connect(bp).connect(g); o.start(t); o.stop(t + 2.6);
+      g.connect(this.reverbSend); env(0.05, 0.6, 1.9);
+    }
+    setTimeout(() => { try { g.disconnect(); p.disconnect(); } catch { /* gone */ } }, 6000);
+  }
+
+  /**
+   * A knock on a pipe: a dull hit and the pipe ringing on after it. `far` (0..1) is a knock heard
+   * from the other end of the pipe: quieter, duller, mostly echo. `pan` -1 left .. 1 right.
+   */
+  knock(pan: number, far: number) {
+    if (!this.ready) return;
+    const c = this.ctx, t = c.currentTime;
+    const g = c.createGain(), p = c.createStereoPanner(), lp = c.createBiquadFilter();
+    p.pan.value = pan;
+    lp.type = 'lowpass'; lp.frequency.value = 6500 - far * 5400;
+    g.connect(lp).connect(p).connect(this.sfxBus);
+    const send = c.createGain(); send.gain.value = 0.3 + far * 0.9; p.connect(send).connect(this.reverbSend);
+    const vol = 1 - far * 0.6;
+    const env = (peak: number, dec: number, start = t) => { const e = c.createGain(); e.connect(g); e.gain.setValueAtTime(0.0001, start); e.gain.linearRampToValueAtTime(peak * vol, start + 0.003); e.gain.exponentialRampToValueAtTime(0.0001, start + dec); return e; };
+    // the knuckles: a short thump of band-limited noise and a low body
+    const n = c.createBufferSource(); n.buffer = this.noiseBuf; n.start(t, Math.random()); n.stop(t + 0.05);
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 1.2;
+    n.connect(bp).connect(env(0.5, 0.05));
+    const body = c.createOscillator(); body.frequency.setValueAtTime(150, t); body.frequency.exponentialRampToValueAtTime(70, t + 0.1);
+    body.connect(env(0.35, 0.12)); body.start(t); body.stop(t + 0.15);
+    // the pipe ringing: inharmonic partials, the high ones dying first
+    for (const [f, a, d] of [[318, 0.2, 0.9], [871, 0.11, 0.6], [1597, 0.06, 0.38], [2433, 0.035, 0.22]] as const) {
+      const o = c.createOscillator(); o.frequency.value = f * (0.99 + Math.random() * 0.02);
+      o.connect(env(a, d)); o.start(t); o.stop(t + d + 0.05);
+    }
+    setTimeout(() => { try { g.disconnect(); p.disconnect(); send.disconnect(); } catch { /* gone */ } }, 4000);
+  }
 
   /**
    * Water lapping at the quays (louder the nearer the edge), the cordon's hum and its drones' whine
@@ -1052,6 +1185,35 @@ class AudioEngine {
       case 'thud': { const x = o('sine', 80, t, 0.3); x.frequency.exponentialRampToValueAtTime(35, t + 0.25); x.connect(env(0.6, 0.3)); break; }
       case 'duo': { [392, 523, 659, 784, 1047, 1319].forEach((f, i) => o('sawtooth', f, t + i * 0.05, 0.5).connect(env(0.04, 0.5, 0.01, t + i * 0.05))); break; }
       case 'step': { const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; n(0.05).connect(lp).connect(env(0.05, 0.05)); break; }
+      // the flashlight's switch
+      case 'click': { o('square', 2600, t, 0.004).connect(env(0.05, 0.01)); o('square', 1900, t + 0.06, 0.004).connect(env(0.04, 0.012, 0.002, t + 0.06)); break; }
+      // bolt cutters through a chain link
+      case 'snip': {
+        const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2800;
+        n(0.05).connect(hp).connect(env(0.35, 0.05));
+        o('sine', 2650, t, 0.2).connect(env(0.06, 0.2));
+        o('sine', 4100, t, 0.12).connect(env(0.03, 0.12));
+        break;
+      }
+      // the chain running off the gate onto the floor
+      case 'chain': {
+        for (let i = 0; i < 14; i++) {
+          const st = t + i * 0.05 + Math.random() * 0.04;
+          o('sine', 1800 + Math.random() * 2600, st, 0.08).connect(env(0.03 + Math.random() * 0.03, 0.08, 0.002, st));
+        }
+        const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
+        n(0.12, t + 0.75).connect(lp).connect(env(0.2, 0.12, 0.003, t + 0.75));
+        break;
+      }
+      // a scissor gate folding back: a juddering metal drag, a clank as it stops
+      case 'gate': {
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1100; bp.Q.value = 2;
+        const am = c.createGain(); am.gain.value = 0.5;
+        const tr = o('square', 17, t, 1.1); const depth = c.createGain(); depth.gain.value = 0.5; tr.connect(depth).connect(am.gain);
+        n(1.1).connect(bp).connect(am).connect(env(0.12, 1.0, 0.08));
+        const gg = env(0.15, 0.6, 0.003, t + 1.05); o('sine', 380, t + 1.05, 0.6).connect(gg); o('sine', 1043, t + 1.05, 0.4).connect(gg); gg.connect(this.reverbSend);
+        break;
+      }
       case 'drip': { const x = o('sine', 1800 + Math.random() * 600, t, 0.12); x.frequency.exponentialRampToValueAtTime(600, t + 0.1); const gg = env(0.04, 0.12); x.connect(gg); gg.connect(this.reverbSend); break; }
       case 'bird': { const st = t; const x = o('sine', 2800, st, 0.25); x.frequency.setValueAtTime(2800, st); x.frequency.linearRampToValueAtTime(3600, st + 0.08); x.frequency.linearRampToValueAtTime(2600, st + 0.18); x.connect(env(0.015, 0.2, 0.01)); break; }
       case 'foghorn': { const x = o('sawtooth', 73, t, 2.5); const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260; const gg = env(0.12, 2.4, 0.4); x.connect(lp).connect(gg); gg.connect(this.reverbSend); break; }

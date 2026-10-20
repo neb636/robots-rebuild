@@ -103,8 +103,9 @@ export function skyline(parent: THREE.Object3D, b: Batch, lights: FogLight[]) {
       z -= w;
     }
   }
-  // far ground climbing the hill
-  b.add(wbox(12, 1, 46, 0.4), pbrMat('asphalt', '#8a8a8a'), -1.2, 2.4 - 0.5 + 1.5, -58, -0.065, 0, 0);
+  // far ground climbing the hill, from behind Park Street's headhouse (scene.ts) as the houses do
+  const slope = 0.12, near = -48.5, far = -81, mid = (near + far) / 2;
+  b.add(wbox(12, 1, near - far + 0.5, 0.4), pbrMat('asphalt', '#8a8a8a'), -1.2, 2.4 + (near - mid) * slope - 0.5, mid, Math.atan(slope), 0, 0);
 
   // ---- State House: collapsed gilded dome on a columned drum
   const sh = new THREE.Group(); sh.position.set(-4, 11, -112); parent.add(sh);

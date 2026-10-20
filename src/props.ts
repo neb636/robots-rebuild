@@ -332,3 +332,21 @@ export function glowSprite(color: string, size: number, intensity = 4) {
   const s = new THREE.Sprite(m); s.scale.setScalar(size);
   return s;
 }
+
+// -------------------------------------------------------------------------------- MBTA station sign
+/** a station-name panel, MBTA style: white lettering on black over a stripe of the line's colour,
+ *  two years grimier. Faintly self-lit so it reads when a light finds it. */
+export function stationSign(text: string, line: string, w = 1024, h = 192) {
+  return cached(`sign:${text}:${line}:${w}`, () => {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const c = cv.getContext('2d')!;
+    c.fillStyle = '#141414'; c.fillRect(0, 0, w, h);
+    c.fillStyle = line; c.fillRect(0, h - 22, w, 22);
+    c.fillStyle = '#ecebe4'; c.font = `bold ${Math.round(h * 0.46)}px Helvetica, Arial, sans-serif`; c.textBaseline = 'middle';
+    c.fillText(text, 36, h * 0.44);
+    const R = rng(text.length * 31 + w);
+    for (let i = 0; i < 260; i++) { c.fillStyle = `rgba(30,24,18,${R() * 0.22})`; c.fillRect(R() * w, R() * h, 2 + R() * 40, 1 + R() * 4); }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    return new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.06, roughness: 0.6 });
+  });
+}
