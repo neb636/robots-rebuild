@@ -18,6 +18,22 @@ function mixc(a: [number, number, number], b: [number, number, number], t: numbe
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 }
 
+/** a repeatable 0..1 per integer cell */
+const cellHash = (a: number, b: number, seed: number) => { const x = Math.sin(a * 127.1 + b * 311.7 + seed * 74.7) * 43758.5453; return x - Math.floor(x); };
+/** signed distance (cm) to a rounded rectangle centred at the origin: half-size hx, hy, corner radius r */
+const rrect = (px: number, py: number, hx: number, hy: number, r: number) => {
+  const qx = Math.abs(px) - hx + r, qy = Math.abs(py) - hy + r;
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+};
+/** granite's grain at (u, v): black mica, white quartz and pink feldspar flecks over a base colour */
+function granite(c: [number, number, number], u: number, v: number, f: number, seed: number): [number, number, number] {
+  const a = vnoise(u * f, v * f, f, seed), b = vnoise(u * f * 1.7, v * f * 1.7, Math.round(f * 1.7), seed + 1), g = vnoise(u * f * 3.1, v * f * 3.1, Math.round(f * 3.1), seed + 2);
+  c = mixc(c, hex('#1e1d1c'), sstep(0.7, 0.8, a) * 0.75);
+  c = mixc(c, hex('#c4c0b6'), sstep(0.74, 0.84, b) * 0.6);
+  c = mixc(c, hex('#a07e70'), sstep(0.76, 0.86, g) * 0.35);
+  return c;
+}
+
 function dataTex(data: Uint8Array, size: number, srgb: boolean) {
   const t = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -43,6 +59,10 @@ function build(size: number, normalStrength: number, fn: (u: number, v: number) 
     rough[i * 4] = r; rough[i * 4 + 1] = r; rough[i * 4 + 2] = r; rough[i * 4 + 3] = 255;
   }
   const s = normalStrength * size / 256;
+  // the height, normalised, rides in the normal map's alpha (the harbor ground's parallax reads it)
+  let h0 = Infinity, h1 = -Infinity;
+  for (let i = 0; i < n; i++) { if (h[i] < h0) h0 = h[i]; if (h[i] > h1) h1 = h[i]; }
+  const hk = 255 / Math.max(1e-6, h1 - h0);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const xl = (x - 1 + size) % size, xr = (x + 1) % size, yd = (y - 1 + size) % size, yu = (y + 1) % size;
     const dx = (h[y * size + xr] - h[y * size + xl]) * s;
@@ -50,7 +70,7 @@ function build(size: number, normalStrength: number, fn: (u: number, v: number) 
     let nx = -dx, ny = -dy, nz = 1;
     const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
     const i = (y * size + x) * 4;
-    nrm[i] = (nx * 0.5 + 0.5) * 255; nrm[i + 1] = (ny * 0.5 + 0.5) * 255; nrm[i + 2] = (nz * 0.5 + 0.5) * 255; nrm[i + 3] = 255;
+    nrm[i] = (nx * 0.5 + 0.5) * 255; nrm[i + 1] = (ny * 0.5 + 0.5) * 255; nrm[i + 2] = (nz * 0.5 + 0.5) * 255; nrm[i + 3] = (h[y * size + x] - h0) * hk;
   }
   return { map: dataTex(col, size, true), normalMap: dataTex(nrm, size, false), roughnessMap: dataTex(rough, size, false) };
 }
@@ -373,51 +393,132 @@ const GEN: Record<string, () => PBRSet> = {
     const fuzz = vnoise(u * 200, v * 200, 200, 201) * 0.05;
     return [c[0] - fuzz, c[1] - fuzz, c[2] - fuzz, puff * 0.6 * seam + fuzz, 0.95];
   }),
-  /** City sidewalk: poured concrete slabs with scored joints, stains, gum spots and hairline cracks. */
-  concrete: () => build(512, 2.2, (u, v) => {
-    const sx = u * 2, sz = v * 2, fx = sx - Math.floor(sx), fz = sz - Math.floor(sz);
-    const joint = Math.min(sstep(0, 0.012, fx), sstep(0, 0.012, 1 - fx), sstep(0, 0.012, fz), sstep(0, 0.012, 1 - fz));
-    const slab = Math.abs(Math.sin(Math.floor(sx) * 37.1 + Math.floor(sz) * 91.3)) * 0.12;
+  /** City sidewalk: poured slabs (two by two to the tile) with tooled edges and a broom finish across
+   *  them; each slab heaved a little its own way, some cracked through, corners spalled, and two years of
+   *  stains: oil, rust, gum, the brown ghosts of leaves; dirt and moss in the joints. */
+  concrete: () => build(512, 2.4, (u, v) => {
+    const sx = u * 2, sz = v * 2, ix = Math.floor(sx), iz = Math.floor(sz), fx = sx - ix, fz = sz - iz;
+    const id = cellHash(ix, iz, 3), id2 = cellHash(ix, iz, 4), id3 = cellHash(ix, iz, 5);
+    // distance to the joint, in cm (a slab is 150 cm)
+    const e = Math.min(fx, 1 - fx, fz, 1 - fz) * 150 + (vnoise(u * 80, v * 80, 80, 140) - 0.5) * 0.6;
+    const joint = sstep(0.5, 1.4, e), tooled = sstep(4.5, 6, e);
+    const broom = vnoise2(u * 30, v * 900, 30, 900, 147) * 0.7 + vnoise2(u * 60, v * 1400, 60, 1400, 148) * 0.3;
     const n = fbm(u, v, 6, 5, 141), g = vnoise(u * 300, v * 300, 300, 142);
+    // a crack across one slab in three, wandering (the cells' edges, warped)
+    const wu = u + (fbm(u, v, 6, 4, 158) - 0.5) * 0.12, wv = v + (fbm(u, v, 6, 4, 159) - 0.5) * 0.12;
+    const [c1, c2] = cellular(((wu % 1) + 1) % 1, ((wv % 1) + 1) % 1, 4, 145);
+    const crack = (1 - sstep(0.0, 0.006, c2 - c1)) * (id2 < 0.35 ? 1 : 0) * sstep(0.35, 0.55, fbm(u, v, 3, 3, 146)) * sstep(2, 6, e);
+    // a spalled corner here and there
+    const cx = fx < 0.5 ? fx : 1 - fx, cz = fz < 0.5 ? fz : 1 - fz;
+    const spall = id3 < 0.3 ? sstep(0.09, 0.06, Math.hypot(cx, cz) + (fbm(u, v, 24, 3, 149) - 0.5) * 0.06) : 0;
     const stain = sstep(0.55, 0.8, fbm(u, v, 3, 4, 143));
-    const gum = sstep(0.985, 0.995, vnoise(u * 90, v * 90, 90, 144));
-    const [c1, c2] = cellular(u, v, 7, 145);
-    const crack = (1 - sstep(0.0, 0.012, c2 - c1)) * sstep(0.6, 0.75, fbm(u, v, 4, 3, 146));
-    let c = mixc(hex('#8a8680'), hex('#a8a49c'), n * 0.6 + g * 0.2 + slab);
-    c = mixc(c, hex('#5e5a54'), stain * 0.4);
-    c = mixc(c, hex('#3a3834'), gum * 0.7 + crack * 0.7);
-    c = mixc(c, hex('#4a4640'), 1 - joint);
-    return [c[0], c[1], c[2], joint * 0.7 + n * 0.2 + g * 0.1 - crack * 0.4, 0.86 - stain * 0.08];
+    const rust = sstep(0.8, 0.9, fbm(u, v, 5, 3, 150)) * (id < 0.25 ? 1 : 0);
+    const [g1, , gid] = cellular(u, v, 24, 144);
+    const gum = sstep(0.1 + gid * 0.4, 0.05, g1 + (vnoise(u * 300, v * 300, 300, 156) - 0.5) * 0.05) * (gid < 0.04 ? 1 : 0);
+    // leaf stains: the tannin a leaf leaves on concrete after it's gone (scattered, each its own way)
+    const [l1, , lid] = cellular(u, v * 0.55, 30, 151);
+    const leaf = sstep(0.3, 0.18, l1 + vnoise(u * 200, v * 200, 200, 157) * 0.12) * (lid < 0.05 ? 1 : 0);
+    const moss = (1 - joint) * sstep(0.45, 0.65, fbm(u, v, 8, 3, 152));
+    let c = mixc(hex('#7e7a74'), hex('#9d9890'), n * 0.55 + g * 0.15 + id * 0.3);
+    c = mixc(c, mixc(c, hex('#77736c'), 0.5), (1 - tooled) * 0.25 * (1 - broom * 0.5) + tooled * broom * 0.12);
+    c = mixc(c, hex('#5a564f'), stain * 0.35);
+    c = mixc(c, hex('#7a5034'), rust * 0.45);
+    c = mixc(c, hex('#6a5640'), leaf * 0.3);
+    c = mixc(c, hex('#6c6860'), spall * 0.6);
+    c = mixc(c, hex('#33302c'), gum * 0.7 + crack * 0.75);
+    c = mixc(c, mixc(hex('#3a342c'), hex('#3e4626'), moss), 1 - joint);
+    // each slab heaved its own way
+    const tilt = ((fx - 0.5) * (id - 0.5) + (fz - 0.5) * (id2 - 0.5)) * 0.35;
+    const height = joint * (0.6 + tilt) + sstep(0, 3, e) * 0.08 + n * 0.12 + broom * tooled * 0.05 + g * 0.03 - crack * 0.35 - spall * 0.25;
+    return [c[0], c[1], c[2], height, 0.88 - stain * 0.08 - (1 - tooled) * 0.06 + spall * 0.06];
   }),
-  /** Granite setts: rough rectangular cobbles in staggered rows, dark joints with grit (North and South
-   *  Market Streets, North Square). */
-  setts: () => build(512, 5, (u, v) => {
-    const rows = 10, per = 6;
+  /** Granite setts: rough-split cobbles in staggered courses, domed and worn smooth on top, their edges
+   *  chipped; wide joints of grit and dark soil with moss coming through (North and South Market Streets,
+   *  North Square). */
+  setts: () => build(512, 6, (u, v) => {
+    const rows = 14, per = 9, cw = 200 / per, ch = 200 / rows;
     const ry = v * rows, row = Math.floor(ry), fy = ry - row;
-    const rx = u * per + (row % 2) * 0.5 + Math.sin(row * 7.7) * 0.2, cx = Math.floor(rx), fx = rx - cx;
-    const wob = (vnoise(u * 60, v * 60, 60, 151) - 0.5) * 0.08;
-    const e = Math.min(fx + wob, 1 - fx + wob, (fy + wob) * 1.2, (1 - fy + wob) * 1.2);
-    const stone = sstep(0.02, 0.12, e);
-    const dome = Math.sqrt(clamp01(e * 3));
-    const id = Math.abs(Math.sin(cx * 127.1 + row * 311.7));
-    const n = fbm(u, v, 24, 3, 152);
-    let c = mixc(hex('#5a5652'), hex('#8a847c'), id * 0.6 + n * 0.4);
-    c = mixc(c, hex('#6a5a4c'), sstep(0.7, 0.9, id) * 0.4);
-    c = mixc(hex('#24221e'), c, stone);
-    return [c[0], c[1], c[2], dome * stone * 0.8 + n * 0.1, 0.78 + (1 - stone) * 0.18 - id * 0.06];
+    const rx = u * per + cellHash(row, 0, 11), cx = Math.floor(rx), fx = rx - cx, sid = ((cx % per) + per) % per;
+    const h1 = cellHash(sid, row, 12), h2 = cellHash(sid, row, 13), h3 = cellHash(sid, row, 14), h4 = cellHash(sid, row, 15);
+    // the stone in its cell (cm), a little smaller than the cell and off-centre
+    const m0 = 0.9 + h1 * 1.4, m1 = 0.9 + h2 * 1.4, my = 0.9 + h3 * 1.1;
+    const px = fx * cw - (cw + m0 - m1) / 2, py = fy * ch - ch / 2 + (h4 - 0.5) * 0.8;
+    const wob = (fbm(u, v, 40, 3, 151) - 0.5) * 2.2 + (vnoise(u * 160, v * 160, 160, 152) - 0.5) * 0.6;
+    const d = rrect(px, py, (cw - m0 - m1) / 2, ch / 2 - my, 2.6) + wob;
+    const stone = sstep(0.6, -0.6, d);
+    const dome = Math.sqrt(clamp01(-d / 4.5));
+    const tilt = (px / cw) * (h1 - 0.5) * 0.3 + (py / ch) * (h2 - 0.5) * 0.3 + (h3 - 0.5) * 0.12;
+    const pal = ['#6f6c68', '#85817a', '#5f5d5a', '#7c746e', '#6b6f73', '#8a7c72', '#767370'].map(hex);
+    let c = mixc(pal[Math.floor(h4 * pal.length) % pal.length], pal[Math.floor(h2 * pal.length) % pal.length], 0.3);
+    c = mixc(c, mixc(c, hex('#4a4640'), 0.6), fbm(u, v, 18, 3, 153) * 0.5);
+    c = granite(c, u, v, 210, 154);
+    // worn: the tops polished paler, the edges dirty
+    c = mixc(c, mixc(c, hex('#a8a49c'), 0.5), dome * 0.22);
+    c = mixc(c, hex('#3a3632'), (1 - dome) * stone * 0.35);
+    const grit = vnoise(u * 260, v * 260, 260, 155), moss = sstep(0.5, 0.7, fbm(u, v, 10, 3, 156));
+    let jc = mixc(hex('#2c2822'), hex('#5a5246'), sstep(0.55, 0.8, grit));
+    jc = mixc(jc, hex('#38431f'), moss * 0.85);
+    c = mixc(jc, c, stone);
+    const height = stone * (0.55 + dome * 0.35 + tilt) + (1 - stone) * grit * 0.12 + vnoise(u * 120, v * 120, 120, 157) * 0.04 * stone;
+    return [c[0], c[1], c[2], height, stone * (0.86 - dome * 0.3) + (1 - stone) * 0.97];
   }),
-  /** Granite pavers: big rectangular slabs, light grey, for plazas and the marketplace. */
+  /** Boston's brick sidewalk: pavers laid herringbone on sand (no mortar), faded and dusty, some
+   *  sunk and some heaved by roots, corners chipped, sand and moss in the joints. Tile 16 brick-widths. */
+  pavebrick: () => build(512, 4.2, (u, v) => {
+    const N = 16, X = u * N, Y = v * N, cx = Math.floor(X), cy = Math.floor(Y);
+    const mod = (a: number, n: number) => ((a % n) + n) % n;
+    // 90° herringbone of 2:1 bricks: a lattice (1,1), (2,-2) of one horizontal brick at (0,0) and one
+    // upright at (2,-1); find whose cell this is
+    let ox = 0, oy = 0, hz = true;
+    found: for (const [bx, by, h] of [[0, 0, 1], [2, -1, 0]]) for (let k = 0; k < 2; k++) {
+      const x0 = cx - (h ? k : 0), y0 = cy - (h ? 0 : k), dx = x0 - bx, dy = y0 - by;
+      if (mod(dx + dy, 2) === 0 && mod(dx - dy, 4) === 0) { ox = x0; oy = y0; hz = !!h; break found; }
+    }
+    const lx = X - ox, ly = Y - oy, bw = hz ? 2 : 1, bh = hz ? 1 : 2;
+    const id = cellHash(mod(ox, N), mod(oy, N), 21), id2 = cellHash(mod(ox, N), mod(oy, N), 22), id3 = cellHash(mod(ox, N), mod(oy, N), 23);
+    // distance to the brick's edge in cm (a unit is 10 cm), chipped
+    const wob = (fbm(u, v, 48, 3, 161) - 0.5) * 0.7;
+    const e = Math.min(lx, bw - lx, ly, bh - ly) * 10 + wob;
+    const corner = Math.min(Math.hypot(Math.min(lx, bw - lx), Math.min(ly, bh - ly)) * 10, 99);
+    const chip = id3 < 0.4 ? sstep(1.6, 0.6, corner + (vnoise(u * 90, v * 90, 90, 162) - 0.5) * 1.5) : 0;
+    const brick = sstep(0.15, 0.6, e) * (1 - chip * 0.7);
+    const bevel = sstep(0.2, 1.4, e);
+    const pal = ['#663226', '#713a2c', '#5a2b22', '#7a4533', '#4f261e', '#6a3f31', '#80503e', '#3e231c', '#743e2e'].map(hex);
+    let c = pal[Math.floor(id * pal.length) % pal.length];
+    const n = fbm(u, v, 12, 4, 163), sand = vnoise(u * 340, v * 340, 340, 164);
+    c = mixc(c, hex('#4a2a20'), n * 0.3);
+    // dust and wear: the faces gone matte and pale, efflorescence blooming on some
+    c = mixc(c, hex('#6e6058'), 0.22 + sstep(0.4, 0.8, fbm(u, v, 5, 3, 165)) * 0.3);
+    c = mixc(c, hex('#9a8e82'), sstep(0.75, 0.88, fbm(u, v, 9, 3, 166)) * (id2 < 0.2 ? 0.25 : 0.05));
+    c = mixc(c, hex('#a87a62'), sstep(0.8, 0.9, sand) * 0.12);
+    c = mixc(c, hex('#2a201a'), sstep(0.55, 0.85, fbm(u, v, 3, 4, 169)) * 0.3);
+    c = mixc(c, mixc(c, hex('#2e1e18'), 0.5), (1 - bevel) * 0.4);
+    const moss = sstep(0.55, 0.75, fbm(u, v, 9, 3, 167));
+    let jc = mixc(hex('#5c5248'), hex('#2e2620'), sstep(0.3, 0.7, fbm(u, v, 30, 2, 168)));
+    jc = mixc(jc, hex('#3a4421'), moss * 0.8);
+    c = mixc(jc, c, brick);
+    // each brick sits its own height: sunk, heaved, tipped
+    const tilt = ((lx / bw - 0.5) * (id2 - 0.5) + (ly / bh - 0.5) * (id3 - 0.5)) * 0.25;
+    const height = brick * (0.6 + bevel * 0.2 + (id2 - 0.5) * 0.18 + tilt) + n * 0.06 + sand * 0.03 * brick - chip * 0.2;
+    return [c[0], c[1], c[2], height, 0.9 - bevel * 0.06 + (1 - brick) * 0.06];
+  }),
+  /** Granite pavers: big slabs, speckled grey, each a shade apart and some tipped, for plazas and the
+   *  marketplace. */
   pavers: () => build(512, 2.5, (u, v) => {
     const rows = 4, per = 2;
     const ry = v * rows, row = Math.floor(ry), fy = ry - row;
-    const rx = u * per + (row % 2) * 0.5, cx = Math.floor(rx), fx = rx - cx;
-    const joint = Math.min(sstep(0, 0.01, fx), sstep(0, 0.01, 1 - fx), sstep(0, 0.02, fy), sstep(0, 0.02, 1 - fy));
-    const id = Math.abs(Math.sin(cx * 91.7 + row * 47.3));
-    const n = fbm(u, v, 10, 4, 161), g = vnoise(u * 400, v * 400, 400, 162);
-    let c = mixc(hex('#8a8680'), hex('#b0aaa0'), id * 0.4 + n * 0.4 + g * 0.2);
+    const rx = u * per + (row % 2) * 0.5, cx = Math.floor(rx), fx = rx - cx, sid = ((cx % per) + per) % per;
+    const id = cellHash(sid, row, 31), id2 = cellHash(sid, row, 32);
+    const e = Math.min(fx * 150, (1 - fx) * 150, fy * 75, (1 - fy) * 75) + (vnoise(u * 60, v * 60, 60, 160) - 0.5) * 0.8;
+    const joint = sstep(0.4, 1.0, e), bevel = sstep(0.4, 2.5, e);
+    const n = fbm(u, v, 10, 4, 161);
+    let c = mixc(hex('#827e78'), hex('#a8a29a'), id * 0.5 + n * 0.35);
+    c = granite(c, u, v, 260, 162);
     c = mixc(c, hex('#5a5048'), sstep(0.65, 0.85, fbm(u, v, 4, 3, 163)) * 0.3);
-    c = mixc(c, hex('#3a3834'), 1 - joint);
-    return [c[0], c[1], c[2], joint * 0.5 + n * 0.2 + g * 0.15, 0.8 - id * 0.06];
+    c = mixc(c, mixc(c, hex('#4a4640'), 0.5), (1 - bevel) * 0.3);
+    c = mixc(mixc(hex('#3a3632'), hex('#3a4424'), sstep(0.55, 0.75, fbm(u, v, 12, 3, 164))), c, joint);
+    const tilt = ((fx - 0.5) * (id - 0.5) + (fy - 0.5) * (id2 - 0.5)) * 0.2;
+    return [c[0], c[1], c[2], joint * (0.6 + bevel * 0.1 + tilt) + n * 0.1, 0.78 - id * 0.06 + (1 - joint) * 0.15];
   }),
   /** Unmown city lawn two years on: coarse grass, clover, bare patches. */
   turf: () => build(512, 3, (u, v) => {
@@ -437,12 +538,22 @@ const GEN: Record<string, () => PBRSet> = {
     c = mixc(c, hex('#1a1918'), patch * 0.7);
     return [c[0], c[1], c[2], grav * 0.5, 0.95 - patch * 0.25];
   }),
+  /** Two winters unplowed: worn aggregate, alligator cracking where the base gave, tar-sealed cracks,
+   *  a patch, oil. */
   asphalt: () => build(512, 2.5, (u, v) => {
-    const n = fbm(u, v, 8, 5, 131), g = vnoise(u * 220, v * 220, 220, 132);
-    const crack = sstep(0.015, 0.0, Math.abs(fbm(u, v, 3, 4, 133) - 0.5));
-    let c = mixc(hex('#2a2a2a'), hex('#3e3c38'), n * 0.7 + g * 0.3);
-    c = mixc(c, hex('#121110'), crack);
-    return [c[0], c[1], c[2], n * 0.3 + g * 0.2 - crack * 0.4, 0.9 - n * 0.1];
+    const n = fbm(u, v, 8, 5, 131), g = vnoise(u * 220, v * 220, 220, 132), agg = vnoise(u * 420, v * 420, 420, 134);
+    const wu = u + (fbm(u, v, 5, 3, 135) - 0.5) * 0.08, wv = v + (fbm(u, v, 5, 3, 136) - 0.5) * 0.08;
+    const [a1, a2] = cellular(((wu % 1) + 1) % 1, ((wv % 1) + 1) % 1, 14, 133);
+    const gator = (1 - sstep(0.0, 0.025, a2 - a1)) * sstep(0.55, 0.7, fbm(u, v, 3, 4, 137));
+    const [b1, b2] = cellular(((wu % 1) + 1) % 1, ((wv % 1) + 1) % 1, 3, 138);
+    const seal = (1 - sstep(0.0, 0.012, b2 - b1)) * sstep(0.4, 0.6, fbm(u, v, 4, 3, 139));
+    const patch = sstep(0.68, 0.72, fbm(u, v, 2, 4, 140)), oil = sstep(0.6, 0.85, fbm(u, v, 4, 3, 141)) * 0.5;
+    let c = mixc(hex('#2c2b29'), hex('#45423d'), n * 0.6 + g * 0.2 + agg * 0.2);
+    c = mixc(c, hex('#5e5a54'), sstep(0.75, 0.9, agg) * 0.4);
+    c = mixc(c, hex('#252422'), patch * 0.8);
+    c = mixc(c, hex('#151413'), oil + seal * 0.85);
+    c = mixc(c, hex('#0e0d0c'), gator * 0.9);
+    return [c[0], c[1], c[2], n * 0.3 + g * 0.2 + agg * 0.1 - gator * 0.4 + seal * 0.05 + patch * 0.08, 0.9 - n * 0.1 - seal * 0.3 - oil * 0.2];
   }),
 };
 
@@ -452,7 +563,7 @@ export function pbr(name: string): PBRSet {
   return s;
 }
 /** sets only the harbor district uses: generated on demand there, never at the other areas' boot */
-const HARBOR_ONLY = ['concrete', 'setts', 'pavers', 'turf', 'tar'];
+const HARBOR_ONLY = ['concrete', 'setts', 'pavers', 'pavebrick', 'turf', 'tar'];
 export const PBR_NAMES = Object.keys(GEN).filter((n) => !HARBOR_ONLY.includes(n));
 
 // ---------------------------------------------------------------------------------- canvas textures

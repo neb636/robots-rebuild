@@ -1,10 +1,10 @@
 // The procedural texture sets (textures.ts) packed into two texture arrays, so the whole district's
-// ground and facades can share a couple of materials: one array of colour (sRGB), one of normal xy
-// plus roughness (linear). Layers are resampled to one size (512 on High, 256 on Low).
+// ground and facades can share a couple of materials: one array of colour (sRGB), one of normal xy,
+// roughness and height (linear). Layers are resampled to one size (512 on High, 256 on Low).
 import * as THREE from 'three';
 import { pbr } from '../textures';
 
-export const LAYERS = ['asphalt', 'concrete', 'brick', 'pavers', 'setts', 'turf', 'wood', 'stone', 'dirt', 'brownstone', 'ashlar', 'tar', 'metal'] as const;
+export const LAYERS = ['asphalt', 'concrete', 'brick', 'pavers', 'setts', 'turf', 'wood', 'stone', 'dirt', 'brownstone', 'ashlar', 'tar', 'metal', 'pavebrick'] as const;
 export type Layer = (typeof LAYERS)[number];
 export const layer = (n: Layer) => LAYERS.indexOf(n);
 
@@ -37,8 +37,8 @@ export function textureArrays(quality: 'high' | 'low') {
     const rm = set.roughnessMap.image as { data: Uint8Array; width: number };
     const off = li * size * size * 4;
     resample(map.data, map.width, size, alb, off, (o, c) => map.data[o + c]);
-    // normal x, y in RG; roughness in B
-    resample(nm.data, nm.width, size, nrm, off, (o, c) => (c === 2 ? rm.data[o] : c === 3 ? 255 : nm.data[o + c]));
+    // normal x, y in RG; roughness in B; height in A
+    resample(nm.data, nm.width, size, nrm, off, (o, c) => (c === 2 ? rm.data[o] : nm.data[o + c]));
   });
   const mk = (data: Uint8Array<ArrayBuffer>, srgb: boolean) => {
     const t = new THREE.DataArrayTexture(data, size, size, n);
