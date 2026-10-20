@@ -24,6 +24,8 @@ const DISTRICTS: MapLabel[] = [
   { text: 'Financial District', x: -150, z: 250, kind: 'district' },
   { text: 'The Greenway', x: 120, z: -120, kind: 'district' },
   { text: 'Dock Square', x: -230, z: -70, kind: 'district' },
+  // north of the North Market row, clear of the four buildings' own names below it
+  { text: 'Faneuil Hall Marketplace', x: -62, z: -100, kind: 'district' },
 ];
 
 export function harborMap(d: HarborData, parts: Part[]): AreaMap {

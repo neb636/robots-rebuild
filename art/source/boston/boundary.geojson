@@ -361,6 +361,22 @@
   {
    "type": "Feature",
    "properties": {
+    "kind": "spot",
+    "name": "hongkong",
+    "heading": 130,
+    "note": "on the Chatham St sidewalk west of The Hong Kong, looking across at its front (65 Chatham St)"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0539271,
+     42.3597435
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
     "kind": "hole",
     "name": "state-stairs",
     "note": "the State station stairwell: no ground here; src/harbor/station.ts builds the stairs into it"

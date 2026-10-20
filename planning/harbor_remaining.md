@@ -42,7 +42,17 @@ The layout matched Boston but walking it didn't say so. `signs.ts` and `freedomt
 | Storefronts | Each shop's board on the street-facing bay of the building it's in (or the nearest one), over the facade's sign band (raised to 2.8 m over the pavement on hills); some lit, some pubs and cafés with a hanging sign. Not on landmarks or buildings too low for a storefront. |
 | Freedom Trail | `ROUTE` (hand-placed on the sidewalks, OSM's own Freedom Trail ways where it maps them): a 0.36 m brick strip with granite edging, a medallion every 38 m, four stop signs, the red line on the map. |
 | Other | HarborWalk markers every ~85 m along its ways, graffiti on street walls, Massachusetts plates (`streetscape.ts`), the Old North Church steeple past the North End cordon (`landmarks/northend.ts`, lanterns lit, a glow sprite so it reads through the fog). |
-| Cost | One atlas (4096 x 2048, half on Low), two materials sharing it (boards and posts; flat paint and brick, polygon-offset, alpha-cut), per-vertex `glow` for the retroreflective/lit faces; nothing casts shadows. Main+shadow+reflection draws rose by 6-14 per view on High (8-12 on Low), triangles unchanged. Walkable area 306,612 m2 (posts), 0 leaks, all spots. |
+| Cost | One atlas (4096 x 3072 since the marketplace pass, half on Low), two materials sharing it (boards and posts; flat paint and brick, polygon-offset, alpha-cut), per-vertex `glow` for the retroreflective/lit faces; nothing casts shadows. Main+shadow+reflection draws rose by 6-14 per view on High (8-12 on Low), triangles unchanged. Walkable area 306,612 m2 (posts), 0 leaks, all spots. |
+
+## Done since: Faneuil Hall Marketplace in detail
+
+| Piece | What |
+|---|---|
+| Market fronts | `markets.ts`: every North/South Market store gets a tenant (the OSM shops in or just in front of it, else a generic trade or FOR LEASE): a name board over the shopfront, a blade on a bracket, canvas awnings. Quincy's canopy fascia carries the shops inside the hall. Gilt QUINCY MARKET / 1826 over the pavilion doors, EST. 1826 on the row gables. Bull Market pushcarts under the canopies and out on the malls. One sign sheet (2048 x 4096, half on Low). |
+| The malls | `signs.ts`: five green directory pylons (plan, you-are-here, arrows per face), paired banners on every lamp within 15 m of the four buildings. `marketplace.ts`: café tables and umbrellas by the restaurants, planters, the street performers' chalk circle on the east plaza. |
+| Building names | Named OSM buildings (header.names) get one name panel on their best street wall: incised granite, bronze or steel letters, or a garage's blue P. |
+| The Hong Kong | `landmarks/hongkong.ts` (`keepWalls`) on 65 Chatham St (OSM w1280705644; the bar isn't in OSM): red lacquered front, the THE HONG KONG neon band (one letter dead, the G stuttering), the vertical 香港 / HONG KONG blade, lit swaying lanterns, a green tile awning; Sissy K's board on the Commercial St side. Nightclubs now count as bars in the bake (the Wild Rover). Spot `hongkong`. |
+| Atlas | The signs atlas is 4096 x 3072 now: the pylons, banners and names filled the old 2048. |
 
 ## Follow-ups (not done)
 
@@ -70,7 +80,7 @@ The layout matched Boston but walking it didn't say so. `signs.ts` and `freedomt
 
 - Dev server: `npx vite --port 5173`. URL params: `?menu=0&card=0&ui=0&start=harbor&q=high|low&mood=curfew|ashfall|pall&at=<spot>&fps=8&debug=stats`.
   Spots: state, faneuil, quincy, longwharf, aquarium, columbus, customhouse, harbortowers, rowes,
-  northsquare, blackstone.
+  northsquare, blackstone, hongkong.
 - `window.app` is the game (`pos`, `heading`, `yaw`, `pitch`, `dist`, `player.group`,
   `resetCamera()`, `placeCamera(1, true)`, `built`). It is a DOM element until boot finishes: wait for
   `.loader` to detach and `window.app.built` to exist.

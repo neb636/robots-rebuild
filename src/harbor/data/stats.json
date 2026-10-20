@@ -37,7 +37,8 @@
   "ringsFountain": 0,
   "unionOysterHouse": 0,
   "columbusTrellis": 0,
-  "oldNorthChurch": 5
+  "oldNorthChurch": 5,
+  "hongKong": 2
  },
  "ground": {
   "landArea": 476365,
@@ -81,10 +82,10 @@
   "lamp": 2273
  },
  "streets": 338,
- "shops": 186,
+ "shops": 188,
  "bytes": {
-  "json": 220464,
+  "json": 220777,
   "bin": 4584128,
-  "binGz": 2005826
+  "binGz": 2005837
  }
 }

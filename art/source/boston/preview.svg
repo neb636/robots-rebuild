@@ -19780,8 +19780,8 @@
 <path d="M586.3,-98.7L592.7,-107.8L607.9,-98.2L601.1,-88.8L592.1,-93.8Z" fill="#8a8580" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678828  h=13.2 style=0</title></path>
 <path d="M-633.6,1792.9L-630.1,1806.2L-657.0,1813.2L-660.5,1799.9Z" fill="#8a8580" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678831  h=36.6 style=4</title></path>
 <path d="M520.6,1582.5L519.1,1576.4L533.8,1573.0L543.0,1608.2L543.8,1608.0L544.1,1609.0L516.4,1616.2L512.3,1615.9L509.0,1613.5L507.9,1611.7L501.4,1586.8Z" fill="#e8dccc" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678832 Farlow Building h=16.4 style=1</title></path>
-<path d="M771.0,1500.8L788.2,1498.8L793.5,1523.3L791.5,1523.7L791.9,1525.5L773.5,1527.9Z" fill="#e8dccc" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678833  h=30.3 style=3</title></path>
-<path d="M756.7,1502.4L771.0,1500.8L773.5,1527.9L759.5,1529.6Z" fill="#e8dccc" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678834  h=30.3 style=7</title></path>
+<path d="M771.0,1500.8L788.2,1498.8L793.5,1523.3L791.5,1523.7L791.9,1525.5L773.5,1527.9Z" fill="#e8b040" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678833  h=30.3 style=3</title></path>
+<path d="M756.7,1502.4L771.0,1500.8L773.5,1527.9L759.5,1529.6Z" fill="#e8b040" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678834  h=30.3 style=7</title></path>
 <path d="M726.3,1505.7L756.7,1502.4L759.5,1529.6L728.8,1533.5Z" fill="#e8dccc" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678835  h=30.3 style=1</title></path>
 <path d="M753.1,1536.8L793.7,1530.6L799.6,1558.1L797.3,1558.5L797.9,1561.2L761.3,1569.0L761.1,1567.9L759.2,1568.3Z" fill="#e8dccc" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678836  h=30.3 style=3</title></path>
 <path d="M730.4,1540.2L753.1,1536.8L759.2,1568.3L737.4,1572.9Z" fill="#e8dccc" fill-rule="evenodd" stroke="#2a2826" stroke-width="0.4"><title>678837  h=30.3 style=0</title></path>
@@ -22808,4 +22808,6 @@
 <text x="808.3" y="642.0" font-family="sans-serif" font-size="16" fill="#fff" stroke="#000" stroke-width="0.6">northsquare</text>
 <circle cx="276.3" cy="1248.0" r="6" fill="#ff40c0"/>
 <text x="284.3" y="1252.0" font-family="sans-serif" font-size="16" fill="#fff" stroke="#000" stroke-width="0.6">blackstone</text>
+<circle cx="752.3" cy="1484.7" r="6" fill="#ff40c0"/>
+<text x="760.3" y="1488.7" font-family="sans-serif" font-size="16" fill="#fff" stroke="#000" stroke-width="0.6">hongkong</text>
 </svg>

@@ -12,7 +12,7 @@ import type { WalkMesh } from './walk';
 import type { Part } from './buildings';
 import { ChunkBuilder, type Chunk, type MeshAcc } from './chunks';
 import { storefront } from './facade';
-import { buildFreedomTrail } from './freedomtrail';
+import { buildFreedomTrail, ROUTE } from './freedomtrail';
 import { rng } from '../noise';
 
 /** an atlas cell: u0, v0 (bottom left), u1, v1 */
@@ -247,6 +247,178 @@ function graffitiCell(A: SignAtlas, i: number, seed: number) {
   });
 }
 
+// -------------------------------------------------------------------------------- the marketplace
+/** the four buildings of Faneuil Hall Marketplace, by landmark key, as the pylons name them */
+export const MARKET: [string, string][] = [['faneuil', 'Faneuil Hall'], ['quincy', 'Quincy Market'], ['northMarket', 'North Market'], ['southMarket', 'South Market']];
+const GOLD = '#d6b25a', PYLON_GREEN = '#123422';
+/** a gilt grasshopper (Faneuil Hall's weathervane), facing right, about 1 x 0.45 of `s` */
+function grasshopper(c: CanvasRenderingContext2D, x: number, y: number, s: number, fill: string) {
+  c.save(); c.translate(x, y); c.scale(s, s); c.fillStyle = fill; c.strokeStyle = fill; c.lineCap = 'round';
+  c.beginPath(); c.ellipse(0, 0, 0.42, 0.11, -0.08, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.ellipse(0.42, -0.04, 0.09, 0.08, 0, 0, Math.PI * 2); c.fill();
+  c.lineWidth = 0.05;
+  c.beginPath(); c.moveTo(-0.05, -0.02); c.lineTo(-0.36, -0.3); c.lineTo(-0.46, 0.22); c.stroke(); // the big hind leg
+  c.beginPath(); c.moveTo(0.22, 0.06); c.lineTo(0.3, 0.24); c.moveTo(0.1, 0.06); c.lineTo(0.06, 0.24); c.stroke();
+  c.lineWidth = 0.025; c.beginPath(); c.moveTo(0.48, -0.08); c.quadraticCurveTo(0.7, -0.3, 0.95, -0.22); c.stroke();
+  c.restore();
+}
+/** Quincy Market's dome and portico in outline, centred on (x, y), `s` wide */
+function domeMark(c: CanvasRenderingContext2D, x: number, y: number, s: number, fill: string) {
+  c.save(); c.translate(x, y); c.scale(s, s); c.fillStyle = fill;
+  c.fillRect(-0.5, 0.12, 1, 0.08);
+  for (let i = 0; i < 4; i++) c.fillRect(-0.36 + i * 0.22, -0.12, 0.06, 0.24);
+  c.beginPath(); c.moveTo(-0.46, -0.12); c.lineTo(0.46, -0.12); c.lineTo(0, -0.3); c.closePath(); c.fill();
+  c.beginPath(); c.ellipse(0, -0.3, 0.22, 0.2, 0, Math.PI, 0); c.fill();
+  c.fillRect(-0.03, -0.62, 0.06, 0.14);
+  c.restore();
+}
+/** a lamp post's banner, 0.45 x 1.25 m; `torn` rips the foot ragged (cut out by the alpha) */
+function bannerCell(A: SignAtlas, design: 0 | 1, torn: boolean, seed: number) {
+  return A.add(`banner:${design}:${torn ? 1 : 0}:${seed}`, 90, 250, (c, w, h) => {
+    const R = rng(seed * 7 + design * 31 + (torn ? 3 : 0));
+    const bg = design === 0 ? '#6e1b20' : '#1c2c4a', fg = '#f1e6c8';
+    c.fillStyle = bg; c.fillRect(0, 0, w, h);
+    c.strokeStyle = GOLD; c.lineWidth = 2; c.strokeRect(5, 5, w - 10, h - 10);
+    const t = (s: string, y: number, px: number, col = fg, font = SERIF) => fitText(c, s, w / 2, y, w - 18, `bold ${px}px ${font}`, col);
+    if (design === 0) {
+      grasshopper(c, w / 2 - 4, 40, 50, GOLD);
+      t('FANEUIL', 92, 17); t('HALL', 114, 19);
+      c.fillStyle = GOLD; c.fillRect(20, 130, w - 40, 2);
+      t('MARKET', 152, 15); t('PLACE', 172, 15);
+      t('BOSTON', 220, 11, GOLD, SANS);
+    } else {
+      domeMark(c, w / 2, 56, 56, GOLD);
+      t('QUINCY', 104, 18); t('MARKET', 128, 17);
+      c.fillStyle = GOLD; c.fillRect(20, 146, w - 40, 2);
+      t('1826', 172, 20, GOLD);
+      t('FANEUIL HALL', 210, 9, fg, SANS); t('MARKETPLACE', 224, 9, fg, SANS);
+    }
+    // two years of sun: faded toward the top, the dye run
+    const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(230, 220, 200, 0.28)'); g.addColorStop(1, 'rgba(230, 220, 200, 0.04)');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    weather(c, w, h, R, 0.55);
+    // the hem: a swallowtail, or ripped
+    c.globalCompositeOperation = 'destination-out'; c.fillStyle = '#000';
+    c.beginPath();
+    if (torn) {
+      const top = h * (0.5 + R() * 0.2);
+      c.moveTo(0, h); c.lineTo(0, top + R() * 30);
+      for (let x = 0; x <= w; x += 6) c.lineTo(x, top + R() * 46 + (x / w) * 30 * (R() - 0.3));
+      c.lineTo(w, h);
+    } else { c.moveTo(0, h); c.lineTo(w / 2, h - 16); c.lineTo(w, h); }
+    c.closePath(); c.fill();
+    // moth holes
+    for (let k = 0; k < 5; k++) { c.beginPath(); c.arc(R() * w, R() * h, 1 + R() * (torn ? 5 : 2.5), 0, Math.PI * 2); c.fill(); }
+  });
+}
+/** Faneuil Hall Marketplace's four buildings (their outlines), how far a point is from the nearest of
+ *  them (0 inside), and whether a point keeps `r` clear of the Freedom Trail */
+export function marketZone(d: HarborData) {
+  const inPoly = (x: number, z: number, r: number[][]) => {
+    let c = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) if ((r[i][1] > z) !== (r[j][1] > z) && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+    return c;
+  };
+  const segD = (x: number, z: number, ax: number, az: number, bx: number, bz: number) => {
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz, t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+    return Math.hypot(ax + dx * t - x, az + dz * t - z);
+  };
+  const market = MARKET.map(([key, name]) => ({ key, name, rings: d.h.landmarks.find((l) => l.key === key)?.outline ?? [] })).filter((m) => m.rings.length);
+  const marketDist = (x: number, z: number) => {
+    let best = Infinity;
+    for (const m of market) for (const r of m.rings) {
+      if (inPoly(x, z, r)) return 0;
+      for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length]; best = Math.min(best, segD(x, z, a[0], a[1], b[0], b[1])); }
+    }
+    return best;
+  };
+  const offTrail = (x: number, z: number, r: number) => ROUTE.every((a, i) => i === 0 || segD(x, z, ROUTE[i - 1][0], ROUTE[i - 1][1], a[0], a[1]) > r);
+  return { market, marketDist, offTrail };
+}
+
+/** a directory pylon's face, 0.88 x 2 m: the marketplace's name, a north-up plan of its four buildings
+ *  with this pylon's dot, and which way each of them (and the waterfront) lies from here, as seen
+ *  from this face (`dirs`: name and angle, 0 straight ahead, clockwise) */
+function pylonCell(A: SignAtlas, key: string, plan: { name: string; ring: [number, number][] }[], here: [number, number], dirs: [string, number][], seed: number) {
+  return A.add(`pylon:${key}`, 220, 500, (c, w, h) => {
+    const R = rng(seed);
+    c.fillStyle = PYLON_GREEN; c.fillRect(0, 0, w, h);
+    c.strokeStyle = GOLD; c.lineWidth = 2; c.strokeRect(6, 6, w - 12, h - 12);
+    grasshopper(c, w / 2 - 6, 30, 46, GOLD);
+    fitText(c, 'FANEUIL HALL', w / 2, 66, w - 28, `bold 27px ${SERIF}`, GOLD);
+    fitText(c, 'M A R K E T P L A C E', w / 2, 92, w - 28, `bold 15px ${SERIF}`, '#efe4c4');
+    c.fillStyle = GOLD; c.fillRect(22, 108, w - 44, 2);
+    // the plan
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const b of plan) for (const [x, z] of b.ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    x0 = Math.min(x0, here[0]) - 10; x1 = Math.max(x1, here[0]) + 10; z0 = Math.min(z0, here[1]) - 10; z1 = Math.max(z1, here[1]) + 10;
+    const px = 16, py = 120, pw = w - 32, ph = 130, k = Math.min(pw / (x1 - x0), ph / (z1 - z0));
+    const ox = px + (pw - (x1 - x0) * k) / 2, oy = py + (ph - (z1 - z0) * k) / 2;
+    const P = (x: number, z: number): [number, number] => [ox + (x - x0) * k, oy + (z - z0) * k];
+    c.fillStyle = '#1d4a33'; c.fillRect(px, py, pw, ph);
+    for (const b of plan) {
+      c.beginPath(); b.ring.forEach(([x, z], i) => { const [u, v] = P(x, z); if (i) c.lineTo(u, v); else c.moveTo(u, v); }); c.closePath();
+      c.fillStyle = '#d9ceb0'; c.fill(); c.strokeStyle = '#0c2216'; c.lineWidth = 1; c.stroke();
+      let cx = 0, cz = 0; for (const [x, z] of b.ring) { cx += x; cz += z; }
+      const [u, v] = P(cx / b.ring.length, cz / b.ring.length);
+      fitText(c, b.name, u, v + 1, 80, `bold 9px ${SANS}`, '#16301f');
+    }
+    const [hu, hv] = P(here[0], here[1]);
+    c.fillStyle = '#d8342c'; c.beginPath(); c.arc(hu, hv, 4.5, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#f4ecd8'; c.lineWidth = 1.5; c.stroke();
+    fitText(c, 'YOU ARE HERE', w / 2, py + ph + 13, w - 30, `bold 10px ${SANS}`, '#e8a49a');
+    fitText(c, 'N ↑', w - 30, py + 10, 30, `bold 10px ${SANS}`, '#efe4c4');
+    // the directions
+    dirs.forEach(([name, a], i) => {
+      const y = 290 + i * 38;
+      c.fillStyle = 'rgba(214, 178, 90, 0.18)'; c.fillRect(16, y - 16, w - 32, 32);
+      c.save(); c.translate(36, y); c.rotate(a); c.fillStyle = GOLD;
+      c.beginPath(); c.moveTo(0, -11); c.lineTo(8, -1); c.lineTo(3, -1); c.lineTo(3, 10); c.lineTo(-3, 10); c.lineTo(-3, -1); c.lineTo(-8, -1); c.closePath(); c.fill();
+      c.restore();
+      c.save(); c.textAlign = 'left'; c.textBaseline = 'middle'; c.font = `bold 17px ${SERIF}`; c.fillStyle = '#efe4c4';
+      const tw = c.measureText(name).width, mw = w - 76; c.translate(56, y + 1); if (tw > mw) c.scale(mw / tw, 1); c.fillText(name, 0, 0); c.restore();
+    });
+    fitText(c, 'Shops · Dining · Since 1742', w / 2, h - 22, w - 30, `italic 12px ${SERIF}`, '#cdbf98');
+    weather(c, w, h, R, 0.6);
+  });
+}
+/** a building's own name: incised in a granite lintel (old masonry), bronze letters on brick, brushed
+ *  steel on the modern ones, or a garage's blue sign */
+type NameKind = 'stone' | 'bronze' | 'steel' | 'parking';
+const NAME_H = 64;
+function nameCell(A: SignAtlas, name: string, kind: NameKind, seed: number) {
+  const text = name.toUpperCase();
+  const font = kind === 'steel' ? `300 34px ${SANS}` : kind === 'parking' ? `bold 32px ${SANS}` : `34px ${SERIF}`;
+  const spaced = text.split('').join(kind === 'steel' ? ' ' : ' ');
+  const w = Math.round(Math.min(900, Math.max(200, measure(spaced, font) * 1.08 + (kind === 'parking' ? 90 : 40))));
+  return {
+    w, uv: A.add(`name:${kind}:${name}`, w, NAME_H, (c, w, h) => {
+      const R = rng(seed);
+      if (kind === 'stone') {
+        c.fillStyle = '#a49e92'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(40, 36, 30, 0.6)'; c.lineWidth = 2; c.strokeRect(4, 4, w - 8, h - 8);
+        // incised: a dark cut with a lit lower lip
+        fitText(c, spaced, w / 2, h / 2 + 3, w - 30, font, 'rgba(240, 236, 226, 0.55)');
+        fitText(c, spaced, w / 2, h / 2 + 2, w - 30, font, '#3c3830');
+        weather(c, w, h, R, 0.7);
+      } else if (kind === 'parking') {
+        c.fillStyle = '#16407a'; c.fillRect(0, 0, w, h);
+        c.fillStyle = '#f2f4f2'; roundRect(c, 8, 8, h - 16, h - 16, 6); c.fill();
+        fitText(c, 'P', 8 + (h - 16) / 2, h / 2 + 2, h - 20, `bold 42px ${SANS}`, '#16407a');
+        fitText(c, spaced, (h + w) / 2, h / 2 + 2, w - h - 20, font, '#f2f4f2');
+        weather(c, w, h, R, 0.55);
+      } else {
+        // raised letters on the wall itself: the rest of the cell is cut away
+        const col = kind === 'bronze' ? '#9a7038' : '#c6cacc';
+        fitText(c, spaced, w / 2 + 2, h / 2 + 4, w - 20, font, 'rgba(20, 16, 12, 0.7)');
+        fitText(c, spaced, w / 2, h / 2 + 2, w - 20, font, col);
+        if (kind === 'bronze') { c.globalCompositeOperation = 'source-atop'; for (let k = 0; k < 30; k++) { c.fillStyle = `rgba(70, 140, 110, ${0.2 + R() * 0.3})`; c.fillRect(R() * w, R() * h * 0.6 + h * 0.3, 3 + R() * 8, 4 + R() * 14); } }
+        weather(c, w, h, R, 0.4);
+      }
+    }),
+  };
+}
+
 // -------------------------------------------------------------------------------- geometry
 /** how much a face gives back of the light that's about: the retroreflective sheeting of a sign, a
  *  storefront the grid still lights, nothing for paint and brick (the `glow` attribute scales emission) */
@@ -397,7 +569,8 @@ export interface SignOpts { parts: Part[]; arms: SignalArm[]; lamps: { x: number
 // -------------------------------------------------------------------------------- the build
 export function buildSigns(d: HarborData, parent: THREE.Object3D, collide: CollisionGrid, walk: WalkMesh, o: SignOpts) {
   const R = rng(2030);
-  const A = new SignAtlas(4096, 2048, o.quality === 'high' ? 1 : 0.5);
+  // 3072 tall: the marketplace's pylons and banners and the buildings' names outgrew 2048
+  const A = new SignAtlas(4096, 3072, o.quality === 'high' ? 1 : 0.5);
   // boards and posts, and what lies flat on a wall or the pavement (none of it casts a shadow: thin
   // posts barely show in one, and every tile would draw again in the shadow pass)
   const signMat = signMaterial(A.tex, false), flatMat = signMaterial(A.tex, true);
@@ -406,7 +579,7 @@ export function buildSigns(d: HarborData, parent: THREE.Object3D, collide: Colli
   const signs = (x: number, z: number) => cb.at(signMat, x, z, { cast: false, far: 150 });
   const flat = (x: number, z: number) => cb.at(flatMat, x, z, { cast: false, far: 160 });
   const counts: Record<string, number> = {};
-  const debug: { street: { x: number; z: number; names: string[] }[]; shops: { x: number; z: number; nx: number; nz: number; name: string }[]; graffiti: [number, number, number, number][]; trail: [number, number][]; arms: [number, number][]; parking: [number, number, string][]; harborWalk: [number, number][] } = { street: [], shops: [], graffiti: [], trail: [], arms: [], parking: [], harborWalk: [] };
+  const debug: { street: { x: number; z: number; names: string[] }[]; shops: { x: number; z: number; nx: number; nz: number; name: string }[]; graffiti: [number, number, number, number][]; trail: [number, number][]; arms: [number, number][]; parking: [number, number, string][]; harborWalk: [number, number][]; pylons: [number, number][]; banners: [number, number][]; names: { x: number; z: number; name: string }[] } = { street: [], shops: [], graffiti: [], trail: [], arms: [], parking: [], harborWalk: [], pylons: [], banners: [], names: [] };
 
   const cls = d.get<Uint8Array>('gTriClass');
   const classAt = (x: number, z: number) => { const t = walk.triAt(x, z); return t < 0 ? -1 : cls[t]; };
@@ -530,6 +703,56 @@ export function buildSigns(d: HarborData, parent: THREE.Object3D, collide: Colli
   counts.harborWalk = hwAt.length;
   debug.harborWalk = hwAt;
 
+  // ---- Faneuil Hall Marketplace: directory pylons at the ends of its malls, banners on its lamp posts
+  const { market, marketDist, offTrail } = marketZone(d);
+  if (market.length) {
+    const plan = market.map((m) => ({ name: m.name, ring: m.rings[0] }));
+    const goals: [string, number, number][] = [
+      ...market.map((m): [string, number, number] => { const r = m.rings[0]; return [m.name, r.reduce((a, p) => a + p[0], 0) / r.length, r.reduce((a, p) => a + p[1], 0) / r.length]; }),
+      ['Waterfront & Aquarium', 380, 30],
+    ];
+    // the Merchants Row ends of North and South Market St, their Greenway ends, Faneuil Hall's east door
+    const want: [number, number][] = [[-158, -40], [-157, 6], [22, -56], [28, -12], [-161, -14]];
+    want.forEach(([wx, wz], pi) => {
+      let at: [number, number, number] | null = null;
+      for (let r = 0; r < 9 && !at; r += 0.75) for (let k = 0; k < (r ? 16 : 1); k++) {
+        const x = wx + Math.cos((k / 16) * Math.PI * 2) * r, z = wz + Math.sin((k / 16) * Math.PI * 2) * r, y = walk.heightAt(x, z);
+        if (Number.isNaN(y) || collide.blocked(x, z, 0.9) || !offTrail(x, z, 1.3) || !clear(x, z, 3)) continue;
+        at = [x, y, z]; break;
+      }
+      if (!at) return;
+      const [x, y, z] = at, s = streets.nearest(x, z, 30), [nx, nz] = s ? dirOf(s) : [1, 0];
+      const face = (sg: number) => {
+        const fx = nx * sg, fz = nz * sg, rx = fz, rz = -fx;
+        const dirs = goals.map(([name, gx, gz]): [string, number] => { const L = Math.hypot(gx - x, gz - z) || 1, dx = (gx - x) / L, dz = (gz - z) / L; return [name, Math.atan2(dx * rx + dz * rz, -(dx * fx + dz * fz))]; });
+        return pylonCell(A, `${pi}:${sg}`, plan, [x, z], dirs, pi * 13 + sg + 50);
+      };
+      const acc = signs(x, z), roll = pi === 2 ? 0.05 : 0;
+      board(acc, x, y + 1.14, z, nx, nz, 0.88, 2.0, 0.16, face(1), face(-1), A.blank, roll);
+      board(acc, x, y + 0.07, z, nx, nz, 0.98, 0.18, 0.24, A.iron, A.iron, A.iron);
+      board(acc, x, y + 2.18, z, nx, nz, 0.96, 0.08, 0.22, A.iron, A.iron, A.iron, roll);
+      collide.addSeg(x + nz * 0.47, z - nx * 0.47, x - nz * 0.47, z + nx * 0.47, y + 2.2);
+      taken.push([x, z]); debug.pylons.push([x, z]);
+    });
+    counts.pylons = debug.pylons.length;
+    let design = 0;
+    for (const l of o.lamps) {
+      if (marketDist(l.x, l.z) > 15) continue;
+      const s = streets.nearest(l.x, l.z, 30), [ux, uz] = s ? dirOf(s) : [1, 0];
+      // the arms reach across the way, so the banners face along it
+      const ax = -uz, az = ux, top = l.y + 3.95, acc = signs(l.x, l.z);
+      for (const y of [top, top - 1.25]) bar(acc, A.iron, [l.x - ax * 0.6, y, l.z - az * 0.6], [l.x + ax * 0.6, y, l.z + az * 0.6], 0.013);
+      const dz = (design++ % 2) as 0 | 1;
+      for (const sd of [-1, 1]) {
+        if (R() < 0.12) continue; // blown away
+        const uv = bannerCell(A, dz, R() < 0.25, Math.floor(R() * 3)), cx = l.x + ax * 0.34 * sd, cz = l.z + az * 0.34 * sd;
+        board(acc, cx, top - 0.63, cz, ux, uz, 0.45, 1.25, 0.004, uv, uv, A.blank, (R() - 0.5) * 0.04);
+      }
+      debug.banners.push([l.x, l.z]);
+    }
+    counts.banners = debug.banners.length;
+  }
+
   // ---- storefronts: each shop's board over the nearest street-facing bay of a plain building
   interface Wall { p: Part; ax: number; az: number; bx: number; bz: number; L: number; nx: number; nz: number; used: [number, number][] }
   const walls: Wall[] = [], wallGrid = new Map<number, number[]>();
@@ -620,6 +843,54 @@ export function buildSigns(d: HarborData, parent: THREE.Object3D, collide: Colli
       counts.hanging = (counts.hanging ?? 0) + 1;
     }
   }
+
+  // ---- buildings' own names, over the middle of their best street front: incised granite or bronze on
+  // the old ones, steel letters on the new, a garage's blue P
+  const OLD = new Set(['brickTenement', 'brickCommercial', 'graniteWarehouse', 'masonryOffice', 'civic']);
+  const NOT_A_NAME = /sephora|restaurant|records|hilton|egress|cruises|gift|welcome center|landing|tower$/i;
+  const lmNames = new Set(d.h.landmarks.map((l) => l.name.toLowerCase()));
+  const byName = new Map<string, Wall[]>();
+  for (const w of walls) {
+    const n = d.h.names[String(w.p.i)];
+    if (!n || NOT_A_NAME.test(n) || lmNames.has(n.toLowerCase())) continue;
+    let l = byName.get(n); if (!l) byName.set(n, (l = [])); l.push(w);
+  }
+  const pBlade = A.add('name:pblade', 96, 96, (c, w, h) => {
+    c.fillStyle = '#16407a'; c.fillRect(0, 0, w, h); c.strokeStyle = '#f2f4f2'; c.lineWidth = 3; roundRect(c, 5, 5, w - 10, h - 10, 8); c.stroke();
+    fitText(c, 'P', w / 2, h / 2 + 4, w - 20, `bold 70px ${SANS}`, '#f2f4f2'); weather(c, w, h, rng(88), 0.5);
+  });
+  for (const [name, ws] of byName) {
+    // the longest wall over a named street (a main road counts for more)
+    let best: { w: Wall; score: number } | null = null;
+    for (const w of ws) {
+      const mx = (w.ax + w.bx) / 2, mz = (w.az + w.bz) / 2;
+      if (Number.isNaN(walk.heightAt(mx + w.nx * 2.5, mz + w.nz * 2.5))) continue;
+      const road = streets.nearest(mx + w.nx * 4, mz + w.nz * 4, 18), score = w.L * (road ? (MAJOR.has(road.kind) ? 2 : 1.4) : 0.6);
+      if (!best || score > best.score) best = { w, score };
+    }
+    if (!best) continue;
+    const { w } = best, p = w.p;
+    const kind: NameKind = /garage|parking/i.test(name) ? 'parking' : !OLD.has(p.style) ? 'steel' : p.style.startsWith('brick') ? 'bronze' : 'stone';
+    const cell = nameCell(A, name, kind, p.seed % 9973);
+    let h = kind === 'parking' ? 0.62 : kind === 'stone' ? 0.5 : 0.42, width = (cell.w / NAME_H) * h;
+    if (width > w.L - 0.6) { width = w.L - 0.6; h = width * (NAME_H / cell.w); }
+    if (h < 0.26) continue;
+    const u = place(w, w.L / 2, width + 0.4);
+    if (u === null) continue;
+    const ux = (w.bx - w.ax) / w.L, uz = (w.bz - w.az) / w.L, x = w.ax + ux * u, z = w.az + uz * u;
+    const gH = storefront(p.style).ground, street = walk.heightAt(x + w.nx * 1.5, z + w.nz * 1.5);
+    const y = Math.max(p.base + gH - 0.62, (Number.isNaN(street) ? p.base : street) + 2.8);
+    if (kind === 'stone' || kind === 'parking') board(signs(x, z), x + w.nx * 0.05, y, z + w.nz * 0.05, w.nx, w.nz, width, h, kind === 'stone' ? 0.08 : 0.05, cell.uv, null, A.blank, 0, kind === 'stone' ? GLOW.none : GLOW.sign);
+    else quad(flat(x, z), [x + w.nx * 0.03, y, z + w.nz * 0.03], [-ux, 0, -uz], [0, 1, 0], [w.nx, 0, w.nz], width, h, cell.uv, GLOW.none);
+    if (kind === 'parking') {
+      // and the blue P out over the pavement, by the name
+      const e = Math.max(0.5, Math.min(w.L - 0.5, u + (width / 2 + 0.6) * (u < w.L / 2 ? 1 : -1))), bx = w.ax + ux * e, bz = w.az + uz * e, by = y + 1.2;
+      bar(signs(bx, bz), A.iron, [bx, by + 0.4, bz], [bx + w.nx * 1.05, by + 0.4, bz + w.nz * 1.05], 0.02);
+      board(signs(bx, bz), bx + w.nx * 0.6, by, bz + w.nz * 0.6, ux, uz, 0.7, 0.7, 0.05, pBlade, pBlade, A.blank, 0, GLOW.sign);
+    }
+    debug.names.push({ x, z, name });
+  }
+  counts.names = debug.names.length;
 
   // ---- graffiti, low on street walls, never two near each other
   const wantGraffiti = o.quality === 'high' ? 26 : 16;

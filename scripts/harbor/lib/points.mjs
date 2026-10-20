@@ -72,8 +72,8 @@ export function streets({ osm, near }) {
 }
 
 // what a storefront sign names: shops, and places to eat and drink
-const SHOP_AMENITY = new Set(['restaurant', 'cafe', 'bar', 'pub', 'fast_food', 'ice_cream', 'pharmacy']);
-const shopKind = (t) => (t.shop ? (t.shop === 'bakery' || t.shop === 'pastry' || t.shop === 'confectionery' ? 'bakery' : 'shop') : t.amenity === 'pub' || t.amenity === 'bar' ? 'bar' : t.amenity === 'cafe' || t.amenity === 'ice_cream' ? 'cafe' : t.amenity === 'pharmacy' ? 'shop' : 'restaurant');
+const SHOP_AMENITY = new Set(['restaurant', 'cafe', 'bar', 'pub', 'fast_food', 'ice_cream', 'pharmacy', 'nightclub']);
+const shopKind = (t) => (t.shop ? (t.shop === 'bakery' || t.shop === 'pastry' || t.shop === 'confectionery' ? 'bakery' : 'shop') : t.amenity === 'pub' || t.amenity === 'bar' || t.amenity === 'nightclub' ? 'bar' : t.amenity === 'cafe' || t.amenity === 'ice_cream' ? 'cafe' : t.amenity === 'pharmacy' ? 'shop' : 'restaurant');
 
 /**
  * The neighbourhood's own shops, cafés and bars, for their signs: not the national chains (anything
