@@ -11,7 +11,7 @@ import type { WalkMesh } from './walk';
 import type { Part } from './buildings';
 import { ChunkBuilder, type Chunk } from './chunks';
 import { pbrMat } from '../props';
-import { getBarkMat, taperTube, leafCards, tuftGeometry, getGrassMat, grassPatch, type Card } from '../foliage';
+import { getBarkMat, taperTube, leafCards, tuftGeometry, getGrassMat, grassPatch, wind, type Card } from '../foliage';
 import { rng } from '../noise';
 import type { SignalArm } from './signs';
 import { KITS, pickKit, paintFor, plateMat, platesOf, carFleet } from './cars';
@@ -116,14 +116,29 @@ class Segs {
 }
 
 // -------------------------------------------------------------------------------- kits
-/** the street trees downtown: lindens (a dense oval crown), honey locusts (open, airy, spreading) and
- *  London planes (big and broad) */
-type Species = 'linden' | 'locust' | 'plane';
+/** the street trees downtown: lindens (a dense oval crown), honey locusts (open, airy, spreading),
+ *  London planes (big and broad) and red maples (a full round head) */
+type Species = 'linden' | 'locust' | 'plane' | 'maple';
 const SPECIES: Record<Species, { trunk: number; limbs: [number, number]; rise: [number, number]; reach: number; lobe: number; squash: number; cards: number; airy: number }> = {
   linden: { trunk: 0.32, limbs: [4, 6], rise: [1.1, 1.8], reach: 0.62, lobe: 0.62, squash: 0.95, cards: 1.15, airy: 0.15 },
   locust: { trunk: 0.38, limbs: [3, 5], rise: [0.55, 1.0], reach: 0.8, lobe: 0.55, squash: 0.66, cards: 1.0, airy: 0.28 },
   plane: { trunk: 0.3, limbs: [4, 6], rise: [0.8, 1.4], reach: 0.78, lobe: 0.6, squash: 0.78, cards: 1.05, airy: 0.22 },
+  maple: { trunk: 0.28, limbs: [5, 7], rise: [1.0, 1.6], reach: 0.6, lobe: 0.66, squash: 0.92, cards: 1.15, airy: 0.12 },
 };
+
+/** the turn of the season, in strong painterly colours: deep and bright summer greens still on most
+ *  lindens and planes, the locusts going yellow-green to gold, the maples orange and red */
+const C = (h: string) => new THREE.Color(h);
+const LEAF = { deep: C('#3d6b1f'), green: C('#5a8a24'), yellow: C('#93a32a'), gold: C('#dba522'), orange: C('#d9701c'), red: C('#b8301c') };
+/** a tree's two colours (its main one, and what it's turning to) */
+function crownColours(sp: Species, R: () => number): [THREE.Color, THREE.Color] {
+  const r = R(), L = LEAF;
+  if (sp === 'linden') return r < 0.8 ? [L.deep, L.green] : [L.green, L.yellow];
+  if (sp === 'plane') return r < 0.65 ? [L.green, L.deep] : [L.yellow, L.gold];
+  if (sp === 'locust') return r < 0.35 ? [L.green, L.yellow] : r < 0.7 ? [L.yellow, L.gold] : [L.gold, L.yellow];
+  return r < 0.45 ? [L.red, L.orange] : r < 0.8 ? [L.orange, L.gold] : [L.green, L.orange];
+}
+const autumnal = (c: THREE.Color) => c === LEAF.gold || c === LEAF.orange || c === LEAF.red;
 
 /** a street tree: a clear trunk, scaffold limbs, twiggy ends, and the leaf masses its crown is built of
  *  (a lobe around each limb's end and one through the middle) */
@@ -171,7 +186,8 @@ function treeKit(seed: number, height: number, sp: Species) {
   let y0 = Infinity, y1 = -Infinity;
   for (const l of lobes) { y0 = Math.min(y0, l.c.y - l.r * S.squash); y1 = Math.max(y1, l.c.y + l.r * S.squash); }
   const ctr = new THREE.Vector3(crown.x, (y0 + y1) / 2, crown.z);
-  return { bark: mergeGeometries(geos), r0, lobes, ctr, y0: Math.max(y0, trunkH * 0.85), y1, squash: S.squash, cards: S.cards, airy: S.airy };
+  const rad = lobes.reduce((a, l) => Math.max(a, Math.hypot(l.c.x, l.c.z) + l.r), 1);
+  return { bark: mergeGeometries(geos), r0, lobes, ctr, y0: Math.max(y0, trunkH * 0.85), y1, rad, squash: S.squash, cards: S.cards, airy: S.airy, sp };
 }
 type TreeKit = ReturnType<typeof treeKit>;
 
@@ -406,6 +422,84 @@ class WeedPatch {
   get size() { return this.x.length; }
 }
 
+// -------------------------------------------------------------------------------- falling leaves
+/** a leafy tree, in the world: where it stands, its crown's height and reach, its two colours, and how
+ *  freely it sheds (a turning tree more) */
+interface Crown { x: number; z: number; y: number; lo: number; hi: number; rad: number; cols: [THREE.Color, THREE.Color]; shed: number }
+
+/** Leaves coming off the trees around the hero: each drifts downwind as it falls, swinging and
+ *  tumbling, lies a few seconds where it lands, then lets go again from another tree nearby. */
+class FallingLeaves {
+  private im: THREE.InstancedMesh;
+  private near: Crown[] = []; private nearW = 0;
+  private L: { x: number; y: number; z: number; floor: number; vy: number; drift: number; ph: number; spin: THREE.Vector3; age: number; rest: number; live: boolean }[] = [];
+  private R: () => number;
+  private last = -1; private scan = 0;
+  private m4 = new THREE.Matrix4(); private q = new THREE.Quaternion(); private e = new THREE.Euler(); private v = new THREE.Vector3(); private one = new THREE.Vector3(1, 1, 1); private zero = new THREE.Vector3();
+  constructor(parent: THREE.Object3D, private crowns: Crown[], n: number, seed: number) {
+    this.R = rng(seed);
+    // a leaf: an ovate blade on a stalk, 12 cm long
+    const sh = new THREE.Shape();
+    sh.moveTo(0, -0.075); sh.bezierCurveTo(0.05, -0.04, 0.045, 0.03, 0, 0.065); sh.bezierCurveTo(-0.045, 0.03, -0.05, -0.04, 0, -0.075);
+    const g = new THREE.ShapeGeometry(sh, 3);
+    const mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.75 });
+    this.im = new THREE.InstancedMesh(g, mat, n);
+    this.im.castShadow = false; this.im.receiveShadow = true; this.im.frustumCulled = false; this.im.name = 'fallingLeaves';
+    for (let i = 0; i < n; i++) {
+      this.L.push({ x: 0, y: -1e3, z: 0, floor: 0, vy: 0, drift: 0, ph: 0, spin: new THREE.Vector3(), age: 0, rest: 0, live: false });
+      this.im.setMatrixAt(i, this.m4.compose(this.zero, this.q.identity(), this.zero));
+      this.im.setColorAt(i, LEAF.gold);
+    }
+    parent.add(this.im);
+  }
+  /** let leaf i go from a tree near the hero (high in its crown, or anywhere on the way down when `mid`) */
+  private spawn(i: number, mid: boolean) {
+    const R = this.R, l = this.L[i];
+    if (!this.near.length) { l.live = false; return; }
+    let pick = R() * this.nearW, c = this.near[0];
+    for (const t of this.near) if ((pick -= t.shed) <= 0) { c = t; break; }
+    const a = R() * Math.PI * 2, r = Math.sqrt(R()) * c.rad;
+    l.x = c.x + Math.cos(a) * r; l.z = c.z + Math.sin(a) * r;
+    l.y = mid ? c.y + 0.3 + R() * (c.hi - c.y) : c.lo + R() * (c.hi - c.lo) * 0.6;
+    l.floor = c.y + 0.03; l.vy = 0.55 + R() * 0.5; l.drift = 0.4 + R() * 0.9; l.ph = R() * 6.28;
+    l.spin.set((R() - 0.5) * 6, (R() - 0.5) * 4, (R() - 0.5) * 6); l.age = 0; l.rest = 3 + R() * 7; l.live = true;
+    this.im.setColorAt(i, R() < 0.65 ? c.cols[1] : c.cols[0]);
+    this.im.instanceColor!.needsUpdate = true;
+  }
+  update(t: number, hero: THREE.Vector3) {
+    const dt = this.last < 0 ? 0 : Math.min(0.1, t - this.last);
+    this.last = t;
+    // the trees within reach, every second
+    if ((this.scan -= dt) <= 0) {
+      this.scan = 1;
+      this.near.length = 0; this.nearW = 0;
+      for (const c of this.crowns) if ((c.x - hero.x) ** 2 + (c.z - hero.z) ** 2 < 38 * 38) { this.near.push(c); this.nearW += c.shed; }
+    }
+    // the same gusts the crowns lean in (foliage.ts): leaves blow further while one passes
+    const wt = wind.value;
+    for (let i = 0; i < this.L.length; i++) {
+      const l = this.L[i];
+      if (!l.live || (l.x - hero.x) ** 2 + (l.z - hero.z) ** 2 > 45 * 45) { this.spawn(i, !l.live); if (!l.live) { this.im.setMatrixAt(i, this.m4.compose(this.zero, this.q.identity(), this.zero)); continue; } }
+      l.age += dt;
+      if (l.y > l.floor) {
+        const gust = Math.pow(0.5 + 0.5 * Math.sin((l.x * 0.8 + l.z * 0.6) * 0.045 - wt * 0.9), 3);
+        const sway = Math.sin(l.age * 2.2 + l.ph);
+        l.x += (0.8 * l.drift * (0.4 + gust * 1.6) + -0.6 * sway * 0.5) * dt;
+        l.z += (0.6 * l.drift * (0.4 + gust * 1.6) + 0.8 * sway * 0.5) * dt;
+        // a leaf falls fastest edge-on, and slows as it swings flat at the end of each swing
+        l.y = Math.max(l.floor, l.y - l.vy * (0.6 + 0.5 * Math.abs(Math.cos(l.age * 2.2 + l.ph))) * dt);
+        this.e.set(l.spin.x * l.age + sway * 0.8, l.spin.y * l.age, l.spin.z * l.age);
+      } else {
+        // down: lying flat, a while
+        this.e.set(-Math.PI / 2, l.ph, 0);
+        if ((l.rest -= dt) <= 0) { this.spawn(i, false); continue; }
+      }
+      this.im.setMatrixAt(i, this.m4.compose(this.v.set(l.x, l.y, l.z), this.q.setFromEuler(this.e), this.one));
+    }
+    this.im.instanceMatrix.needsUpdate = true;
+  }
+}
+
 // -------------------------------------------------------------------------------- the build
 export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide: CollisionGrid, walk: WalkMesh, parts: Part[], quality: 'high' | 'low') {
   const R = rng(1771);
@@ -424,11 +518,12 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
 
   // ---- trees: OSM's, in their pits where they stand in the sidewalk; then, since OSM maps only some of
   // the parks' trees, a sparse grove on the lawns wherever none is mapped
-  const kits = (['linden', 'locust', 'plane', 'linden', 'locust', 'plane', 'linden', 'plane'] as Species[]).map((sp, i) => treeKit(900 + i * 17, (sp === 'plane' ? 10.5 : sp === 'locust' ? 9 : 8.5) + (i % 3) * 1.8, sp));
+  const kits = (['linden', 'locust', 'plane', 'maple', 'linden', 'locust', 'plane', 'maple', 'linden'] as Species[]).map((sp, i) => treeKit(900 + i * 17, (sp === 'plane' ? 10.5 : sp === 'locust' ? 9 : 8.5) + (i % 3) * 1.8, sp));
   const perKit: THREE.Matrix4[][] = kits.map(() => []);
-  // leaves in three greens (two summers' neglect has yellowed a few)
-  const LEAF = ['#4b6a2e', '#5d7834', '#7a7c38'];
-  const leaves: Card[][] = LEAF.map(() => []);
+  // every leaf card carries its own colour, so the whole district's leaves are one set (per region)
+  const leaves: Card[] = [];
+  /** the leafy trees, for the leaves they shed */
+  const crowns: Crown[] = [];
   // (Low has half the cards, each larger, so its crowns stay as full)
   const perTree = quality === 'high' ? 300 : 150, cardScale = quality === 'high' ? 1 : 1.35;
   const dirt = pbrMat('dirt', '#5e5040'), edging = pbrMat('ashlar', '#a8a49c');
@@ -449,12 +544,14 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     trunks.get(key)!.push([x, z]);
     // (one in twenty didn't make it)
     if (R() > 0.05) {
-      const r = R(), set = leaves[r < 0.5 ? 0 : r < 0.85 ? 1 : 2];
+      const [a, b] = crownColours(kit.sp, R), turn = autumnal(b) ? 0.38 : 0.25;
       for (const c of crownCards(kit, Math.round(perTree * kit.cards), R)) {
         v.set(c.x, c.y, c.z).applyMatrix4(m);
         n.set(c.nx, c.ny, c.nz).transformDirection(m);
-        set.push({ x: v.x, y: v.y, z: v.z, nx: n.x, ny: n.y, nz: n.z, s: c.s * s * cardScale, c: c.c });
+        // a crown turns from the top and outside first
+        leaves.push({ x: v.x, y: v.y, z: v.z, nx: n.x, ny: n.y, nz: n.z, s: c.s * s * cardScale, c: c.c, col: R() < turn * (0.5 + (c.c ?? 1)) ? b : a });
       }
+      crowns.push({ x, z, y, lo: y + kit.y0 * s, hi: y + kit.y1 * s, rad: kit.rad * s * 0.8, cols: [a, b], shed: autumnal(a) || autumnal(b) ? 3 : 1 });
     }
   };
   for (const p of d.h.furniture.tree) {
@@ -507,10 +604,11 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   // canopy drawing in every pass wherever the camera looks
   const regional: THREE.Object3D[] = [];
   kits.forEach((kit, i) => { for (const xf of byRegion(perKit[i], (m) => [m.elements[12], m.elements[14]])) { const im = instanced(group, kit.bark, getBarkMat(), xf); if (im) { im.name = 'bark'; regional.push(im); } } });
-  leaves.forEach((set, i) => byRegion(set, (c) => [c.x, c.z]).forEach((cards, j) => {
-    const im = leafCards(group, cards, 'canopy', LEAF[i], 31 + i + j * 7);
+  byRegion(leaves, (c) => [c.x, c.z]).forEach((cards, j) => {
+    const im = leafCards(group, cards, 'canopy', '#ffffff', 31 + j * 7);
     if (im) { im.frustumCulled = true; im.computeBoundingSphere(); im.name = 'leaves'; regional.push(im); }
-  }));
+  });
+  const falling = new FallingLeaves(group, crowns, quality === 'high' ? 150 : 60, 4242);
   counts.trees = perKit.reduce((a, l) => a + l.length, 0);
 
   /** turn something to face away from the nearest wall or curb (its back to it), else anyhow */
@@ -695,6 +793,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     debug: { cars: parked, carKinds: kinds, carTris: fleet.tris, trees: perKit.flatMap((l) => l.map((m) => [m.elements[12], m.elements[14]])), signals: poles.map((m) => [m.elements[12], m.elements[14]]) },
     update(t: number, hero: THREE.Vector3) {
       weeds.update(hero);
+      falling.update(t, hero);
       fleet.update(hero);
       // flashing signals: about once a second each, out of step with their neighbours
       blink.forEach((b, i) => {

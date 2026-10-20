@@ -607,14 +607,15 @@ export const leafTex = (kind: 'ivy' | 'leaf' | 'grass' | 'moss' | 'canopy') => o
   const r = rng(kind === 'ivy' ? 5 : kind === 'leaf' ? 6 : kind === 'moss' ? 8 : kind === 'canopy' ? 9 : 7);
   const leaf = (x: number, y: number, s: number, a: number, tone: number) => {
     c.save(); c.translate(x, y); c.rotate(a); c.scale(s, s);
-    const g = Math.floor(120 + tone * 70), rr = Math.floor(g * 0.72), b = Math.floor(g * 0.42);
+    // (a canopy clump is grey: each tree tints it its own colour, green or gold or red)
+    const g = Math.floor(120 + tone * 70), rr = Math.floor(g * (kind === 'canopy' ? 0.97 : 0.72)), b = Math.floor(g * (kind === 'canopy' ? 0.9 : 0.42));
     c.fillStyle = `rgb(${rr},${g},${b})`;
     c.beginPath();
     if (kind === 'ivy') {
       c.moveTo(0, 30);
       c.bezierCurveTo(-34, 22, -40, -4, -22, -6); c.bezierCurveTo(-26, -24, -10, -30, 0, -36);
       c.bezierCurveTo(10, -30, 26, -24, 22, -6); c.bezierCurveTo(40, -4, 34, 22, 0, 30);
-    } else if (kind === 'leaf') {
+    } else if (kind === 'leaf' || kind === 'canopy') {
       c.moveTo(0, 34); c.bezierCurveTo(-22, 14, -18, -20, 0, -36); c.bezierCurveTo(18, -20, 22, 14, 0, 34);
     } else {
       c.moveTo(-3, 40); c.quadraticCurveTo(-4, -10, 2, -44); c.quadraticCurveTo(2, -10, 3, 40);
@@ -642,20 +643,23 @@ export const leafTex = (kind: 'ivy' | 'leaf' | 'grass' | 'moss' | 'canopy') => o
     return;
   }
   if (kind === 'canopy') {
-    // a ragged ball of leaves: the ones underneath and behind are drawn first and darker, the sunlit
-    // ones on top last and lighter, so one card already reads as a clump with depth
-    // a solid, ragged core first (so the card survives mipmapping under the alpha test), in shadow
-    for (let i = 0; i < 9; i++) {
-      const a = r() * Math.PI * 2, d = r() * 34;
-      c.fillStyle = `rgb(${50 + r() * 14 | 0},${70 + r() * 16 | 0},${30 + r() * 10 | 0})`;
-      c.beginPath(); c.arc(128 + Math.cos(a) * d, 132 + Math.sin(a) * d, 50 + r() * 24, 0, Math.PI * 2); c.fill();
+    // a lumpy clump of a few sprigs (not a disc, so a crown of them has a broken, leafy edge): the
+    // leaves underneath and behind are drawn first and darker, the sunlit ones on top last and lighter
+    const sprigs: [number, number, number][] = [[128, 134, 46]];
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + r() * 0.8, d = 40 + r() * 26; sprigs.push([128 + Math.cos(a) * d, 132 + Math.sin(a) * d * 0.9, 22 + r() * 18]); }
+    for (const [x, y, rad] of sprigs) {
+      const v = 104 + r() * 18 | 0;
+      c.fillStyle = `rgb(${v * 0.97 | 0},${v},${v * 0.9 | 0})`;
+      c.beginPath(); c.arc(x, y, rad * 0.8, 0, Math.PI * 2); c.fill();
     }
     const ls: [number, number, number, number, number][] = [];
-    for (let i = 0; i < 260; i++) {
-      const a = r() * Math.PI * 2, d = Math.pow(r(), 0.8) * 98;
-      const x = 128 + Math.cos(a) * d, y = 128 + Math.sin(a) * d * 0.92;
-      const lift = 1 - (y - 24) / 208, edge = d / 98;
-      ls.push([x, y, 0.3 + r() * 0.2, a + Math.PI / 2 + (r() - 0.5) * 1.4, Math.min(1, 0.12 + lift * 0.55 + edge * 0.25 + r() * 0.3)]);
+    for (let i = 0; i < 300; i++) {
+      const [sx, sy, rad] = sprigs[Math.floor(r() * sprigs.length)];
+      const a = r() * Math.PI * 2, d = Math.pow(r(), 0.7) * rad * 1.15;
+      const x = sx + Math.cos(a) * d, y = sy + Math.sin(a) * d;
+      if (Math.hypot(x - 128, y - 128) > 118) continue;
+      const lift = 1 - (y - 24) / 208, edge = Math.hypot(x - 128, y - 128) / 110;
+      ls.push([x, y, 0.32 + r() * 0.22, a + Math.PI / 2 + (r() - 0.5) * 1.4, Math.min(1, 0.12 + lift * 0.55 + edge * 0.25 + r() * 0.3)]);
     }
     ls.sort((p, q) => p[4] - q[4]);
     for (const [x, y, sc, ang, tone] of ls) leaf(x, y, sc, ang, tone);

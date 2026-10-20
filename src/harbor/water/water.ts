@@ -23,12 +23,13 @@ export const waterUniforms = {
   uNormA: { value: null as THREE.Texture | null },
   uNormB: { value: null as THREE.Texture | null },
   uNormC: { value: null as THREE.Texture | null },
-  // the harbour's own colour under the reflections: a dark blue-green, lifting to bottle green where
-  // the swell thins toward its crests, and silt-brown green against the walls
-  uDeep: { value: new THREE.Color('#0a1f26') },
-  uScatter: { value: new THREE.Color('#1c4a44') },
-  uShallow: { value: new THREE.Color('#2c3a2a') },
-  uFoamCol: { value: new THREE.Color('#b8bcb4') },
+  // the harbour's own colour under the reflections, strong and painterly: a deep sea blue, lifting to
+  // teal where the swell thins toward its crests (and the sun shines through them), and a silty green
+  // against the walls
+  uDeep: { value: new THREE.Color('#09304a') },
+  uScatter: { value: new THREE.Color('#1c7276') },
+  uShallow: { value: new THREE.Color('#2e5c50') },
+  uFoamCol: { value: new THREE.Color('#e6ecea') },
   uPlanar: { value: 0 },
   uRefl: { value: null as THREE.Texture | null },
   uReflDepth: { value: null as THREE.Texture | null },
@@ -128,16 +129,25 @@ export function waterMaterial(shore: ShoreField, quality: 'high' | 'low') {
         // foam: a ragged band along the walls that breathes with the swell
         float n = vnoise(vWater.xz * 0.9 + uTime * 0.05) * 0.6 + vnoise(vWater.xz * 3.1 - uTime * 0.11) * 0.4;
         float lap = 0.55 + 0.45 * sin(uTime * 1.1 - sd * 1.6 + n * 3.0);
-        float foam = (1.0 - smoothstep(0.15, 1.6 + n * 1.4, sd)) * smoothstep(0.35, 0.65, n + lap * 0.35);
+        // the swell per pixel (the far tiles are single quads, too coarse to carry it in their vertices)
+        float sw = swell(vWater.xz, uTime) * uAmp * smoothstep(0.6, 11.0, sd);
+        float foam = (1.0 - smoothstep(0.1, 0.9 + n * 0.9, sd)) * smoothstep(0.4, 0.7, n + lap * 0.35);
         // and out on the open water, faint drifting lines of scum and spent foam, laid along the wind
         vec2 wq = mat2(0.94, -0.34, 0.34, 0.94) * vWater.xz;
         float lane = vnoise(wq * vec2(0.035, 0.42) + vec2(uTime * 0.01, uTime * 0.03)) * 0.7 + vnoise(wq * 0.6 + uTime * 0.04) * 0.3;
-        foam = max(foam, smoothstep(0.66, 0.8, lane) * 0.28 * smoothstep(4.0, 14.0, sd) * uChop);
+        foam = max(foam, smoothstep(0.7, 0.84, lane) * 0.22 * smoothstep(8.0, 20.0, sd) * uChop);
+        // the wash: a thin line of foam a few metres out, running in and out with each lap
+        float wash = smoothstep(0.45, 0.05, abs(sd - (1.2 + lap * 1.6 + n * 0.6))) * smoothstep(0.45, 0.75, vnoise(vWater.xz * 0.45 + uTime * 0.07));
+        foam = max(foam, wash * 0.4 * (1.0 - smoothstep(3.0, 4.5, sd)));
+        // whitecaps: the odd crest breaking out on the open water, more as the wind gets up
+        float capN = vnoise(vWater.xz * 0.7 + uTime * vec2(0.08, 0.05)) * 0.6 + vnoise(vWater.xz * 2.3 - uTime * 0.15) * 0.4;
+        float cap = smoothstep(0.72, 0.9, capN) * smoothstep(0.08, 0.18, sw) * smoothstep(14.0, 30.0, sd) * clamp(uChop - 0.3, 0.0, 1.0);
+        foam = max(foam, cap * 0.9);
         foam *= 1.0 - underDeck;
-        float crest = clamp(vSwell * 5.0 + 0.45, 0.0, 1.0);
+        float crest = clamp(sw * 5.0 + 0.45, 0.0, 1.0);
         vec3 body = mix(uDeep, uScatter, crest * crest * 0.85);
         body = mix(uShallow, body, smoothstep(0.5, 7.0, sd));
-        diffuseColor.rgb = mix(body * (1.0 - underDeck * 0.75), uFoamCol, foam * 0.85);`)
+        diffuseColor.rgb = mix(body * (1.0 - underDeck * 0.75), uFoamCol, foam * 0.92);`)
       .replace('#include <roughnessmap_fragment>', /* glsl */`#include <roughnessmap_fragment>
         // far off, a pixel covers many wave facets: rougher there, so the sun lays a broad glitter path
         // instead of aliasing into sparks
@@ -182,7 +192,23 @@ export function waterMaterial(shore: ShoreField, quality: 'high' | 'low') {
           vec3 planar = rcol * T + fogColor * (1.0 - T);
           radiance = mix(radiance, planar, uPlanar * (1.0 - underDeck) * (1.0 - foam));
         }
-        #endif`);
+        #endif`)
+      .replace('#include <lights_fragment_end>', /* glsl */`#include <lights_fragment_end>
+        #if NUM_DIR_LIGHTS > 0
+        {
+          // sunlight through the waves: the crests glow teal, most of all looking toward the sun
+          vec3 sunW = (vec4(directionalLights[0].direction, 0.0) * viewMatrix).xyz;
+          vec3 viewW = normalize(vWater - cameraPosition);
+          float toward = pow(clamp(dot(normalize(viewW.xz + 1e-4), normalize(sunW.xz + 1e-4)), 0.0, 1.0), 2.0);
+          float face = clamp(0.5 + dot(nW.xz, -viewW.xz) * 3.0, 0.0, 1.0);
+          float glow = crest * crest * (0.2 + 0.8 * toward) * (0.4 + 0.6 * face) * (1.0 - foam) * (1.0 - underDeck);
+          // (far off, the mirror is all you see)
+          glow *= 1.0 - smoothstep(40.0, 220.0, length(vWater - cameraPosition)) * 0.85;
+          reflectedLight.indirectDiffuse += uScatter * directionalLights[0].color * glow * 0.2;
+        }
+        #endif
+        // the mirror takes on a little of the sea's colour
+        reflectedLight.indirectSpecular *= mix(vec3(1.0), vec3(0.82, 0.96, 1.0), 1.0 - foam);`);
   };
   mat.customProgramCacheKey = () => `harbor-water-${quality}`;
   return mat;

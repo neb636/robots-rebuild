@@ -124,6 +124,35 @@ export function grass(parent: THREE.Object3D, pts: { x: number; z: number; y?: n
 
 // -------------------------------------------------------------------------------- leaf cards
 const leafMats = new Map<string, THREE.MeshStandardMaterial>();
+/** a tree crown in the wind: gusts roll across the district as a travelling wave, each one leaning the
+ *  whole crown downwind and setting its cards fluttering; between gusts it barely stirs */
+const CANOPY_SWAY = /* glsl */`
+  #ifdef USE_INSTANCING
+  {
+    vec3 io = (modelMatrix * instanceMatrix[3]).xyz;
+    float ph = fract(sin(dot(io.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.283;
+    vec2 wdir = vec2(0.8, 0.6);
+    float wave = dot(io.xz, wdir) * 0.045 - uWind * 0.9;
+    float gust = pow(0.5 + 0.5 * sin(wave), 3.0) * (0.6 + 0.4 * sin(wave * 0.37 + 1.3));
+    float lean = 0.1 + gust * 0.32;
+    float flutter = sin(uWind * (5.0 + gust * 5.0) + ph) * (0.03 + gust * 0.07);
+    mvPosition.xz += wdir * (lean + sin(uWind * 1.4 + ph * 0.3) * 0.05) + vec2(-wdir.y, wdir.x) * flutter;
+    mvPosition.y += flutter * 0.6 - gust * 0.05;
+    mvPosition.xyz += position.xzy * flutter * 0.6;
+  }
+  #endif`;
+/** leaves are thin: lit from behind they glow (seen against the sun, and on the far side of a crown
+ *  from it), and their shadowed side never goes black */
+const CANOPY_LIGHT = /* glsl */`#include <lights_fragment_end>
+  #if NUM_DIR_LIGHTS > 0
+  {
+    vec3 Ld = directionalLights[0].direction;
+    float back = pow(clamp(dot(normalize(-vViewPosition), Ld), 0.0, 1.0), 4.0);
+    float thru = clamp(-dot(normal, Ld), 0.0, 1.0);
+    reflectedLight.directDiffuse += diffuseColor.rgb * directionalLights[0].color * (back * 0.75 + thru * 0.22);
+  }
+  #endif
+  reflectedLight.indirectDiffuse *= 1.25;`;
 function leafMat(kind: 'ivy' | 'leaf' | 'canopy', color: string) {
   const key = kind + color;
   let m = leafMats.get(key);
@@ -144,10 +173,13 @@ function leafMat(kind: 'ivy' | 'leaf' | 'canopy', color: string) {
           vec4 wpos = modelMatrix * mvPosition;
           float sway = sin(uWind * 2.3 + wpos.x * 1.7 + wpos.y * 1.1) * 0.5 + sin(uWind * 4.1 + wpos.z * 2.3) * 0.25;
           mvPosition.xyz += vec3(sway, sway * 0.4, sway * 0.6) * 0.018;
+          ${kind === 'canopy' ? CANOPY_SWAY : ''}
           mvPosition = viewMatrix * modelMatrix * mvPosition;
           gl_Position = projectionMatrix * mvPosition;
         `);
+      if (kind === 'canopy') sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', CANOPY_LIGHT);
     };
+    if (kind === 'canopy') base.customProgramCacheKey = () => 'leaf-canopy';
     foliageMats.push(m);
     leafMats.set(key, m);
   }
@@ -156,7 +188,7 @@ function leafMat(kind: 'ivy' | 'leaf' | 'canopy', color: string) {
 
 /** a leaf card: where, which way it faces (and shades), its size, and optionally how much of the light
  *  it gets (c: 1 lit, toward 0 deep in a crown) */
-export interface Card { x: number; y: number; z: number; nx: number; ny: number; nz: number; s: number; c?: number }
+export interface Card { x: number; y: number; z: number; nx: number; ny: number; nz: number; s: number; c?: number; col?: THREE.Color }
 
 /** Instanced leaf cards with explicit normals. */
 export function leafCards(parent: THREE.Object3D, cards: Card[], kind: 'ivy' | 'leaf' | 'canopy', color: string, seed = 3, castShadow = true) {
@@ -179,7 +211,12 @@ export function leafCards(parent: THREE.Object3D, cards: Card[], kind: 'ivy' | '
     const k = R();
     tint.setRGB(0.7 + k * 0.5, 0.75 + k * 0.4, 0.7 + k * 0.3);
     if (R() < (kind === 'canopy' ? 0.04 : 0.12)) tint.setRGB(1.3, 0.9, 0.5); // a few dead/brown leaves
-    if (c.c !== undefined) tint.multiplyScalar(c.c);
+    if (c.col) {
+      // its own colour (the material's is white), shaded painterly: warm where lit, cool in shadow
+      const sh = c.c ?? 1, w = 0.15 + sh * 0.85;
+      tint.setRGB(0.9 + k * 0.2, 0.9 + k * 0.2, 0.9 + k * 0.2).multiply(c.col);
+      tint.setRGB(tint.r * sh * (0.8 + 0.3 * w), tint.g * sh * (0.93 + 0.1 * w), tint.b * sh * (1.15 - 0.3 * w));
+    } else if (c.c !== undefined) tint.multiplyScalar(c.c);
     im.setColorAt(i, tint);
   });
   // per-instance attribute; the geometry is per-mesh so attaching here is safe
