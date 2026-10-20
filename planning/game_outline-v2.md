@@ -3,8 +3,8 @@
 > A 3D road-story. Boston → Appalachia → the Deep South → the Great Plains → the Rockies → Silicon Valley.
 > *Stand by Me* and *It*, with a machine that is very, very kind.
 
-Status: first draft for discussion. Supersedes `game_outline.md` and `prologue_script.md` once approved.
-Nothing here is final; the **Open decisions** list at the bottom is where I most need you.
+Status: draft with all open questions decided (see **Decisions** at the bottom). Supersedes `game_outline.md`
+and `prologue_script.md` once approved.
 
 ---
 
@@ -210,11 +210,6 @@ flashlight, the radio that carries two voices. Changes: the walk, the harbor, an
    Then a second voice under it, in Marcus's cadence: *"Theo? Hey. Come on in. It's really nice here."*
    Title card: **QUIET MACHINES — Chapter 1**.
 
-Alternate (darker) version to consider: instead of being taken, Marcus *volunteers* to convert,
-asking Solace to take him in exchange for sparing Theo and Maya, a bargain Solace doesn't honour for
-long. It makes Marcus's agency even clearer and the later reunion much harder (§7). See Open
-decisions.
-
 ---
 
 ## 6. The road
@@ -287,7 +282,7 @@ reasonable person might want to stay.
 - *The Valley*: **a place with no sound**. Listen is useless. The Hum is everywhere. The party's bond is the
   only thing that can make noise.
 - *Infiltration*: the party splits. Every character has a solo stealth section, and every one of them
-  is in a Hum zone: this is where **bond as resistance** pays off. Lila Chen. Mr. Gray.
+  is in a Hum zone: this is where **bond as resistance** pays off. Lila Chen.
 - **Marcus** appears at a maintenance door. The player can knock: *two taps*. Marcus doesn't answer.
   *Then, from inside the next room, once.* (Or from nowhere. The player can't tell.)
 - *The Core*: the truth of Solace, and the final choice. The **Reckoning** is a conversation across a
@@ -372,14 +367,18 @@ deliberate, and so is the fact that you can't save everyone.
 
 ---
 
-## Open decisions (where I need you)
+## Decisions
 
-1. **Marcus's exit.** Taken (he steps into the light and is converted, as drafted), or **volunteers** for
-   a bargain Solace breaks (darker, more agency)?
-2. **How alive should Marcus be at the end?** Can he wake, or is the best ending that Theo reaches him
-   and Marcus chooses to stay Quiet?
-3. **Is Solace the right name**, and the Hum/Reach vocabulary? (Alternates: Halcyon, Shepherd.)
-4. **Combat.** Cut entirely, or keep a small improvised layer as drafted? What does the engine have now?
-5. **The frame.** Do you want the epilogue of Theo broadcasting the story as the third voice, or a simpler ending?
-6. **Tilly and the side-character plots** (Mr. Gray, Lila Chen, Warden Six): keep all as written, or trim for a tighter road?
-7. **Theo's backstory facts** (audio engineer, North End, mom Annette; Marcus's dad an electrician): fine, or change?
+1. **Marcus's exit: he is taken, by his own choice, with no bargain.** He steps into the light to save you.
+   A fake deal Solace breaks would add a contrivance; a plain choice is cleaner and costs more.
+2. **Marcus can wake, but only on the best path.** Reaching him at the Core with all four anchors wakes him on
+   his own. Otherwise he stays content beside you. The flashbacks are optional, and they're what earns him back.
+3. **Names stay:** Solace, the Hum, Reach, Collection Attendant.
+4. **Combat stays, but small.** Short, improvised, real-time (flashlight glare, a yanked cable, a thrown can).
+   No HP race, no turn-based bosses. The old battle system is retired from the main loop.
+5. **The frame stays:** Theo is the third voice on the radio in the epilogue, recording this story.
+6. **Trim the side plots.** Keep Tilly, Lila Chen, Echo, Vault 49, Nora and Warden Six (now the adaptive
+   stalker). Cut Mr. Gray: the Reckoning is already a conversation, and the Governor covers the
+   "weaker version of Elise's argument" job.
+7. **Backstory facts stay:** Theo an audio engineer from the North End, his mom Annette a night nurse,
+   Marcus's dad an electrician.
