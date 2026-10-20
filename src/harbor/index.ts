@@ -112,7 +112,8 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
 
   progress(0.8, 'Lighting the lamps…'); await nextFrame();
   const lampChunks = new ChunkBuilder(128, 'lamps');
-  const lamps = buildLamps(d, lampChunks, collide, (x, z) => walk.heightAt(x, z), quality);
+  const triClass = d.get<Uint8Array>('gTriClass');
+  const lamps = buildLamps(d, lampChunks, collide, (x, z) => walk.heightAt(x, z), (x, z) => { const t = walk.triAt(x, z); return t < 0 ? -1 : triClass[t]; }, quality);
   chunks.push(...lampChunks.flush(root));
   root.add(lamps.group);
   let lampScale = 1;
