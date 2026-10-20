@@ -43,7 +43,7 @@ export class SignAtlas {
   readonly blank: UV;
   readonly iron: UV;
   full = false;
-  constructor(readonly W: number, readonly H: number, scale: number) {
+  constructor(readonly W: number, readonly H: number, scale: number, private fullWarning = 'harbor signs: atlas full') {
     const cv = document.createElement('canvas');
     cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
     this.c = cv.getContext('2d')!;
@@ -65,7 +65,7 @@ export class SignAtlas {
     // out of room for a new one: any taller shelf with space left
     if (!shelf && this.next + ph > this.H) shelf = this.shelves.filter((s) => s.h >= ph && s.x + pw <= this.W).sort((a, b) => a.h - b.h)[0];
     if (!shelf) {
-      if (this.next + ph > this.H) { if (!this.full) console.warn('harbor signs: atlas full'); this.full = true; return this.blank; }
+      if (this.next + ph > this.H) { if (!this.full) console.warn(this.fullWarning); this.full = true; return this.blank; }
       shelf = { y: this.next, h: ph, x: 0 };
       this.shelves.push(shelf); this.next += ph;
     }
@@ -425,7 +425,7 @@ function nameCell(A: SignAtlas, name: string, kind: NameKind, seed: number) {
 export const GLOW = { sign: 0.1, back: 0.04, lit: 1.6, none: 0 };
 
 /** a flat quad centred on c, facing n (unit), with `r` its right and `up` its up (both unit) */
-function quad(acc: MeshAcc, c: V3, r: V3, up: V3, n: V3, w: number, h: number, uv: UV, glow = GLOW.sign) {
+export function quad(acc: MeshAcc, c: V3, r: V3, up: V3, n: V3, w: number, h: number, uv: UV, glow = GLOW.sign) {
   const hw = w / 2, hh = h / 2, b = acc.count;
   for (const [sr, su] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) acc.v(c[0] + r[0] * hw * sr + up[0] * hh * su, c[1] + r[1] * hw * sr + up[1] * hh * su, c[2] + r[2] * hw * sr + up[2] * hh * su, n[0], n[1], n[2]);
   acc.texcoord(uv[0], uv[1]); acc.texcoord(uv[2], uv[1]); acc.texcoord(uv[2], uv[3]); acc.texcoord(uv[0], uv[3]);
@@ -443,7 +443,7 @@ const crossv = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a
  * blank edges; `roll` turns it in its own plane (a bent blade). The front can go to another
  * accumulator (a lit sign's glowing face).
  */
-function board(acc: MeshAcc, x: number, y: number, z: number, nx: number, nz: number, w: number, h: number, t: number, front: UV, back: UV | null, blank: UV, roll = 0, glow = GLOW.sign) {
+export function board(acc: MeshAcc, x: number, y: number, z: number, nx: number, nz: number, w: number, h: number, t: number, front: UV, back: UV | null, blank: UV, roll = 0, glow = GLOW.sign) {
   const n: V3 = [nx, 0, nz], up0: V3 = [0, 1, 0], r0 = crossv(up0, n);
   const cr = Math.cos(roll), sr = Math.sin(roll);
   const r: V3 = [r0[0] * cr + up0[0] * sr, r0[1] * cr + up0[1] * sr, r0[2] * cr + up0[2] * sr];
@@ -461,7 +461,7 @@ function board(acc: MeshAcc, x: number, y: number, z: number, nx: number, nz: nu
   quad(acc, off(r, -w / 2), n, up, [-r[0], -r[1], -r[2]], t, h, blank, GLOW.back);
 }
 /** an upright post from y0 to y1 (an open-ended n-sided tube with a cap) */
-function post(acc: MeshAcc, uv: UV, x: number, z: number, y0: number, y1: number, r: number, n = 8) {
+export function post(acc: MeshAcc, uv: UV, x: number, z: number, y0: number, y1: number, r: number, n = 8) {
   const b = acc.count;
   for (let i = 0; i <= n; i++) {
     const a = (i / n) * Math.PI * 2, cx = Math.cos(a), sz = Math.sin(a);
@@ -473,7 +473,7 @@ function post(acc: MeshAcc, uv: UV, x: number, z: number, y0: number, y1: number
   ironed(acc, b, uv);
 }
 /** a bar from a to b (a bracket or strap), square in section */
-function bar(acc: MeshAcc, uv: UV, a: V3, b: V3, s: number) {
+export function bar(acc: MeshAcc, uv: UV, a: V3, b: V3, s: number) {
   const from = acc.count, d: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(...d), u: V3 = [d[0] / L, d[1] / L, d[2] / L];
   const ref: V3 = Math.abs(u[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
   let p = crossv(u, ref); const pl = Math.hypot(...p); p = [p[0] / pl, p[1] / pl, p[2] / pl];
@@ -490,7 +490,7 @@ function bar(acc: MeshAcc, uv: UV, a: V3, b: V3, s: number) {
 
 /** the material every sign shares: the atlas, cut out by its alpha (paint and bronze on a wall or the
  *  pavement), lit by the per-vertex `glow` */
-function signMaterial(tex: THREE.Texture, flat: boolean) {
+export function signMaterial(tex: THREE.Texture, flat: boolean) {
   const m = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#fff2e0', roughness: 0.66, metalness: 0.05, alphaTest: 0.45 });
   // what lies flat on a wall or the ground keeps in front of it
   if (flat) { m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -2; }

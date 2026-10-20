@@ -21,6 +21,9 @@ import { buildStation } from './station';
 import { buildStreetscape } from './streetscape';
 import { buildSigns } from './signs';
 import { buildMarketplace } from './marketplace';
+import { greenwayZone } from './greenwayzone';
+import { buildGreenwaySigns } from './greenwaysigns';
+import { buildGreenway } from './greenway';
 import { LAYERS } from './texarray';
 import { groundUniforms } from './groundmat';
 import { facadeUniforms } from './facade';
@@ -136,6 +139,14 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const market = buildMarketplace(d, root, collide, walk, quality);
   chunks.push(...market.chunks);
   console.info('harbor marketplace', JSON.stringify(market.counts));
+  // the Greenway: its signs first, so its furniture keeps clear of them
+  const gz = greenwayZone(d);
+  const gwSigns = buildGreenwaySigns(d, root, collide, walk, { zone: gz, lamps: lamps.lamps, quality });
+  chunks.push(...gwSigns.chunks);
+  console.info('harbor greenway signs', JSON.stringify(gwSigns.counts));
+  const greenway = buildGreenway(d, root, collide, walk, gz, quality);
+  chunks.push(...greenway.chunks);
+  console.info('harbor greenway', JSON.stringify(greenway.counts));
 
   // name what isn't a chunk or a landmark, so the stats and profiles can tell it apart
   const label = (o: THREE.Object3D, name: string) => o.traverse((m) => { if ((m as THREE.Mesh).isMesh && !m.name) m.name = name; });
@@ -145,7 +156,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
 
   // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets)
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
-  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks, ...market.chunks]);
+  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks, ...market.chunks, ...gwSigns.chunks, ...greenway.chunks]);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
   for (const o of [sky.mesh, tower.group, cordon.buoys, cordon.lamps, cordon.eyes, ...cordon.drones, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
 
@@ -333,12 +344,13 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     spots,
     cine: { shots: cine, pose: spawn },
     // for tests: the play area's outline
-    ...({ __boundary: d.h.boundary, __street: street.debug, __signs: signs.debug } as object),
+    ...({ __boundary: d.h.boundary, __street: street.debug, __signs: signs.debug, __greenway: { zone: gz, signs: gwSigns.debug, props: greenway.debug } } as object),
     onAttach(ctx) { post = ctx.post; reflect(ctx.hero); ctx.fill.layers.enable(REFLECT_LAYER); station?.setDialogue(ctx.dlg); },
     applyMood(m) {
       // rain chops the harbour up; Grey Pall's dead calm stills it
       lampScale = m.lamps;
       lamps.setOn(m.lamps > 0);
+      greenway.setLit(m.lamps > 0);
       groundUniforms.uWet.value = m.wet ? 1 : 0;
       waterUniforms.uRain.value = m.rain ? 1 : 0;
       waterUniforms.uAmp.value = m.rain ? 1.3 : m.name === 'Grey Pall' ? 0.45 : 0.85;

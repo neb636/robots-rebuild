@@ -9,6 +9,7 @@ import { paulRevere, oldStateHouse, cityHall, carousel } from './historic';
 import { holocaustMemorial, armenianPark, ringsFountain, columbusTrellis, unionOysterHouse } from './parks';
 import { oldNorthChurch } from './northend';
 import { hongKong } from './hongkong';
+import { harborIslandsPavilion, northEndPergola, turnpikeTollbooth } from './greenway';
 
 export const LANDMARKS: Record<string, LandmarkBuilder> = {
   faneuil, quincy, northMarket, southMarket,
@@ -19,4 +20,5 @@ export const LANDMARKS: Record<string, LandmarkBuilder> = {
   holocaustMemorial, armenianPark, ringsFountain, columbusTrellis, unionOysterHouse,
   oldNorthChurch,
   hongKong,
+  harborIslandsPavilion, northEndPergola, turnpikeTollbooth,
 };

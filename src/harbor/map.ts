@@ -22,7 +22,10 @@ const DISTRICTS: MapLabel[] = [
   { text: 'North End', x: 60, z: -440, kind: 'district' },
   { text: 'Long Wharf', x: 560, z: -70, kind: 'district' },
   { text: 'Financial District', x: -150, z: 250, kind: 'district' },
-  { text: 'The Greenway', x: 120, z: -120, kind: 'district' },
+  // the Greenway down Atlantic Ave, and its two parcels in the play area (greenwayzone.ts)
+  { text: 'The Greenway', x: 150, z: 40, kind: 'district' },
+  { text: 'Wharf District Parks', x: 196, z: 236, kind: 'place' },
+  { text: 'North End Parks', x: -196, z: -270, kind: 'place' },
   { text: 'Dock Square', x: -230, z: -70, kind: 'district' },
   // north of the North Market row, clear of the four buildings' own names below it
   { text: 'Faneuil Hall Marketplace', x: -62, z: -100, kind: 'district' },
@@ -142,10 +145,11 @@ export function harborMap(d: HarborData, parts: Part[]): AreaMap {
 
 /** each landmark's name at the middle of its biggest outline */
 function landmarkLabels(d: HarborData): MapLabel[] {
-  return d.h.landmarks.map((lm) => {
+  // the pergola is the North End Parks' own, already named
+  return d.h.landmarks.filter((lm) => lm.key !== 'northEndPergola').map((lm) => {
     const pts = lm.outline.length ? lm.outline.reduce((a, r) => (Math.abs(area(r)) > Math.abs(area(a)) ? r : a)) : lm.path ?? [];
     const [x, z] = lm.outline.length ? centroid(pts) : pts[Math.floor(pts.length / 2)] ?? [0, 0];
-    return { text: lm.name.replace(/\s*\(.*\)$/, '').replace(/ labyrinth$/, '').replace(/^Boston Marriott /, ''), x, z, kind: 'landmark' as const };
+    return { text: lm.name.replace(/\s*\(.*\)$/, '').replace(/ labyrinth$/, '').replace(/^Boston Marriott /, '').replace(/^Boston Harbor Islands /, 'Harbor Islands '), x, z, kind: 'landmark' as const };
   });
 }
 const area = (r: [number, number][]) => r.reduce((s, [x, z], i) => { const [x2, z2] = r[(i + 1) % r.length]; return s + x * z2 - x2 * z; }, 0) / 2;
