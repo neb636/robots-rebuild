@@ -40,10 +40,13 @@
   "columbusTrellis": 0,
   "oldNorthChurch": 5,
   "hongKong": 2,
-  "aquariumStation": 1
+  "aquariumStation": 1,
+  "harborIslandsPavilion": 1,
+  "northEndPergola": 0,
+  "turnpikeTollbooth": 0
  },
  "ground": {
-  "landArea": 476614,
+  "landArea": 477037,
   "classes": {
    "road": 163253,
    "crosswalk": 11451,
@@ -53,14 +56,14 @@
    "sidewalkConcrete": 47737,
    "pavers": 14294,
    "setts": 468,
-   "path": 21529,
-   "grass": 55808,
+   "path": 21531,
+   "grass": 56230,
    "deckWood": 0,
    "deckConcrete": 0
   }
  },
- "groundTriangles": 93414,
- "curbs": 17175,
+ "groundTriangles": 93400,
+ "curbs": 17167,
  "seawallRuns": 1,
  "decks": 24,
  "piles": 851,
@@ -93,9 +96,11 @@
  },
  "streets": 338,
  "shops": 188,
+ "parks": 87,
+ "art": 35,
  "bytes": {
-  "json": 224513,
-  "bin": 4583784,
-  "binGz": 2005561
+  "json": 246713,
+  "bin": 4582952,
+  "binGz": 2005006
  }
 }

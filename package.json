@@ -10,8 +10,7 @@
     "typecheck": "tsc --noEmit",
     "voice": "node --env-file-if-exists=.env.local scripts/voice.mjs",
     "harbor:fetch": "node scripts/harbor/fetch.mjs",
-    "harbor:bake": "node scripts/harbor/bake.mjs",
-    "prebuild": "node scripts/resolve-pr47-bake.mjs"
+    "harbor:bake": "node scripts/harbor/bake.mjs"
   },
   "dependencies": {
     "@fontsource/cormorant-garamond": "^5.3.0",
