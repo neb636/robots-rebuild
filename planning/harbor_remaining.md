@@ -12,8 +12,9 @@ browser runs.
 A walkable, real-map recreation of Boston's downtown waterfront two years after the machines took
 over: from the Congress St cordon (State station spawn) east to the end of Long Wharf, Faneuil
 Hall / Quincy Market, the Greenway, Columbus Park, the Aquarium, Harbor Towers, Rowes Wharf and the
-southern North End. Boot it with `?start=harbor`. Isolated from Acorn Lane for now (a subway-tunnel
-walk will connect them later; the station gate is the hook). A later session has Theo swim out to
+southern North End. Boot it with `?start=harbor`. The Tunnel Walk (`src/tunnel/`, `?start=tunnel`)
+connects it to Acorn Lane: it ends at the gate under State station and hands off to the `state`
+spawn. A later session has Theo swim out to
 the trawler *Persistence* moored off Long Wharf: `built.harbor` has `waterHeight`, `shoreDistance`,
 `inSwim`, `escapeBoat` and `ladders` (the ways out of the water).
 

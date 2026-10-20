@@ -9,24 +9,33 @@ import { rng, wnoise } from './noise';
 import { flagstones } from './flagstones';
 import { grass, leafCards, bushCards, ivyCards, tree, Card } from './foliage';
 import { rowhouse, poster, graffiti, placeAABB, AABB } from './buildings';
-import { pbrMat, gasLamp, hangingLantern, barrelFire, wreckedCar, drone, stringLights, balustrade, rubble, trashBags, crate, FogLight, flickerUpdate, ironMat } from './props';
+import { pbrMat, stationSign, gasLamp, hangingLantern, barrelFire, wreckedCar, drone, stringLights, balustrade, rubble, trashBags, crate, FogLight, flickerUpdate, ironMat } from './props';
 import { skyDome, skyline, SkySettings } from './sky';
 import { Character, CONVERTED, blobShadow } from './character';
 import type { Grade, FogSettings, Post } from './post';
 import type { Interactable, Dialogue } from './dialogue';
 import type { CamMode } from './settings';
 import type { AreaMap } from './map';
+import type { Theo } from './theo';
 
 export const TERRACE_Y = 3.2;
 const STAIR = { x0: 3.1, x1: 6.5, zTop: -12, zBot: -3, steps: 16 };
 const FAR_STAIR = { z0: -30.5, steps: 12, run: 0.5, rise: 0.2 };
+/** past the far stair: a landing up to Park Street station's headhouse, the way down to the tunnels */
+const PARK_ST = { x0: -5.4, x1: 2.7, z0: -42.3, cx: -1.4, front: -42.2, depth: 6, w: 5, door: 2.4 };
 
 /** Walkable ground height, or NaN where the player can't stand. */
 export function heightAt(x: number, z: number): number {
   if (z > 9.2 || x > 11.6) return NaN;
   if (x < -5.75) return NaN;
   if (z < FAR_STAIR.z0) {
-    if (x > 3.0 || z < FAR_STAIR.z0 - FAR_STAIR.steps * FAR_STAIR.run - 1.5) return NaN;
+    if (x > 3.0) return NaN;
+    if (z < FAR_STAIR.z0 - FAR_STAIR.steps * FAR_STAIR.run) {
+      // the landing, and the headhouse's doorway
+      const door = Math.abs(x - PARK_ST.cx) < PARK_ST.door / 2 - 0.3 && z > PARK_ST.front - 0.9;
+      if (!door && (x < PARK_ST.x0 || x > PARK_ST.x1 || z < PARK_ST.z0)) return NaN;
+      return FAR_STAIR.steps * FAR_STAIR.rise;
+    }
     const k = Math.min(FAR_STAIR.steps, Math.floor((FAR_STAIR.z0 - z) / FAR_STAIR.run) + 1);
     return k * FAR_STAIR.rise;
   }
@@ -112,6 +121,29 @@ export interface AttachContext {
   hero: THREE.Object3D;
   /** the dialogue box, for the area's own interactions */
   dlg: Dialogue;
+  /** the shell's controls for an area's own scripted beats */
+  story: StoryHost;
+}
+
+/** The areas the shell can build and move between. */
+export type AreaName = 'apartment' | 'street' | 'tunnel' | 'harbor';
+
+/** What an area's story beats can ask of the shell (the prologue has its own, richer host). */
+export interface StoryHost {
+  /** freeze the hero for a cutscene */
+  lock(on: boolean): void;
+  /** turn the hero to face a point */
+  face(p: THREE.Vector3): void;
+  /** hold the camera on a fixed shot (null = back to following the hero) */
+  shot(s: { pos: THREE.Vector3; look: THREE.Vector3 } | null): void;
+  /** true while an interaction, a dialogue or a cutscene is running */
+  busy(): boolean;
+  /** Theo himself, for his animation layers (reaching) */
+  player: Theo;
+  /** the way the hero is facing (radians, 0 = +z) */
+  heading(): number;
+  /** fade out, build the next area and move into it */
+  travel(to: AreaName): Promise<void>;
 }
 
 /** A playable level: the street (outdoors, with moods) or an interior with its own fixed lighting. */
@@ -172,6 +204,11 @@ export interface Built {
   /** an autopilot (the harbor's ?walk=): the world direction to walk in this frame, or null to leave
    *  the hero to the player; it goes through the same movement and collision as a stick would */
   steer?: (pos: THREE.Vector3, t: number) => { x: number; z: number } | null;
+  /** a light carried through the fog (a companion's flashlight): drawn as the volumetric beam in
+   *  place of a drone's searchlight, with no compliance scan */
+  beam?: () => { spot: THREE.SpotLight; color: THREE.Color; len: number } | null;
+  /** the objective shown on arrival (the street's is held until its opening shots are over) */
+  objective?: string;
   /** the drone whose searchlight and compliance scan are live right now (default: `drone`) */
   activeDrone?: () => ReturnType<typeof drone> | undefined;
   /** the shared actors are in the scene: grab what the area needs from the shell */
@@ -372,6 +409,7 @@ export function buildScene(quality: 'high' | 'low'): Built {
     for (let k = 0; k < 4; k++) if (R() < 0.6) grassPts.push({ x: -5.9 + R() * 9, y: top, z: zc - 0.15, s: 0.6 + R() * 0.5 });
   }
   skylineUpdate = skyline(root, b, lights);
+  const parkSt = parkStreet(b, root, colliders, lights);
 
   // ------------------------------------------------------------------ the tree that arches over the lane
   b.add(new THREE.CylinderGeometry(0.95, 1.0, 0.5, 24, 1, true), pbrMat('brick', '#c8a898'), -4.3, 0.25, 4.5);
@@ -524,6 +562,9 @@ export function buildScene(quality: 'high' | 'low'): Built {
     shadow: { lift: 60 },
     fogBanks: LANE_FOG_BANKS,
     cine: { shots: LANE_CINE, pose: LANE_CINE_POSE },
+    items: [parkSt.item],
+    objective: 'Find Park Street station, up the stairs at the end of the lane',
+    onAttach(ctx) { parkSt.attach(ctx.dlg, ctx.story); },
     update(dt, t, cam, player) {
       for (const u of updaters) u(dt, t, cam, player);
       lights.forEach((l, i) => flickerUpdate(l, t, i * 3.1));
@@ -534,6 +575,60 @@ export function buildScene(quality: 'high' | 'low'): Built {
 }
 
 let skylineUpdate: { update: (t: number) => void } | null = null;
+
+/**
+ * Park Street's headhouse at the top of the lane: a little granite kiosk under a green copper roof,
+ * its doorway onto stairs that go down into the dark. Theo goes down to the Red Line here (the
+ * Tunnel Walk, `src/tunnel/`).
+ */
+function parkStreet(b: Batch, root: THREE.Object3D, colliders: AABB[], lights: FogLight[]) {
+  const { cx, front, depth, w, door } = PARK_ST;
+  const y = FAR_STAIR.steps * FAR_STAIR.rise, H = 3.6, back = front - depth;
+  const granite = pbrMat('ashlar', '#b8b2a8', { normalScale: 1.2 });
+  const trim = pbrMat('ashlar', '#9a948a');
+  const copper = pbrMat('metal', '#4e8a76', { metalness: 0.3, roughness: 0.7 });
+  // the landing's paving, out to the kiosk
+  const z0 = FAR_STAIR.z0 - FAR_STAIR.steps * FAR_STAIR.run, z1 = front - depth - 0.8;
+  b.add(wbox(PARK_ST.x1 - PARK_ST.x0 + 0.6, 0.3, z0 - z1), pbrMat('stone', '#9a968e'), (PARK_ST.x0 + PARK_ST.x1) / 2, y - 0.15, (z0 + z1) / 2);
+  // walls: the front with its doorway, the sides, the back
+  const x0 = cx - w / 2, x1 = cx + w / 2;
+  b.add(wbox((w - door) / 2, H, 0.4), granite, x0 + (w - door) / 4, y + H / 2, front - 0.2);
+  b.add(wbox((w - door) / 2, H, 0.4), granite, x1 - (w - door) / 4, y + H / 2, front - 0.2);
+  b.add(wbox(door, H - 2.7, 0.4), granite, cx, y + 2.7 + (H - 2.7) / 2, front - 0.2);
+  for (const x of [x0 + 0.2, x1 - 0.2]) b.add(wbox(0.4, H, depth), granite, x, y + H / 2, front - depth / 2);
+  b.add(wbox(w, H, 0.4), granite, cx, y + H / 2, back + 0.2);
+  // cornice and the copper hip roof
+  b.add(wbox(w + 0.5, 0.35, depth + 0.5), trim, cx, y + H + 0.17, front - depth / 2);
+  b.add(new THREE.ConeGeometry(1, 1, 4, 1).rotateY(Math.PI / 4), copper, cx, y + H + 0.35 + 1.0, front - depth / 2, 0, 0, 0, (w + 0.6) * 0.72, 2.0, (depth + 0.6) * 0.72);
+  b.add(new THREE.SphereGeometry(0.16, 10, 8), copper, cx, y + H + 2.45, front - depth / 2);
+  // the stairs going down inside, into black
+  for (let i = 0; i < 14; i++) b.add(wbox(door - 0.2, 0.3, 0.32), trim, cx, y - 0.2 - i * 0.28, front - 0.6 - i * 0.32);
+  b.add(wplane(door, 4), new THREE.MeshBasicMaterial({ color: '#000000' }), cx, y - 2.6, front - 5.2, 0, 0, 0, 1, 1, 1, false);
+  // the name over the door
+  b.add(new THREE.PlaneGeometry(2.6, 0.49), stationSign('Park Street', '#00843d'), cx, y + 3.1, front + 0.01, 0, 0, 0, 1, 1, 1, false);
+  colliders.push({ x0: x0 - 0.1, z0: back, x1: cx - door / 2, z1: front }, { x0: cx + door / 2, z0: back, x1: x1 + 0.1, z1: front });
+  // a lamp beside the door, still lit
+  const l = gasLamp(b, root, x1 + 0.9, y, front + 0.9, { intensity: 7, flicker: 0.2 });
+  if (l) lights.push(l);
+  colliders.push({ x0: x1 + 0.65, z0: front + 0.65, x1: x1 + 1.15, z1: front + 1.15 });
+  let dlg: Dialogue | null = null, story: StoryHost | null = null, gone = false;
+  const item: Interactable = {
+    id: 'parkst', name: 'Park Street', verb: 'Go down', radius: 2.0,
+    pos: new THREE.Vector3(cx, y + 0.6, front + 0.3),
+    enabled: () => !gone,
+    use: async () => {
+      if (!dlg || !story) return;
+      await dlg.say([
+        'Park Street.',
+        'The voice under the static said there were people below.',
+        'Marcus went down ahead to find Okafor\'s people. He said he\'d wait at the bottom of the stairs.',
+      ]);
+      gone = true;
+      await story.travel('tunnel');
+    },
+  };
+  return { item, attach(d: Dialogue, s: StoryHost) { dlg = d; story = s; } };
+}
 
 function maps(name: string) {
   const s = pbr(name);

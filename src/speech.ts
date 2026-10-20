@@ -27,6 +27,8 @@ const SPEECH: Record<string, Speech> = {
   narrator: { prefer: ['Ava', 'Zoe', 'Allison', 'Susan', 'Samantha', 'Moira', 'Karen', 'Microsoft Aria', 'Microsoft Jenny', 'Microsoft Zira', 'Google US English', 'Google UK English Female'], pitch: 1, rate: 0.92 },
   // urgent, quicker
   marcus: { prefer: ['Tom', 'Evan', 'Eddy', 'Rocko', 'Daniel', 'Reed', 'Microsoft Mark', 'Microsoft Guy', 'Google UK English Male'], pitch: 1, rate: 1.1, avoid: 'theo' },
+  // clipped and precise, a little quick; never the narrator's voice
+  maya: { prefer: ['Karen', 'Moira', 'Tessa', 'Fiona', 'Samantha', 'Victoria', 'Microsoft Jenny', 'Microsoft Zira', 'Google UK English Female', 'Google US English'], pitch: 1.05, rate: 1.04, avoid: 'narrator' },
   // a robot: macOS has real ones, elsewhere a flat low read
   tv: { prefer: ['Zarvox', 'Trinoids', 'Ralph', 'Fred', 'Microsoft David', 'Google UK English Male'], pitch: 0.6, rate: 0.9 },
 };

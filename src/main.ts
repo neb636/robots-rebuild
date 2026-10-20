@@ -7,7 +7,7 @@ import './style.css';
 import './shaderpatches';
 import * as THREE from 'three';
 import { PBR_NAMES, pbr, setAnisotropy } from './textures';
-import { buildScene, MOODS, Mood, Built } from './scene';
+import { buildScene, MOODS, Mood, Built, type AreaName, type StoryHost } from './scene';
 import { Post, MAX_LIGHTS } from './post';
 import { blobShadow, rim } from './character';
 import { Theo, loadTheo, TheoAsset } from './theo';
@@ -71,20 +71,25 @@ async function boot() {
   gl.setPixelRatio(basePixelRatio());
 
   // the game opens on Day Zero in the apartment; ?start=street jumps to Acorn Lane, two years later,
-  // and ?start=harbor to the harbor district (its own area for now, loaded on demand)
+  // ?start=tunnel to the walk under the city, and ?start=harbor to the harbor district (the tunnel
+  // and the harbor are their own chunks, loaded on demand)
   const start = resume?.area ?? params.get('start');
-  const area = start === 'street' ? 'street' : start === 'harbor' ? 'harbor' : 'apartment';
+  const area: AreaName = start === 'street' || start === 'tunnel' || start === 'harbor' ? start : 'apartment';
   const outdoors = area !== 'apartment';
   const harbor = area === 'harbor' ? await import('./harbor') : null;
+  const tunnel = area === 'tunnel' ? await import('./tunnel') : null;
   const msgs = area === 'harbor'
     ? ['Pouring the harbour…', 'Setting the granite…', 'Raising the cordon…', 'Barnacling the pilings…', 'Salting the air…', 'Lighting the lamps…']
+    : tunnel
+    ? ['Pumping out the tunnels…', 'Laying the third rail…', 'Stopping the train…', 'Flooding a platform…', 'Charging the flashlight…', 'Dimming the exit signs…']
     : outdoors
     ? ['Weathering brick…', 'Laying flagstones…', 'Growing moss…', 'Rusting the cars…', 'Knitting a sweater…', 'Lighting the lamps…']
     : ['Sanding the floorboards…', 'Folding sweaters…', 'Watering Gerald…', 'Brewing coffee…', 'Fluffing the cat…', 'Opening the blinds…'];
   const sets = harbor ? harbor.HARBOR_PBR : PBR_NAMES;
   for (let i = 0; i < sets.length; i++) { setLoad((i / sets.length) * 0.7, msgs[i % msgs.length]); await nextFrame(); pbr(sets[i]); }
-  setLoad(0.75, harbor ? 'Building the waterfront…' : outdoors ? 'Building the street…' : 'Making the bed (badly)…'); await nextFrame();
+  setLoad(0.75, harbor ? 'Building the waterfront…' : tunnel ? 'Digging under the city…' : outdoors ? 'Building the street…' : 'Making the bed (badly)…'); await nextFrame();
   const built = harbor ? await harbor.buildHarbor(state.quality, (p, msg) => setLoad(0.75 + p * 0.1, msg))
+    : tunnel ? tunnel.buildTunnel(state.quality)
     : outdoors ? buildScene(state.quality) : buildApartment(state.quality);
   setLoad(0.85, 'Waking Theo…');
   const theo = await loadTheo(state.quality);
@@ -95,16 +100,7 @@ async function boot() {
   if (params.has('debug')) { (window as any).__app = app3; (window as any).__perf = perf; }
   setLoad(1, ''); await nextFrame();
   // compile shaders up front so the first frames don't hitch
-  if (harbor) {
-    // a big area: compile without blocking, then draw a couple of frames behind the loader so the
-    // shadow, normal-pass and reflection variants exist before the first real frame
-    await gl.compileAsync(built.scene, app3.camera);
-    // with frustum culling off, so every mesh's variants compile now, not when the camera first turns to it
-    const culled: THREE.Object3D[] = [];
-    built.scene.traverse((o) => { if (o.frustumCulled && (o as THREE.Mesh).isMesh) { o.frustumCulled = false; culled.push(o); } });
-    for (let i = 0; i < 2; i++) { app3.frame(1 / 60); await nextFrame(); }
-    for (const o of culled) o.frustumCulled = true;
-  } else gl.compile(built.scene, app3.camera);
+  await app3.warm(!!harbor);
   loader.classList.add('done');
   setTimeout(() => loader.remove(), 1200);
   app3.start();
@@ -113,6 +109,13 @@ async function boot() {
   if (audio.ready) app3.enableAudio();
   (window as any).app = app3;
   if (params.has('debug')) (window as any).__THREE = THREE;
+}
+
+/** the harbor from another area: its texture sets, then the build (behind the black, no loader) */
+async function buildHarborArea(): Promise<Built> {
+  const h = await import('./harbor');
+  for (const s of h.HARBOR_PBR) { pbr(s); await nextFrame(); }
+  return h.buildHarbor(state.quality, () => {});
 }
 
 // ------------------------------------------------------------------------------ app
@@ -174,13 +177,24 @@ class App {
   mapView: MapView;
   /** the Current: the way to the player's mark (areas with a map) */
   guide: Guide | null = null;
+  /** what an area's scripted beats can ask of the shell */
+  private story: StoryHost;
   private padPrev = new Set<number>();
 
-  constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset, public area: string, private resume: Resume | null) {
+  constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset, public area: AreaName, private resume: Resume | null) {
     this.resumedFrom = !!resume;
     const pm = params.get('perf');
     perf.init(gl, params.get('debug') === 'stats' || params.has('bench'), params.has('bench') ? 'sync' : pm === 'timer' || pm === 'sync' ? pm : undefined);
     this.player = new Theo(theo, Math.min(8, gl.capabilities.getMaxAnisotropy()));
+    this.story = {
+      lock: (on) => { this.locked = on; },
+      face: (p) => this.faceTo(p),
+      shot: (sh) => { this.shot = sh; if (!sh) this.lastLook = this.t; },
+      busy: () => this.busyN > 0 || this.dlg.open || this.locked,
+      player: this.player,
+      heading: () => this.heading,
+      travel: (to) => this.travel(to),
+    };
     this.post = new Post(gl, built.scene, this.camera);
     this.pmrem = new THREE.PMREMGenerator(gl);
     this.dlg.onInteract = () => void this.interact();
@@ -260,7 +274,9 @@ class App {
     this.applyMood();
     if (!this.interior && state.cam === 'cinematic') { state.cam = 'follow'; if (built.cine) this.setCam('cinematic', false); }
     this.resetCamera();
-    built.onAttach?.({ gl: this.gl, post: this.post, camera: this.camera, fill: this.fill, hero: this.player.group, dlg: this.dlg });
+    // (an area's own story may set the objective as it attaches)
+    this.dlg.objective(built.objective ?? null);
+    built.onAttach?.({ gl: this.gl, post: this.post, camera: this.camera, fill: this.fill, hero: this.player.group, dlg: this.dlg, story: this.story });
     if (this.interior) {
       this.prologue = new Prologue({
         apt: built as Apartment, dlg: this.dlg,
@@ -286,19 +302,9 @@ class App {
 
   /** Day Zero is over: build Acorn Lane (while the screen is black) and move into it. */
   async toStreet() {
-    await nextFrame();
-    const next = buildScene(state.quality);
-    await nextFrame();
-    this.area = 'street';
-    const old = this.built;
-    this.player.group.removeFromParent();
-    this.focus = null; this.dlg.setPrompt(null); this.dlg.objective(null); this.actions.set(null);
-    this.shot = null; this.locked = false;
-    this.attach(next);
-    this.gl.compile(next.scene, this.camera);
-    old.scene.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
-    old.dispose?.();
-    if (state.sound) { audio.ambience(next.ambience); audio.playMusic(next.music, 4); }
+    await this.enter('street');
+    // the way on waits until the opening shots are over
+    this.dlg.objective(null);
     // open on the cinematic shots (not saved: the player's own camera setting comes back after)
     this.setCam('cinematic', false);
     void sleep(2400).then(() => this.ui?.titleCard());
@@ -313,6 +319,55 @@ class App {
     this.cutscene = false;
     await sleep(200);
     await this.dlg.fade(0, 1000);
+    this.dlg.objective(this.built.objective ?? null);
+  }
+
+  /** An area's way out (the Park Street stairs, the State gate): fade to black, build the next area
+   *  and move into it, then fade back in on its title card. */
+  async travel(to: AreaName) {
+    this.locked = true;
+    this.focus = null; this.dlg.setPrompt(null); this.dlg.objective(null);
+    audio.ambience(null);
+    audio.playMusic(null, 1.2);
+    await this.dlg.fade(1, 1400);
+    await this.enter(to);
+    await sleep(400);
+    void this.dlg.fade(0, 1800);
+    void sleep(1400).then(() => this.ui?.titleCard());
+  }
+
+  /** build an area (while the screen is black) and swap it in for the current one */
+  private async enter(to: AreaName) {
+    await nextFrame();
+    const next = to === 'harbor' ? await buildHarborArea()
+      : to === 'tunnel' ? (await import('./tunnel')).buildTunnel(state.quality)
+      : to === 'street' ? buildScene(state.quality) : buildApartment(state.quality);
+    await nextFrame();
+    this.area = to;
+    const old = this.built;
+    this.player.group.removeFromParent();
+    this.focus = null; this.dlg.setPrompt(null); this.dlg.objective(null); this.actions.set(null);
+    this.shot = null; this.locked = false;
+    this.attach(next);
+    if (next.map && Minimap.wanted) next.map();
+    await this.warm(to === 'harbor');
+    old.scene.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    old.dispose?.();
+    if (state.sound) { audio.ambience(next.ambience); audio.playMusic(next.music, 4); }
+  }
+
+  /** compile the area's shaders before its first real frame, so it doesn't hitch */
+  async warm(big: boolean) {
+    const built = this.built;
+    if (!big) { this.gl.compile(built.scene, this.camera); return; }
+    // a big area: compile without blocking, then draw a couple of frames (behind the loader or the
+    // black) so the shadow, normal-pass and reflection variants exist before the first real frame
+    await this.gl.compileAsync(built.scene, this.camera);
+    // with frustum culling off, so every mesh's variants compile now, not when the camera first turns to it
+    const culled: THREE.Object3D[] = [];
+    built.scene.traverse((o) => { if (o.frustumCulled && (o as THREE.Mesh).isMesh) { o.frustumCulled = false; culled.push(o); } });
+    for (let i = 0; i < 2; i++) { this.frame(1 / 60); await nextFrame(); }
+    for (const o of culled) o.frustumCulled = true;
   }
 
   start() {
@@ -987,6 +1042,11 @@ class App {
       const ks = snap ? 1 : 1 - Math.exp(-dt * (this.shot ? 2.2 : 5));
       this.ui?.cineFade(0);
       this.camPos.lerp(pos, ks); this.camLook.lerp(look, snap ? 1 : 1 - Math.exp(-dt * (this.shot ? 2.2 : 8)));
+    } else if (this.shot) {
+      // an area's cutscene holds the camera on a shot of its own
+      pos = this.shot.pos; look = this.shot.look;
+      this.ui?.cineFade(0);
+      this.camPos.lerp(pos, snap ? 1 : 1 - Math.exp(-dt * 2.2)); this.camLook.lerp(look, snap ? 1 : 1 - Math.exp(-dt * 2.2));
     } else if (state.cam === 'cinematic') {
       this.cinT += dt;
       const shots = this.built.cine!.shots;
@@ -1057,6 +1117,17 @@ class App {
       lc[i].copy(c.l.color).multiplyScalar(c.l.base * (c.l.k ?? 1) * lamp * 2.0);
     }
     f.set('nLights', n);
+    // a carried light's beam (a companion's flashlight)
+    const bm = this.built.beam?.();
+    if (bm) {
+      const sp = bm.spot.getWorldPosition(this.sp), st = bm.spot.target.getWorldPosition(this.st);
+      f.u<THREE.Vector3>('spotPos').copy(sp);
+      f.u<THREE.Vector3>('spotDir').copy(st.sub(sp).normalize());
+      f.set('spotTan', Math.tan(bm.spot.angle));
+      f.set('spotLen', bm.len);
+      f.u<THREE.Color>('spotCol').copy(bm.color);
+      return;
+    }
     // drone searchlight beam
     const dr = this.built.activeDrone ? this.built.activeDrone() : this.built.drone;
     if (!dr) { f.set('spotLen', 0); return; }

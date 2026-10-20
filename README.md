@@ -115,7 +115,46 @@ that marked and the Current running.
 
 URL params override the saved settings without changing them, for sharing a specific setup:
 `?mood=curfew&cam=jrpg&q=low&audio=web&ui=0&card=0`. `?menu=0` skips the title screen and goes
-straight into the game. `?start=street` skips Day Zero and starts on Acorn Lane. `?debug` exposes `window.__THREE` and the game as `window.__app` (and `window.__title` on the title screen).
+straight into the game. `?start=street` skips Day Zero and starts on Acorn Lane, `?start=tunnel` on the Tunnel Walk under the city. `?debug` exposes `window.__THREE` and the game as `window.__app` (and `window.__title` on the title screen).
+
+## The Tunnel Walk
+
+Acorn Lane's far stair now climbs to Park Street station's headhouse (a granite kiosk under a green
+copper roof). **Go down** there, and Theo is on the Red Line platform under the Common with Marcus,
+who has the flashlight. `?start=tunnel` (or `?menu=0&card=0&start=tunnel`) starts there. The walk
+(`src/tunnel/`) runs south down the Red Line to Downtown Crossing, through the transfer passage up to
+the Orange Line, and north to State. At the gate at the top of State's escalator Marcus cuts the
+chain, and the game builds the harbor district behind the black and brings Theo up at its State
+station spawn. About five minutes at a walk:
+
+- **Park Street.** The flashlight clicks on: Okafor's directions, Biscuit's with Wren, and if they
+  get split up, two knocks.
+- **The stopped train.** Two Red Line cars that have stood in the tunnel since Day Zero, the
+  commuters converted in their seats, a phone still ringing in one of them (look through the
+  window). The walkway is too narrow beside it, so Marcus takes the far side and his light goes
+  with him.
+- **The knock code.** In the dark by the train, Theo knocks on a pipe: one press of interact is one
+  knock. Two knocks means *you there?*, and Marcus knocks once back from the other side of the train
+  (`src/knock.ts`). He waits at the front with the light pointed back up the walkway.
+- **Downtown Crossing.** The platform has slumped into black water, and Marcus keeps to the back
+  wall and won't look at it. Maya is at a dead signal box: she joins.
+- **State.** The gate, then up into the harbor.
+
+Marcus's flashlight is the main light: a SpotLight carried in his hand, and also the fog's
+volumetric beam (`Built.beam`, which draws it without the compliance scan a drone's searchlight
+sets off). Otherwise there are a few emergency lamps that never went out. Every mood is dark
+underground except Partly Sunny, which turns on flat work lights so the build can be seen as built.
+Marcus and Maya follow the walk's route (`layout.ts`) a few steps behind, off to one side where the
+floor is wide enough. The story's beats (`walk.ts`) fire from how far along the route Theo is, and
+`?at=` puts everything where the story would have it: parkstreet, train, knock, downtown, transfer,
+orange, state, gate. `?walk` walks the route on autopilot (it stops at the pipe and the gate for the
+knock and the gate's button).
+
+Sound is all Web Audio (`audio.tunnel()`): drips with a long echo, the Hum growing toward State, a
+far-off groan of metal, water lapping by the drowned platform, the train's ballast buzz and its
+ringing phone, and the pipe's knock and the muffled one back. Lines are read by the browser's voices
+(Maya has her own `SPEECH` and `TALK` profiles; Marcus's blips only go through the phone band on his
+Day Zero call).
 
 ## The harbor district
 
@@ -177,7 +216,8 @@ test would keep the GPU and a CPU core pinned:
 - after **30 s with no input** the loop drops to 4 fps until the next key, click or mouse move.
 
 When driving the game from an agent, `?menu=0&card=0` goes straight into the apartment (no intro
-fade), `?menu=0&card=0&start=street` straight to the street, `?q=low` is
+fade), `?menu=0&card=0&start=street` straight to the street (`start=tunnel` and `start=harbor`
+likewise), `?q=low` is
 lighter still if the screenshot doesn't need the high-quality look, and closing the browser when
 done (`playwright-cli close`) stops the rendering entirely.
 
