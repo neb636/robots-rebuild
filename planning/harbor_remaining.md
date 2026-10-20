@@ -105,8 +105,7 @@ widths, and lists their beds and lawns.
 
 - Long Wharf: the pavilion's heights are a guess (OSM implies a ~7 m ridge, the LiDAR 4.85 m; built at
   6 m), as are its stepped edge's position and the flag. Tia's (on the Marriott's north annex) isn't in
-  OSM, so it has no sign or patio. The Boston Harbor Islands Welcome Center on the Greenway is left to
-  the Greenway pass.
+  OSM, so it has no sign or patio.
 
 - Signs: street-number plaques, MBTA bus stops (OSM has them, not baked), wall-mounted corner signs
   in the narrow North End lanes where there's no room for a post. Shop names come from OSM as of the
