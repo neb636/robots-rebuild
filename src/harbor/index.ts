@@ -20,6 +20,7 @@ import { buildBoats } from './boats';
 import { buildStation } from './station';
 import { buildStreetscape } from './streetscape';
 import { buildSigns } from './signs';
+import { buildMarketplace } from './marketplace';
 import { LAYERS } from './texarray';
 import { groundUniforms } from './groundmat';
 import { facadeUniforms } from './facade';
@@ -132,6 +133,9 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const signs = buildSigns(d, root, collide, walk, { parts: all, arms: street.arms, lamps: lamps.lamps, quality });
   chunks.push(...signs.chunks);
   console.info('harbor signs', JSON.stringify(signs.counts));
+  const market = buildMarketplace(d, root, collide, walk, quality);
+  chunks.push(...market.chunks);
+  console.info('harbor marketplace', JSON.stringify(market.counts));
 
   // name what isn't a chunk or a landmark, so the stats and profiles can tell it apart
   const label = (o: THREE.Object3D, name: string) => o.traverse((m) => { if ((m as THREE.Mesh).isMesh && !m.name) m.name = name; });
@@ -141,7 +145,7 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
 
   // what the water mirrors: the city's walls, the waterfront, the cordon, the sky (not the streets)
   const reflect = (o: THREE.Object3D) => o.traverse((c) => c.layers.enable(REFLECT_LAYER));
-  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks]);
+  const streets = new Set([...groundChunks, ...street.chunks, ...signs.chunks, ...market.chunks]);
   for (const c of chunks) if (!streets.has(c)) reflect(c.mesh);
   for (const o of [sky.mesh, tower.group, cordon.buoys, cordon.lamps, cordon.eyes, ...cordon.drones, lamps.group, ...wf.floats, ...boats.map((b) => b.group), ...landmarkObjs, ...(station ? [station.group] : [])]) reflect(o);
 

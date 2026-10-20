@@ -8,6 +8,7 @@ import { customHouse, harborTowers, rowesWharf } from './skyline';
 import { paulRevere, oldStateHouse, cityHall, carousel } from './historic';
 import { holocaustMemorial, armenianPark, ringsFountain, columbusTrellis, unionOysterHouse } from './parks';
 import { oldNorthChurch } from './northend';
+import { hongKong } from './hongkong';
 
 export const LANDMARKS: Record<string, LandmarkBuilder> = {
   faneuil, quincy, northMarket, southMarket,
@@ -17,4 +18,5 @@ export const LANDMARKS: Record<string, LandmarkBuilder> = {
   paulRevere, oldStateHouse, cityHall, carousel,
   holocaustMemorial, armenianPark, ringsFountain, columbusTrellis, unionOysterHouse,
   oldNorthChurch,
+  hongKong,
 };

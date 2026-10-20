@@ -20,5 +20,6 @@
   "ringsFountain": { "name": "Rings Fountain plaza", "osm": ["w860134706"] },
   "unionOysterHouse": { "name": "Union Oyster House", "osm": ["w405520328"] },
   "columbusTrellis": { "name": "Christopher Columbus Park trellis", "osm": [], "path": "w563978436" },
-  "oldNorthChurch": { "name": "Old North Church", "osm": ["w29650592"] }
+  "oldNorthChurch": { "name": "Old North Church", "osm": ["w29650592"] },
+  "hongKong": { "name": "The Hong Kong", "osm": ["w1280705644"] }
 }

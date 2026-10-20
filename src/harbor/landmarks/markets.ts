@@ -113,7 +113,7 @@ const dark = () => cached('mk:void', () => new THREE.MeshBasicMaterial({ color: 
 const pane = () => cached('mk:pane', () => new THREE.MeshStandardMaterial({ color: '#3c4c54', roughness: 0.06, metalness: 0.55, transparent: true, opacity: 0.34, side: THREE.DoubleSide, depthWrite: false }));
 
 // gilt letters, from one atlas
-const GLYPHS = 'ACEHIKMNOQRSTUY';
+const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789&.'-";
 let atlas: { tex: THREE.CanvasTexture; w: Record<string, number> } | null = null;
 function letterAtlas() {
   if (atlas) return atlas;
@@ -133,6 +133,167 @@ function letterAtlas() {
   return (atlas = { tex, w });
 }
 const gilt = () => cached('mk:gilt', () => new THREE.MeshStandardMaterial({ map: letterAtlas().tex, alphaTest: 0.45, metalness: 0.65, roughness: 0.38, color: '#d8c8a0' }));
+
+// ================================================================================ painted signs
+/** a cell of the sign sheet: u0, v0 (bottom), u1, v1 (top) */
+type Cell = [number, number, number, number];
+type Kind = 'shop' | 'bakery' | 'cafe' | 'bar' | 'restaurant' | 'lease';
+interface Tenant { name: string; kind: Kind }
+const SERIF = 'Georgia, "Times New Roman", serif', SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+
+/** The markets' signboards, awning canvas and cart boards, packed in shelves on one canvas (half size
+ *  on Low), shared by the three buildings */
+class Sheet {
+  readonly tex: THREE.CanvasTexture;
+  private c: CanvasRenderingContext2D;
+  private shelves: { y: number; h: number; x: number }[] = [];
+  private next = 0;
+  private cells = new Map<string, Cell>();
+  full = false;
+  constructor(readonly W: number, readonly H: number, scale: number) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
+    this.c = cv.getContext('2d')!;
+    this.c.setTransform(scale, 0, 0, scale, 0, 0);
+    this.tex = new THREE.CanvasTexture(cv);
+    this.tex.colorSpace = THREE.SRGBColorSpace; this.tex.anisotropy = 8;
+  }
+  /** the cell for `key`, drawn the first time; null once the sheet is full */
+  cell(key: string, w: number, h: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void): Cell | null {
+    const hit = this.cells.get(key);
+    if (hit) return hit;
+    const pad = 4, pw = w + pad, ph = h + pad;
+    let shelf = this.shelves.filter((s) => s.h >= ph && s.h <= ph * 1.3 && s.x + pw <= this.W).sort((a, b) => a.h - b.h)[0];
+    if (!shelf) {
+      if (this.next + ph > this.H) { if (!this.full) console.warn('market signs: sheet full'); this.full = true; return null; }
+      shelf = { y: this.next, h: ph, x: 0 };
+      this.shelves.push(shelf); this.next += ph;
+    }
+    const x = shelf.x + pad / 2, y = shelf.y + pad / 2, c = this.c;
+    shelf.x += pw;
+    c.save(); c.translate(x, y); c.beginPath(); c.rect(0, 0, w, h); c.clip(); draw(c, w, h); c.restore();
+    const uv: Cell = [(x + 0.5) / this.W, 1 - (y + h - 0.5) / this.H, (x + w - 0.5) / this.W, 1 - (y + 0.5) / this.H];
+    this.cells.set(key, uv);
+    this.tex.needsUpdate = true;
+    return uv;
+  }
+}
+const sheets = new Map<Q, Sheet>();
+const sheet = (q: Q) => { let s = sheets.get(q); if (!s) sheets.set(q, (s = new Sheet(2048, 4096, q === 'high' ? 1 : 0.5))); return s; };
+const signMat = (q: Q) => cached(`mk:sign:${q}`, () => new THREE.MeshStandardMaterial({ map: sheet(q).tex, roughness: 0.72, metalness: 0.04, alphaTest: 0.4, side: THREE.DoubleSide }));
+/** a board the grid still lights */
+const signLit = (q: Q) => cached(`mk:signLit:${q}`, () => new THREE.MeshStandardMaterial({ map: sheet(q).tex, emissiveMap: sheet(q).tex, emissive: '#ffe6c4', emissiveIntensity: 1.3, roughness: 0.5, alphaTest: 0.4, side: THREE.DoubleSide }));
+
+const measureCtx = (() => { let c: CanvasRenderingContext2D | null = null; return () => (c ??= document.createElement('canvas').getContext('2d')!); })();
+const measure = (text: string, font: string) => { const c = measureCtx(); c.font = font; return c.measureText(text).width; };
+/** text centred at (x, y), squeezed sideways to maxW, with a drop shadow */
+function fit(c: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, font: string, fill: string) {
+  c.font = font; c.textAlign = 'center'; c.textBaseline = 'middle';
+  const w = c.measureText(text).width, k = w > maxW ? maxW / w : 1;
+  c.save(); c.translate(x, y); c.scale(k, 1);
+  c.shadowColor = 'rgba(0, 0, 0, 0.5)'; c.shadowOffsetX = 2; c.shadowOffsetY = 2; c.shadowBlur = 2;
+  c.fillStyle = fill; c.fillText(text, 0, 0);
+  c.restore();
+}
+/** two years outdoors: a sun-faded wash, grime blooms, a runoff streak, flaking (only over what's drawn) */
+function grime(c: CanvasRenderingContext2D, w: number, h: number, R: () => number, amount: number) {
+  c.save(); c.globalCompositeOperation = 'source-atop';
+  c.fillStyle = `rgba(206, 200, 184, ${0.06 + amount * 0.14})`; c.fillRect(0, 0, w, h);
+  for (let i = 0, n = Math.round(3 + amount * 10); i < n; i++) {
+    const x = R() * w, y = R() * h, r = (0.15 + R() * 0.45) * Math.min(w, h);
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(32, 26, 18, ${0.12 + amount * 0.25})`); g.addColorStop(1, 'rgba(32, 26, 18, 0)');
+    c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  const sx = R() * w, g = c.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, `rgba(40, 32, 22, ${amount * 0.4})`); g.addColorStop(1, 'rgba(40, 32, 22, 0)');
+  c.fillStyle = g; c.fillRect(sx, 0, 5 + R() * 12, h);
+  for (let i = 0, n = Math.round(amount * 30); i < n; i++) { c.fillStyle = `rgba(${150 + R() * 60}, ${140 + R() * 50}, ${120 + R() * 40}, ${0.3 + R() * 0.4})`; c.fillRect(R() * w, R() * h, 1 + R() * 4, 1 + R() * 2); }
+  c.restore();
+}
+function roundRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+/** lettering by what the place is */
+const STYLES: Record<Kind, { bg: string; fg: string; face: string; fam: string }[]> = {
+  restaurant: [{ bg: '#3a1215', fg: '#e8d6a8', face: 'bold', fam: SERIF }, { bg: '#141414', fg: '#eee6d2', face: 'bold', fam: SERIF }, { bg: '#1c2638', fg: '#e8e2d0', face: 'bold', fam: SERIF }],
+  cafe: [{ bg: '#173626', fg: '#e8d29a', face: 'italic bold', fam: SERIF }, { bg: '#2b1a10', fg: '#f0e0c0', face: 'italic bold', fam: SERIF }, { bg: '#ece2cc', fg: '#7a1c22', face: 'italic bold', fam: SERIF }],
+  bakery: [{ bg: '#efe6d2', fg: '#9a1f26', face: 'italic bold', fam: SERIF }, { bg: '#5e1a22', fg: '#f4e8cc', face: 'italic bold', fam: SERIF }, { bg: '#f2d8e0', fg: '#6a1a3a', face: 'bold', fam: SERIF }],
+  bar: [{ bg: '#0c2a1b', fg: '#d6b25a', face: 'bold', fam: SERIF }, { bg: '#111111', fg: '#d6b25a', face: 'bold', fam: SERIF }, { bg: '#3a170c', fg: '#ecd9a6', face: 'bold', fam: SERIF }],
+  shop: [{ bg: '#1b2a44', fg: '#f2f2ec', face: 'bold', fam: SANS }, { bg: '#e6e0d2', fg: '#1e1e1e', face: 'bold', fam: SANS }, { bg: '#262626', fg: '#e8c870', face: 'bold', fam: SANS }, { bg: '#5a1a1a', fg: '#f0e6d0', face: 'bold', fam: SERIF }],
+  lease: [{ bg: '#ece8de', fg: '#a01c1c', face: 'bold', fam: SANS }],
+};
+/** what fills a front OpenStreetMap doesn't know the tenant of */
+const TRADES: Tenant[] = ([
+  ['CHOWDER', 'restaurant'], ['OYSTER BAR', 'restaurant'], ['LOBSTER ROLLS', 'restaurant'], ['CLAM SHACK', 'restaurant'], ['PIZZA', 'restaurant'], ['FISH & CHIPS', 'restaurant'],
+  ['FUDGE', 'bakery'], ['CANDY', 'bakery'], ['BAKERY', 'bakery'], ['PRETZELS', 'bakery'], ['COOKIES', 'bakery'],
+  ['COFFEE', 'cafe'], ['ICE CREAM', 'cafe'], ['TEA ROOM', 'cafe'],
+  ['TAVERN', 'bar'], ['PUB', 'bar'],
+  ['GIFTS', 'shop'], ['T-SHIRTS', 'shop'], ['PEWTER', 'shop'], ['CIGARS', 'shop'], ['TOYS', 'shop'], ['ART GALLERY', 'shop'], ['SOUVENIRS', 'shop'], ['JEWELRY', 'shop'],
+  ['HATS', 'shop'], ['MAPS & PRINTS', 'shop'], ['CHEESE', 'shop'], ['FLOWERS', 'shop'], ['SPORTS', 'shop'], ['KITES', 'shop'], ['CANDLES', 'shop'], ['SCRIMSHAW', 'shop'],
+] as [string, Kind][]).map(([name, kind]) => ({ name, kind }));
+const CART_TRADES = ['HOT NUTS', 'KETTLE CORN', 'SUNGLASSES', 'POSTCARDS', 'BOSTON TEES', 'PEWTER', 'CANDLES', 'KITES', 'HATS', 'JEWELRY', 'FUDGE', 'LEMONADE', 'CHARMS', 'PHOTOS', 'SOUVENIRS', 'CAPS', 'PRINTS', 'SOCKS'];
+
+/** a fascia board's face: one line, or two for a long name */
+function fasciaCell(q: Q, name: string, kind: Kind, seed: number) {
+  const R = rng(seed), list = STYLES[kind], si = Math.floor(R() * list.length), s = list[si];
+  const font = (px: number) => `${s.face} ${px}px ${s.fam}`;
+  const words = name.split(' ');
+  let lines = [name];
+  if (measure(name, font(56)) > 680 && words.length > 1) {
+    let best = 1, bd = Infinity;
+    for (let i = 1; i < words.length; i++) { const d = Math.abs(measure(words.slice(0, i).join(' '), font(36)) - measure(words.slice(i).join(' '), font(36))); if (d < bd) { bd = d; best = i; } }
+    lines = [words.slice(0, best).join(' '), words.slice(best).join(' ')];
+  }
+  const px = lines.length > 1 ? 36 : 56, H = 88;
+  const w = Math.round(Math.min(680, Math.max(210, Math.max(...lines.map((l) => measure(l, font(px)))) + 60)));
+  const cell = sheet(q).cell(`fascia:${kind}:${si}:${name}`, w, H, (c, w, h) => {
+    c.fillStyle = s.bg; c.fillRect(0, 0, w, h);
+    c.strokeStyle = s.fg; c.globalAlpha = 0.75; c.lineWidth = 3; c.strokeRect(7, 7, w - 14, h - 14); c.globalAlpha = 1;
+    lines.forEach((l, i) => fit(c, l, w / 2, h / 2 + 3 + (i - (lines.length - 1) / 2) * 36, w - 36, font(px), s.fg));
+    grime(c, w, h, R, 0.3 + R() * 0.45);
+  });
+  return cell ? { cell, aspect: w / H, bg: s.bg } : null;
+}
+/** a projecting blade's face: the name on two lines in a rounded border */
+function bladeCell(q: Q, name: string, kind: Kind, seed: number) {
+  const R = rng(seed + 3), list = STYLES[kind], si = Math.floor(R() * list.length), s = list[si];
+  return sheet(q).cell(`blade:${kind}:${si}:${name}`, 192, 136, (c, w, h) => {
+    c.fillStyle = s.bg; roundRect(c, 0, 0, w, h, 10); c.fill();
+    c.strokeStyle = s.fg; c.lineWidth = 3; roundRect(c, 7, 7, w - 14, h - 14, 7); c.stroke();
+    const words = name.split(' '), half = Math.ceil(words.length / 2);
+    const lines = words.length > 1 ? [words.slice(0, half).join(' '), words.slice(half).join(' ')] : [name];
+    const font = `${s.face} ${lines.length > 1 ? 32 : 40}px ${s.fam}`;
+    lines.forEach((l, i) => fit(c, l, w / 2, h / 2 + 2 + (i - (lines.length - 1) / 2) * 36, w - 26, font, s.fg));
+    grime(c, w, h, R, 0.45 + R() * 0.3);
+  });
+}
+/** awning and cart-top canvas: a colour and a stripe colour */
+const CLOTH: [string, string][] = [['#1f4a34', '#e8e0cc'], ['#6a1a22', '#e8e0cc'], ['#1c2a48', '#e8e0cc'], ['#8a2a1e', '#e8dcb8'], ['#2a5a4a', '#d8c890'], ['#3a3a3a', '#c8a040'], ['#a8401a', '#efe4c8']];
+/** the slope of an awning or a cart's top: plain with a piped edge, or striped */
+function clothCell(q: Q, i: number, striped: boolean) {
+  const [a, b] = CLOTH[i % CLOTH.length], R = rng(i * 31 + (striped ? 7 : 0));
+  return sheet(q).cell(`cloth:${i % CLOTH.length}:${striped}`, 96, 96, (c, w, h) => {
+    c.fillStyle = a; c.fillRect(0, 0, w, h);
+    c.fillStyle = b;
+    if (striped) for (let k = 0; k < 8; k += 2) c.fillRect((k * w) / 8, 0, w / 8, h);
+    else c.fillRect(0, h - 6, w, 3);
+    grime(c, w, h, R, 0.55);
+  });
+}
+/** the scalloped valance under it (cut out below the scallops) */
+function valanceCell(q: Q, i: number, striped: boolean) {
+  const [a, b] = CLOTH[i % CLOTH.length], R = rng(i * 17 + (striped ? 3 : 0));
+  return sheet(q).cell(`valance:${i % CLOTH.length}:${striped}`, 96, 32, (c, w, h) => {
+    c.fillStyle = a; c.fillRect(0, 0, w, 14);
+    for (let k = 0; k < 6; k++) { c.beginPath(); c.arc(k * 16 + 8, 14, 8, 0, Math.PI); c.fill(); }
+    c.fillStyle = b;
+    if (striped) for (let k = 0; k < 8; k += 2) { c.save(); c.beginPath(); c.rect((k * w) / 8, 0, w / 8, h); c.clip(); c.fillRect(0, 0, w, 14); for (let j = 0; j < 6; j++) { c.beginPath(); c.arc(j * 16 + 8, 14, 8, 0, Math.PI); c.fill(); } c.restore(); }
+    else c.fillRect(0, 4, w, 2);
+    grime(c, w, h, R, 0.5);
+  });
+}
 
 // ================================================================================ geometry
 /** triangles with flat normals and explicit UVs */
@@ -350,6 +511,7 @@ function fillOpening(kit: Kit, W: Wall, shape: (i: number) => V2[], depth: numbe
 /** gilt letters on a wall, centred at u; `skip` letters are gone, `hang` ones swing from a nail */
 function letters(kit: Kit, W: Wall, text: string, u: number, y: number, h: number, w: number, skip: number[] = [], hang: number[] = []) {
   const A = letterAtlas(), cell = h * 0.75, gap = h * 0.12;
+  text = text.toUpperCase();
   const adv = [...text].map((c) => (c === ' ' ? h * 0.45 : (A.w[c] ?? 0.6) * cell + gap));
   let x = u - adv.reduce((a, b) => a + b, 0) / 2;
   [...text].forEach((c, i) => {
@@ -362,6 +524,128 @@ function letters(kit: Kit, W: Wall, text: string, u: number, y: number, h: numbe
     if (hang.includes(i)) { g.translate(cell * 0.4, -h * 0.42, 0); g.rotateZ(-0.5); g.translate(-cell * 0.4, h * 0.42, 0); }
     kit.on(W, g, gilt(), xc, y + h / 2, w, null, false);
   });
+}
+
+// ================================================================================ signs, awnings, carts
+/** a w x h plane facing +z showing a cell */
+function cellPlane(w: number, h: number, c: Cell) {
+  const g = new THREE.PlaneGeometry(w, h), uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, c[0] + uv.getX(i) * (c[2] - c[0]), c[1] + uv.getY(i) * (c[3] - c[1]));
+  return g;
+}
+/** a quad a (bottom left), b, c, d (top left) showing a cell, turned to face f; `part` takes a slice of it */
+function cellQuad(A: Acc, a: V3, b: V3, c: V3, d: V3, f: V3, cl: Cell, u0 = 0, u1 = 1) {
+  const U = (k: number) => cl[0] + (cl[2] - cl[0]) * k;
+  A.quadF(a, b, c, d, f, [U(u0), cl[1]], [U(u1), cl[1]], [U(u1), cl[3]], [U(u0), cl[3]]);
+}
+/** a signboard on a wall, centred at (u, y), its back w out: a painted plank with the face on it;
+ *  `tilt` swings it down about one top corner (the other screw gone) */
+function wallBoard(kit: Kit, W: Wall, u: number, y: number, w: number, bw: number, bh: number, cell: Cell, bg: string, lit: boolean, g: number, tilt = 0) {
+  const px = tilt > 0 ? -bw / 2 : bw / 2;
+  const swing = (geo: THREE.BufferGeometry) => { if (tilt) { geo.translate(-px, -bh / 2, 0); geo.rotateZ(-tilt); geo.translate(px, bh / 2, 0); } return geo; };
+  kit.on(W, swing(wbox(bw + 0.08, bh + 0.08, 0.05, 1.2)), wood(), u, y, w + 0.025, { c: lin(bg, 0.8), g, damp: 0, streak: 0.3, vary: 0.2, seed: 41 });
+  kit.on(W, swing(cellPlane(bw, bh, cell).translate(0, 0, 0.03)), lit ? signLit(kit.q) : signMat(kit.q), u, y, w + 0.025, null, false);
+}
+/** a double-sided blade sign hung on an iron bracket from the wall at (u, y) */
+function bladeSign(kit: Kit, W: Wall, u: number, y: number, cell: Cell, metal: Paint, bg: string, g: number, R: () => number) {
+  const arm = 1.3, bw = 0.95, bh = 0.67, w0 = 0.3, yb = y - 0.16 - bh / 2;
+  kit.box(W, iron(), u - 0.025, u + 0.025, y - 0.03, y + 0.03, 0, arm, metal);
+  const L = Math.hypot(0.62, 0.62), br = wbox(0.03, 0.03, L, 1);
+  br.rotateX(-Math.atan2(0.62, 0.62));
+  kit.on(W, br, iron(), u, y - 0.31, 0.33, metal);
+  kit.box(W, iron(), u - 0.06, u + 0.06, y - 0.7, y + 0.12, 0, 0.03, metal);
+  for (const w of [w0 + 0.1, w0 + bw - 0.1]) kit.box(W, iron(), u - 0.008, u + 0.008, yb + bh / 2, y - 0.03, w - 0.008, w + 0.008, metal);
+  // a breath of wind left it turned a little on its hooks
+  const sw = R() < 0.3 ? (R() - 0.5) * 0.35 : 0;
+  const body = wbox(0.04, bh + 0.06, bw + 0.06, 1.2).rotateY(sw);
+  kit.on(W, body, wood(), u, yb, w0 + bw / 2, { c: lin(bg, 0.8), g, damp: 0, streak: 0.3, vary: 0.2, seed: 43 });
+  for (const sg of [1, -1]) kit.on(W, cellPlane(bw, bh, cell).rotateY((sg * Math.PI) / 2).translate(sg * 0.023, 0, 0).rotateY(sw), signMat(kit.q), u, yb, w0 + bw / 2, null, false);
+}
+/** a canvas awning over u0..u1 on a wall, its top at yTop: sloped canvas sagging in the middle, a
+ *  scalloped valance, an iron frame; torn ones are the frame and a rag */
+function awning(kit: Kit, W: Wall, u0: number, u1: number, yTop: number, ci: number, striped: boolean, torn: boolean, metal: Paint, R: () => number) {
+  const out = 1.05, drop = 0.34, yb = yTop - drop, vh = 0.26, um = (u0 + u1) / 2;
+  const L = Math.hypot(out, drop);
+  for (const u of [u0 + 0.03, u1 - 0.03]) { const rb = wbox(0.025, 0.025, L, 1); rb.rotateX(Math.atan2(drop, out)); kit.on(W, rb, iron(), u, yTop - drop / 2, out / 2, metal); }
+  kit.box(W, iron(), u0, u1, yb - 0.02, yb + 0.02, out - 0.02, out + 0.02, metal);
+  const cloth = clothCell(kit.q, ci, striped), val = valanceCell(kit.q, ci, striped);
+  if (!cloth || !val) return;
+  const A = new Acc();
+  if (torn) {
+    // a strip still hangs off the front rail
+    const ua = u0 + (u1 - u0) * (0.15 + R() * 0.55), ub = ua + 0.22 + R() * 0.2, len = 0.5 + R() * 0.5;
+    cellQuad(A, [ua, yb - len, out + 0.02], [ub, yb - len * 0.8, out + 0.02], [ub, yb, out + 0.02], [ua, yb, out + 0.02], [0, 0, 1], cloth, 0.3, 0.6);
+  } else {
+    const sag = 0.07;
+    cellQuad(A, [u0, yb, out], [um, yb - sag, out], [um, yTop, 0.02], [u0, yTop, 0.02], [0, 1, 1], cloth, 0, 0.5);
+    cellQuad(A, [um, yb - sag, out], [u1, yb, out], [u1, yTop, 0.02], [um, yTop, 0.02], [0, 1, 1], cloth, 0.5, 1);
+    cellQuad(A, [u0, yb - vh, out], [um, yb - sag - vh, out], [um, yb - sag, out], [u0, yb, out], [0, 0, 1], val, 0, 0.5);
+    cellQuad(A, [um, yb - sag - vh, out], [u1, yb - vh, out], [u1, yb, out], [um, yb - sag, out], [0, 0, 1], val, 0.5, 1);
+  }
+  kit.on(W, A.geo(), signMat(kit.q), 0, 0, 0, null);
+}
+
+/**
+ * A Bull Market pushcart, built along its own x: a painted wooden barrow with drawers on two big iron
+ * wheels, turned posts carrying a striped canvas top with a scalloped valance, the trade on a board
+ * along the ridge. Stripped ones have lost the canvas; tipped ones lie on their side.
+ */
+function pushcart(kit: Kit, s: number, y: number, t: number, th: number, name: string, fate: 'ok' | 'stripped' | 'tipped', seed: number) {
+  const R = rng(seed), hi = kit.hi, q = kit.q;
+  const body = lin(CLOTH[Math.floor(R() * CLOTH.length)][0], 1.25);
+  const P: Paint = { c: body, g: y, damp: 0.25, streak: 0.3, vary: 0.25, seed };
+  const trim: Paint = { c: lin('#d8ccb0'), g: y, damp: 0.2, streak: 0.2, vary: 0.2, seed: seed + 1 };
+  const steel: Paint = { c: lin('#2a2c2c'), g: y, damp: 0.1, streak: 0.2, vary: 0.3, seed: seed + 2 };
+  const plank: Paint = { c: lin('#8a6a4a'), g: y, damp: 0.1, streak: 0.2, vary: 0.3, seed: seed + 3 };
+  const M = new THREE.Matrix4();
+  if (fate === 'tipped') M.makeRotationX(1.45).premultiply(new THREE.Matrix4().makeTranslation(0, 0.62, 0));
+  const put = (g: THREE.BufferGeometry, m: THREE.Material, p: Paint | null, x: number, yy: number, z: number, rx = 0, ry = 0, rz = 0, cast = true) => {
+    if (rx) g.rotateX(rx); if (ry) g.rotateY(ry); if (rz) g.rotateZ(rz);
+    g.translate(x, yy, z).applyMatrix4(M);
+    kit.add(g, m, s, y, t, th, p, cast);
+  };
+  put(wbox(1.9, 0.62, 0.9, 1.2), wood(), P, 0, 0.95, 0);
+  put(wbox(1.9, 0.05, 0.9, 1.2), wood(), plank, 0, 0.45, 0);
+  put(wbox(2.1, 0.05, 1.05, 1.2), wood(), plank, 0, 1.29, 0);
+  if (hi) for (const x of [-0.62, 0, 0.62]) for (const yy of [0.8, 1.1]) put(wbox(0.54, 0.22, 0.03, 1.5), wood(), trim, x, yy, 0.46);
+  // the wheels, on an axle under the middle
+  for (const z of [-0.53, 0.53]) {
+    put(new THREE.TorusGeometry(0.47, 0.03, hi ? 5 : 3, hi ? 20 : 10), iron(), steel, 0.2, 0.48, z);
+    for (let k = 0; k < (hi ? 4 : 2); k++) put(wbox(0.025, 0.92, 0.02, 1), iron(), steel, 0.2, 0.48, z, 0, 0, (k * Math.PI) / (hi ? 4 : 2));
+  }
+  put(new THREE.CylinderGeometry(0.025, 0.025, 1.12, 6), iron(), steel, 0.2, 0.48, 0, Math.PI / 2);
+  for (const z of [-0.38, 0.38]) {
+    put(wbox(0.06, 0.64, 0.06, 1), wood(), P, -0.85, 0.32, z);
+    put(wbox(0.55, 0.04, 0.04, 1), wood(), plank, 1.2, 1.0, z * 0.9);
+  }
+  // turned posts and the top
+  const yE = 2.48, yR = 2.74, xs = 1.15, zs = 0.62;
+  for (const x of [-0.92, 0.92]) for (const z of [-0.45, 0.45]) {
+    put(new THREE.CylinderGeometry(0.028, 0.034, yE - 1.31, 6), wood(), trim, x, (yE + 1.31) / 2, z);
+    if (hi) put(new THREE.SphereGeometry(0.05, 6, 4), wood(), trim, x, 1.36, z);
+  }
+  if (fate === 'ok') {
+    const ci = Math.floor(R() * CLOTH.length), cloth = clothCell(q, ci, true), val = valanceCell(q, ci, true);
+    if (cloth && val) {
+      const A = new Acc();
+      for (const sg of [-1, 1]) {
+        cellQuad(A, [-xs, yE, sg * zs], [xs, yE, sg * zs], [xs, yR, 0], [-xs, yR, 0], [0, 1, sg], cloth);
+        cellQuad(A, [-xs, yE - 0.24, sg * zs], [xs, yE - 0.24, sg * zs], [xs, yE, sg * zs], [-xs, yE, sg * zs], [0, 0, sg], val);
+        cellQuad(A, [sg * xs, yE - 0.24, -zs], [sg * xs, yE - 0.24, zs], [sg * xs, yE, zs], [sg * xs, yE, -zs], [sg, 0, 0], val, 0, 0.6);
+        const U = (k: number) => cloth[0] + (cloth[2] - cloth[0]) * k;
+        A.triF([sg * xs, yE, -zs], [sg * xs, yE, zs], [sg * xs, yR, 0], [sg, 0, 0], [U(0), cloth[1]], [U(0.6), cloth[1]], [U(0.3), cloth[3]]);
+      }
+      put(A.geo(), signMat(q), null, 0, 0, 0);
+    }
+  }
+  if (fate !== 'tipped') {
+    const f = fasciaCell(q, name, 'shop', seed + 9);
+    if (f) {
+      const bw = Math.min(1.7, 0.34 * f.aspect), bh = bw / f.aspect, yb = (fate === 'ok' ? yR : yE) + bh / 2 + 0.04;
+      put(wbox(bw + 0.06, bh + 0.06, 0.04, 1.2), wood(), { ...plank, c: lin(f.bg, 0.8) }, 0, yb, 0);
+      for (const sg of [1, -1]) put(cellPlane(bw, bh, f.cell).translate(0, 0, 0.023), signMat(q), null, 0, yb, 0, 0, sg > 0 ? 0 : Math.PI, 0, false);
+    }
+  }
 }
 
 // ================================================================================ Quincy Market
@@ -632,6 +916,9 @@ export const quincy: LandmarkBuilder = (ctx) => {
         if (i > 0 && i < 5) kit.box(W, stone(), u - pw2 / 2 - 0.06, u + pw2 / 2 + 0.06, Y(9.45), Y(9.75), -0.1, 0.22, P.trim);
         else kit.box(W, granite(), u - pw2 / 2 + 0.18, u + pw2 / 2 - 0.18, Y(6.0), Y(11.6), 0.1, 0.13, P.granite);
       });
+      // the name over the big middle doors, and the year it opened above the course
+      letters(kit, W, 'QUINCY MARKET', centres[2], Y(4.38), 0.48 * k, 0.03, [], side === 's' ? [12] : []);
+      letters(kit, W, '1826', centres[2], Y(5.4), 0.4 * k, 0.03);
       // rustication: deep joints every course across the base
       if (hi) for (let y = 1.45; y < 5.0; y += 0.62) kit.box(W, granite(), 0, L, Y(y), Y(y) + 0.05, -0.1, -0.02, { ...P.granite, c: lin('#6a665e') });
       kit.box(W, stone(), 0, L, Y(4.95), Y(5.3), -0.1, 0.18, P.trim);
@@ -714,13 +1001,76 @@ export const quincy: LandmarkBuilder = (ctx) => {
   }
 
   // ---- the canopies of 1976 along both flanks (when their footprints belong to this landmark)
+  const canopies: Canopy[] = [];
   for (const c of flank) {
     const side = Math.sign(c.ct) || 1;
     const wallT = side > 0 ? Math.min(...c.ring.map((p) => p[1])) : Math.max(...c.ring.map((p) => p[1]));
     const touches = side > 0 ? wallT < to1 + 1 : wallT > to0 - 1;
     if (!touches) kiosk(kit, c, g, P, R);
     else if (c.area < 30) areaway(kit, c, g, P);
-    else canopy(kit, c, g, side, wallT, Y, P, R, hi);
+    else { const cn = canopy(kit, c, g, side, wallT, Y, P, R, hi); if (cn) canopies.push(cn); }
+  }
+
+  // ---- the stalls' names on the canopies, from the shops OpenStreetMap puts in the hall or under them
+  {
+    const tc = (to0 + to1) / 2, rows = ctx.d.h.landmarks.filter((l) => l.key === 'northMarket' || l.key === 'southMarket').flatMap((l) => l.outline);
+    const depth = Math.max(2, ...canopies.map((cn) => Math.abs(cn.tOut - cn.wallT)));
+    const S0 = Math.min(W0.s0, W1.s0), S1 = Math.max(W0.s1, W1.s1);
+    const named: { name: string; kind: Kind; s: number; side: number }[] = [];
+    for (const sh of ctx.d.h.shops ?? []) {
+      if (rows.some((r) => inRing(sh.x, sh.z, r))) continue;
+      const [s, t] = loc(F, sh.x, sh.z);
+      if (s < S0 - 4 || s > S1 + 4 || t < to0 - depth - 3 || t > to1 + depth + 3) continue;
+      named.push({ name: sh.name, kind: sh.kind, s, side: t < tc ? -1 : 1 });
+    }
+    const Rs = rng(1826);
+    for (const n of named) {
+      const on = canopies.filter((cn) => cn.side === n.side).sort((a, b) => Math.max(0, a.c.s0 - n.s, n.s - a.c.s1) - Math.max(0, b.c.s0 - n.s, n.s - b.c.s1))[0];
+      if (on) canopyBoard(kit, on, n.s, n, Rs, g, false);
+    }
+    // the other stalls, here and there
+    for (const cn of canopies) {
+      for (let s = cn.c.s0 + 5; s < cn.c.s1 - 4; s += hi ? 9 : 13) if (Rs() < 0.55) canopyBoard(kit, cn, s + (Rs() - 0.5) * 3, TRADES[Math.floor(Rs() * TRADES.length)], Rs, g, false);
+      // and boards hung on chains under the glass, facing the walk
+      for (let s = cn.c.s0 + 3; s < cn.c.s1 - 2; s += hi ? 7 : 11) {
+        if (Rs() < 0.35) continue;
+        const sec = sectionAt(cn.c.ring, s);
+        if (!sec) continue;
+        const tt = cn.wallT + cn.side * Math.min(1.5, Math.abs(cn.tOut - cn.wallT) * 0.3), n = named.length && Rs() < 0.4 ? named[Math.floor(Rs() * named.length)] : TRADES[Math.floor(Rs() * TRADES.length)];
+        const f = fasciaCell(kit.q, n.name, n.kind, Math.floor(Rs() * 1e6));
+        if (!f) continue;
+        const bw = Math.min(1.9, 0.42 * f.aspect), bh = bw / f.aspect, yTop = cn.yAt(tt) - 0.3, yb = yTop - 0.45 - bh / 2;
+        const sw = Rs() < 0.25 ? (Rs() < 0.5 ? -1 : 1) * (0.2 + Rs() * 0.5) : 0;
+        if (Rs() < 0.12) continue; // the chains are all that's left
+        kit.add(wbox(bw + 0.06, bh + 0.06, 0.04, 1.2).rotateZ(sw * 0.3), wood(), s, yb, tt, 0, { c: lin(f.bg, 0.8), g, damp: 0, streak: 0.3, vary: 0.2, seed: 44 });
+        for (const sg of [1, -1]) kit.add(cellPlane(bw, bh, f.cell).translate(0, 0, 0.023).rotateY(sg > 0 ? 0 : Math.PI).rotateZ(sw * 0.3), signMat(kit.q), s, yb, tt, 0, null, false);
+        for (const x of [-bw / 2 + 0.12, bw / 2 - 0.12]) kit.fbox(iron(), s + x - 0.008, s + x + 0.008, yb + bh / 2, yTop, tt - 0.008, tt + 0.008, P.steel);
+      }
+    }
+  }
+
+  // ---- Bull Market pushcarts out on the mall, along the canopies (never under a tree or a lamp)
+  {
+    const avoid = ['tree', 'lamp', 'lampOsm', 'bench', 'bin', 'hydrant', 'statue', 'bollard', 'fountain'].flatMap((k) => ctx.d.h.furniture[k] ?? []);
+    const Rc = rng(1976);
+    for (const side of [-1, 1]) {
+      const mine = canopies.filter((cn) => cn.side === side);
+      const tEdge = mine.length ? (side > 0 ? Math.max(...mine.map((cn) => cn.tOut)) : Math.min(...mine.map((cn) => cn.tOut))) : side > 0 ? Math.max(W0.tS, W1.tS) : Math.min(W0.tN, W1.tN);
+      const tc = tEdge + side * 3.3;
+      for (let s = Math.min(W0.s0, W1.s0) + 10; s < Math.max(W0.s1, W1.s1) - 10; s += (hi ? 10 : 16) + Rc() * 4) {
+        const [x, z] = wld(F, s, tc), y0 = ctx.heightAt(x, z);
+        if (Number.isNaN(y0) || Rc() < 0.2) continue;
+        let ok = true;
+        for (let i = 0; i < 10 && ok; i++) {
+          const a = (i / 10) * Math.PI * 2, [xa, za] = wld(F, s + Math.cos(a) * 2.3, tc + Math.sin(a) * 1.7), ya = ctx.heightAt(xa, za);
+          if (Number.isNaN(ya) || Math.abs(ya - y0) > 0.4) ok = false;
+        }
+        if (!ok || avoid.some((f) => Math.hypot(f.x - x, f.z - z) < 2.4)) continue;
+        const r = Rc(), fate = r < 0.72 ? 'ok' : r < 0.9 ? 'stripped' : 'tipped';
+        pushcart(kit, s, y0, tc, (Rc() - 0.5) * (fate === 'tipped' ? 1.2 : 0.16) + (Rc() < 0.5 ? 0 : Math.PI), CART_TRADES[Math.floor(Rc() * CART_TRADES.length)], fate, Math.floor(Rc() * 1e6));
+        ctx.collide.addCircle(x, z, fate === 'tipped' ? 1.5 : 1.15, y0 + 2.6);
+      }
+    }
   }
 
   // ---- someone camps in the west portico, facing Faneuil Hall: a lantern on a chain, bedding, crates
@@ -748,9 +1098,37 @@ export const quincy: LandmarkBuilder = (ctx) => {
   return finish(group, lights, updates);
 };
 
+/** a canopy as its signs see it: its outer long wall, the roof's height across it, the stretches of
+ *  fascia already signed */
+interface Canopy { c: LP; side: number; wallT: number; tOut: number; W: Wall; yAt: (t: number) => number; used: V2[] }
+
+/** a stall's name board on a canopy's fascia, at the bay nearest s (or the nearest free stretch) */
+function canopyBoard(kit: Kit, cn: Canopy, s: number, n: Tenant, R: () => number, g: number, lit: boolean) {
+  const f = fasciaCell(kit.q, n.name, n.kind, Math.floor(R() * 1e6) + n.name.length);
+  if (!f) return;
+  const W = cn.W;
+  let bh = 0.7, bw = bh * f.aspect;
+  if (bw > Math.min(5.5, W.len - 0.6)) { bw = Math.min(5.5, W.len - 0.6); bh = bw / f.aspect; }
+  const want = Math.max(bw / 2 + 0.3, Math.min(W.len - bw / 2 - 0.3, uOf(W, s, cn.tOut)));
+  const tries = [0, 1, -1, 2, -2, 3, -3, 4, -4].map((k) => want + k * (bw / 2 + 0.6)).filter((u) => u >= bw / 2 + 0.3 && u <= W.len - bw / 2 - 0.3);
+  const u = tries.find((u) => !cn.used.some(([a, b]) => u + bw / 2 > a - 0.3 && u - bw / 2 < b + 0.3));
+  if (u === undefined) return;
+  cn.used.push([u - bw / 2, u + bw / 2]);
+  const top = cn.yAt(W.bt + W.at * u);
+  // centred on the fascia (top - 0.42 .. top + 0.06)
+  wallBoard(kit, W, u, top - 0.18, 0.11, bw, bh, f.cell, f.bg, lit, g, R() < 0.12 ? 0.15 + R() * 0.3 : 0);
+}
+
+/** is (x, z) inside a ring? */
+function inRing(x: number, z: number, r: [number, number][] | number[][]) {
+  let c = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) if ((r[i][1] > z) !== (r[j][1] > z) && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+  return c;
+}
+
 /** a canopy: glass shed roof on steel rafters from the hall's string course down to the street,
  *  glass walls between posts, most of the panes now gone */
-function canopy(kit: Kit, c: LP, g: number, side: number, wallT: number, Y: (h: number) => number, P: Record<string, Paint>, R: () => number, hi: boolean) {
+function canopy(kit: Kit, c: LP, g: number, side: number, wallT: number, Y: (h: number) => number, P: Record<string, Paint>, R: () => number, hi: boolean): Canopy | null {
   const yW = Y(5.05), slope = Math.tan(11 * DEG);
   const yAt = (t: number) => yW - Math.abs(t - wallT) * slope;
   const bay = 2.29, s0 = c.s0, s1 = c.s1, nb = Math.max(1, Math.round((s1 - s0) / bay)), bw = (s1 - s0) / nb;
@@ -815,19 +1193,20 @@ function canopy(kit: Kit, c: LP, g: number, side: number, wallT: number, Y: (h: 
       }
     }
   }
-  // what's left inside: pushcarts, a counter, glass on the floor
-  const nCart = Math.max(1, Math.round((s1 - s0) / 12));
+  // the long side out on the mall, where the stalls' names go
+  let outer: Wall | null = null;
+  for (let e = 0; e < ring.length; e++) { const W = wallOf(ring[e], ring[(e + 1) % ring.length]); if (W.nt * side > 0.7 && (!outer || W.len > outer.len)) outer = W; }
+  // what's left inside: the pushcarts, glass on the floor
+  const nCart = Math.max(1, Math.round((s1 - s0) / (hi ? 8 : 12)));
   for (let i = 0; i < nCart; i++) {
     const s = s0 + (s1 - s0) * ((i + 0.3 + R() * 0.4) / nCart), sec = sectionAt(c.ring, s);
     if (!sec) continue;
-    const t = (sec[0] + sec[1]) / 2 + (R() - 0.5) * 2, th = R() < 0.3 ? 0.4 + R() : (R() - 0.5) * 0.3;
-    if (!inside(s, t)) continue;
-    const tipped = R() < 0.35;
-    const body = wbox(2.2, 0.9, 1.1, 1.2);
-    if (tipped) body.rotateX(1.35);
-    kit.add(body, wood(), s, g + (tipped ? 0.55 : 0.85), t, th, { ...P.ply, c: lin(['#6a3a2a', '#2a4a3a', '#5a4a2a'][i % 3]) });
-    kit.add(wbox(2.4, 0.08, 1.3, 1), wood(), s, g + (tipped ? 1.05 : 1.95), t, th, P.frame);
-    for (const sx of [-0.8, 0.8]) kit.add(new THREE.CylinderGeometry(0.35, 0.35, 0.08, 12).rotateX(Math.PI / 2), iron(), s + sx * Math.cos(th), g + 0.35, t - sx * Math.sin(th) + 0.6, th, P.steel);
+    const t = (sec[0] + sec[1]) / 2 + (R() - 0.5) * 1.2, th = R() < 0.25 ? 0.3 + R() * 0.5 : (R() - 0.5) * 0.2;
+    if (!inside(s - 1.3, t) || !inside(s + 1.3, t)) continue;
+    const r = R(), fate = r < 0.6 ? 'ok' : r < 0.85 ? 'stripped' : 'tipped';
+    // the canvas tops stay under the glass
+    if (fate === 'ok' && yAt(t + side * 0.7) < g + 3.05) continue;
+    pushcart(kit, s, g, t, th + (R() < 0.5 ? 0 : Math.PI), CART_TRADES[Math.floor(R() * CART_TRADES.length)], fate, Math.floor(R() * 1e6));
   }
   if (hi) for (let i = 0; i < 26; i++) {
     const s = s0 + R() * (s1 - s0), sec = sectionAt(c.ring, s);
@@ -837,6 +1216,8 @@ function canopy(kit: Kit, c: LP, g: number, side: number, wallT: number, Y: (h: 
     A.triF([s, g + 0.05, t], [s + sz, g + 0.05, t + sz * 0.4 * (R() - 0.5)], [s + sz * 0.3, g + 0.05, t + sz], [0, 1, 0], [0, 0], [1, 0], [0, 1]);
     kit.add(A.geo(), pane(), 0, 0, 0, 0, null, false);
   }
+  if (!outer) return null;
+  return { c, side, wallT, tOut: outer.bt, W: outer, yAt, used: [] };
 }
 
 /** a basement areaway against the hall: a granite curb round a dark stairwell, an iron railing */
@@ -956,6 +1337,29 @@ function marketRow(which: 'north' | 'south'): LandmarkBuilder {
       }
     }
 
+    // ---- tenants: the shops OpenStreetMap puts in the row or just in front of it (not under Quincy's
+    // canopies), at most two to a store; the rest get a trade, or a lease notice
+    const tenants: Tenant[][] = stores.map(() => []);
+    const quincyOut = ctx.d.h.landmarks.find((l) => l.key === 'quincy')?.outline ?? [];
+    const segDist = (x: number, z: number, r: number[][]) => Math.min(...r.map((a, i) => {
+      const b = r[(i + 1) % r.length], dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1, k = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2));
+      return Math.hypot(a[0] + dx * k - x, a[1] + dz * k - z);
+    }));
+    for (const sh of [...(ctx.d.h.shops ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      const [s, t] = loc(F, sh.x, sh.z), mine = ctx.outline.some((r) => inRing(sh.x, sh.z, r));
+      if (quincyOut.some((r) => inRing(sh.x, sh.z, r))) continue;
+      const near = stores.map((st, i) => ({ i, d: Math.max(0, st.s0 - s, s - st.s1), dt: (t - st.tF) * front })).filter((o) => o.d < 1.5).sort((a, b) => a.d - b.d);
+      const at = near[0];
+      if (!at || !(mine || (at.dt > -1 && at.dt < 10 && quincyOut.every((r) => segDist(sh.x, sh.z, r) > 7)))) continue;
+      // a full store passes the shop to a neighbour with room
+      const to = [at.i, at.i - 1, at.i + 1].find((i) => i >= 0 && i < stores.length && tenants[i].length < (stores[i].s1 - stores[i].s0 > 8 ? 2 : 1));
+      if (to !== undefined) tenants[to].push({ name: sh.name, kind: sh.kind });
+    }
+    {
+      const Rt = rng(which === 'north' ? 3540 : 1742);
+      tenants.forEach((l) => { if (!l.length) l.push(Rt() < 0.14 ? { name: Rt() < 0.5 ? 'FOR LEASE' : 'AVAILABLE', kind: 'lease' } : TRADES[Math.floor(Rt() * TRADES.length)]); });
+    }
+
     const spans = spanMap(ctx.d.get('bSpan'), new Set(ctx.parts.map((p) => p.i)));
     const lights: FogLight[] = [];
     const litAt = Math.floor(stores.length * (which === 'north' ? 0.42 : 0.62));
@@ -998,7 +1402,7 @@ function marketRow(which: 'north' | 'south'): LandmarkBuilder {
       const eW = westStore ? st.s0 : endPlane(false), eE = eastStore ? st.s1 : endPlane(true);
 
       // ---- walls, edge by edge
-      const sp = spans.get(st.u.p.i);
+      const sp = spans.get(st.u.p.i), fronts: Wall[] = [];
       for (let e = 0; e < st.ring.length; e++) {
         const a = st.ring[e], b = st.ring[(e + 1) % st.ring.length];
         const W0 = wallOf(a, b);
@@ -1020,10 +1424,12 @@ function marketRow(which: 'north' | 'south'): LandmarkBuilder {
             continue;
           }
           if (Math.abs(W.nt) < 0.7) { plainWall(kit, W, c, st.eave, false); continue; }
-          if (W.nt * front > 0) rowFront(kit, W, c, si === litAt ? (s, t, y) => onLit(s, t, y) : null);
+          if (W.nt * front > 0) { rowFront(kit, W, c, si === litAt ? (s, t, y) => onLit(s, t, y) : null); fronts.push(W); }
           else rowRear(kit, W, c);
         }
       }
+      const fw = fronts.sort((x, y) => y.len - x.len)[0];
+      if (fw && fw.len > 2.5) storeSigns(kit, fw, c, tenants[si], si === litAt, rng(st.seed + 99));
       // a projection past the end wall (an entrance vestibule): a flat granite top
       for (const east of [false, true]) {
         const plane = east ? eE : eW, edge = east ? st.s1 : st.s0;
@@ -1188,6 +1594,39 @@ function rowFront(kit: Kit, W: Wall, o: RowCtx, onLit: ((s: number, t: number, y
   kit.box(W, stone(), -0.02, W.len + 0.02, Yf(0.985), o.eave, -0.1, 0.48, o.trim);
 }
 
+/** a store's signs on its granite front (rowFront's bays): each tenant's name board over the shop
+ *  windows, many with a blade on a bracket, some with canvas awnings over the bays */
+function storeSigns(kit: Kit, W: Wall, o: RowCtx, list: Tenant[], lit: boolean, R: () => number) {
+  const { Yf } = o, n = Math.max(1, Math.round(W.len / 1.72)), bw = W.len / n, post = Math.min(0.44, bw * 0.3);
+  const top = Yf(0.375) - 0.06, bh0 = Math.min(1.0, top - (Yf(0.3) - 0.25));
+  const metal = o.fill.metal ?? o.fill.frame;
+  list.forEach((tn, j) => {
+    const u0 = (W.len * j) / list.length, u1 = (W.len * (j + 1)) / list.length, seed = Math.floor(R() * 1e6);
+    const f = fasciaCell(kit.q, tn.name, tn.kind, seed);
+    let bh = bh0, wB = f ? bh * f.aspect : 0;
+    if (f) {
+      if (wB > u1 - u0 - 0.5) { wB = u1 - u0 - 0.5; bh = wB / f.aspect; }
+      const fate = R();
+      if (fate > 0.1) wallBoard(kit, W, (u0 + u1) / 2, top - bh0 / 2, 0.12, wB, bh, f.cell, f.bg, lit && j === 0, o.g, fate < 0.22 ? 0.12 + R() * 0.35 : 0);
+    }
+    // a blade on the post at the near end of the shop, out over the pavement
+    if (tn.kind !== 'lease' && R() < 0.6 && n >= 2) {
+      const ub = Math.max(bw, Math.min(W.len - bw, bw * Math.round((j % 2 ? u1 : u0) / bw)));
+      const bc = bladeCell(kit.q, tn.name, tn.kind, seed);
+      if (bc) bladeSign(kit, W, ub, Yf(0.375) + 0.5, bc, metal, STYLES[tn.kind][0].bg, o.g, R);
+    }
+    // awnings over the bays
+    if (tn.kind !== 'lease' && R() < 0.5) {
+      const ci = Math.floor(R() * CLOTH.length), striped = R() < 0.4, yA = Math.min(Yf(0.3) - 0.05, top - bh0 - 0.04);
+      for (let i = 0; i < n; i++) {
+        const u = bw * (i + 0.5);
+        if (u < u0 || u > u1) continue;
+        awning(kit, W, u - (bw - post) / 2, u + (bw - post) / 2, yA, ci, striped, R() < 0.18, metal, R);
+      }
+    }
+  });
+}
+
 /** the brick back: plain windows with sandstone sills and flared lintels over a granite storey */
 function rowRear(kit: Kit, W: Wall, o: RowCtx) {
   const { Yf, R } = o, n = Math.max(1, Math.round(W.len / 2.3)), bw = W.len / n;
@@ -1262,6 +1701,7 @@ function gable(kit: Kit, W: Wall, o: RowCtx, tm: number, name: string, hi: boole
   kit.box(W, brick(), uPeak - 0.75, uPeak + 0.75, o.ridge - 0.6, o.ridge + 2.0, -1.2, 0.0, o.brick, 1 / 1.6);
   kit.box(W, stone(), uPeak - 0.85, uPeak + 0.85, o.ridge + 2.0, o.ridge + 2.15, -1.3, 0.1, { ...o.trim, c: lin('#a8a29a') });
   letters(kit, W, name, uPeak, o.Yf(0.712), 0.7, 0.02, [], name.startsWith('S') ? [7] : []);
+  letters(kit, W, 'EST. 1826', uPeak, o.Yf(0.5) + 0.04, 0.4, 0.02);
   if (hi) for (const y of [0.56, 0.76]) for (const u of [0.5, W.len - 0.5]) kit.on(W, new THREE.CylinderGeometry(0.11, 0.11, 0.03, 5).rotateX(Math.PI / 2), iron(), u, o.Yf(y), 0.02, { ...o.fill.frame, c: lin('#2a2624') });
 }
 
