@@ -137,10 +137,13 @@ Freedom Trail: the red brick line with its bronze medallions and its stop signs,
 State St round Faneuil Hall, through the Blackstone Block and up Hanover St to the Paul Revere House,
 then under the wall toward the Old North Church, whose steeple (two lanterns lit) stands past the
 North End's cordon. The trail is on the map too. Every sign face is drawn once onto one canvas atlas,
-so they cost a couple of draws per 128 m tile.
+so they cost a couple of draws per 128 m tile. Long Wharf has its own: the ferry landings' MBTA
+signs, departure boards and queue rails, the ticket booths, HarborWalk history panels, granite
+bollards and chains along the edge, life rings and mooring lines, the restaurants' patios, and the
+open pavilion at the end with the compass rose, the mast and the lookout.
 
 - `?at=<spot>` starts at a named place: state, faneuil, quincy, longwharf, aquarium, columbus,
-  customhouse, harbortowers, rowes, northsquare, blackstone, hongkong.
+  customhouse, harbortowers, rowes, northsquare, blackstone, hongkong, ferry.
 - `?debug=stats` shows what a frame costs (draws and triangles summed over every pass) and warns if
   a shader compiles after warm-up; `?debug=map` adds a top-down map of the walk mesh, colliders,
   the cordon, the tiles drawn, the lit lamps, the drones and the hero.

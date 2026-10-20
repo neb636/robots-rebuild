@@ -7,6 +7,7 @@
   "marriott": { "name": "Boston Marriott Long Wharf", "osm": ["w29625335"] },
   "customHouseBlock": { "name": "Custom House Block", "osm": ["w29619641"] },
   "chartHouse": { "name": "Chart House (Gardiner Building)", "osm": ["w29620958"] },
+  "longWharfPavilion": { "name": "Long Wharf Pavilion", "osm": ["w29833414"], "overhead": ["w29833414"] },
   "aquarium": { "name": "New England Aquarium", "osm": ["w29660091"], "extra": ["w32600260", "w29833421"], "overhead": ["w29877140"] },
   "customHouse": { "name": "Custom House Tower", "osm": ["w29719177"] },
   "harborTowers": { "name": "Harbor Towers", "osm": ["w240415949", "w240415950"] },

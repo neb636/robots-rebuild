@@ -932,4 +932,4 @@ export interface SignKit {
   board(acc: MeshAcc, x: number, y: number, z: number, nx: number, nz: number, w: number, h: number, t: number, uv: UV): void;
   post(acc: MeshAcc, x: number, z: number, y0: number, y1: number, r: number): void;
 }
-export { fitText, weather, roundRect };
+export { fitText, weather, roundRect, quad, board, post, bar, signMaterial };

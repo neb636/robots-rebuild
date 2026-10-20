@@ -377,6 +377,22 @@
   {
    "type": "Feature",
    "properties": {
+    "kind": "spot",
+    "name": "ferry",
+    "heading": 110,
+    "note": "on the HarborWalk on the north side of Long Wharf, by the Boston Harbor Cruise ticket booth, looking out to the Long Wharf (North) ferry dock"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0501098,
+     42.360615
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
     "kind": "hole",
     "name": "state-stairs",
     "note": "the State station stairwell: no ground here; src/harbor/station.ts builds the stairs into it"
