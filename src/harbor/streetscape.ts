@@ -11,7 +11,7 @@ import type { WalkMesh } from './walk';
 import type { Part } from './buildings';
 import { ChunkBuilder, type Chunk } from './chunks';
 import { pbrMat } from '../props';
-import { getBarkMat, taperTube, bushCards, leafCards, tuftGeometry, getGrassMat, grassPatch, type Card } from '../foliage';
+import { getBarkMat, taperTube, leafCards, tuftGeometry, getGrassMat, grassPatch, type Card } from '../foliage';
 import { rng } from '../noise';
 import type { SignalArm } from './signs';
 import { KITS, pickKit, paintFor, plateMat, platesOf, carFleet } from './cars';
@@ -116,36 +116,93 @@ class Segs {
 }
 
 // -------------------------------------------------------------------------------- kits
-/** a street tree (honey locust, linden, plane): a clear trunk, a few scaffold limbs, twiggy ends */
-function treeKit(seed: number, height: number) {
-  const R = rng(seed);
-  const geos: THREE.BufferGeometry[] = [], tips: THREE.Vector3[] = [];
-  const trunkH = height * (0.3 + R() * 0.1), r0 = 0.12 + height * 0.008;
+/** the street trees downtown: lindens (a dense oval crown), honey locusts (open, airy, spreading) and
+ *  London planes (big and broad) */
+type Species = 'linden' | 'locust' | 'plane';
+const SPECIES: Record<Species, { trunk: number; limbs: [number, number]; rise: [number, number]; reach: number; lobe: number; squash: number; cards: number; airy: number }> = {
+  linden: { trunk: 0.32, limbs: [4, 6], rise: [1.1, 1.8], reach: 0.62, lobe: 0.62, squash: 0.95, cards: 1.15, airy: 0.15 },
+  locust: { trunk: 0.38, limbs: [3, 5], rise: [0.55, 1.0], reach: 0.8, lobe: 0.55, squash: 0.66, cards: 1.0, airy: 0.28 },
+  plane: { trunk: 0.3, limbs: [4, 6], rise: [0.8, 1.4], reach: 0.78, lobe: 0.6, squash: 0.78, cards: 1.05, airy: 0.22 },
+};
+
+/** a street tree: a clear trunk, scaffold limbs, twiggy ends, and the leaf masses its crown is built of
+ *  (a lobe around each limb's end and one through the middle) */
+function treeKit(seed: number, height: number, sp: Species) {
+  const R = rng(seed), S = SPECIES[sp];
+  const geos: THREE.BufferGeometry[] = [], tips: THREE.Vector3[] = [], lobes: { c: THREE.Vector3; r: number }[] = [];
+  const trunkH = height * (S.trunk + R() * 0.08), r0 = 0.13 + height * 0.009;
   const lean = new THREE.Vector3((R() - 0.5) * 0.14, 1, (R() - 0.5) * 0.14).normalize();
   const top = lean.clone().multiplyScalar(trunkH);
   const mid = lean.clone().multiplyScalar(trunkH * 0.5).add(new THREE.Vector3((R() - 0.5) * 0.1, 0, (R() - 0.5) * 0.1));
   geos.push(taperTube(new THREE.CatmullRomCurve3([new THREE.Vector3(0, -0.15, 0), mid, top]), 5, 8, r0, r0 * 0.72));
-  const limbs = 3 + Math.floor(R() * 3);
+  // the root flare where the trunk meets the pit
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + R() * 0.8;
+    geos.push(taperTube(new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0.45, 0), new THREE.Vector3(Math.cos(a) * r0 * 1.2, 0.08, Math.sin(a) * r0 * 1.2), new THREE.Vector3(Math.cos(a) * r0 * 2.6, -0.06, Math.sin(a) * r0 * 2.6)]), 4, 5, r0 * 0.5, r0 * 0.15));
+  }
+  const limbs = S.limbs[0] + Math.floor(R() * (S.limbs[1] - S.limbs[0] + 1));
+  const crownH = height - trunkH;
   for (let i = 0; i < limbs; i++) {
     const a = (i / limbs) * Math.PI * 2 + R() * 0.9;
-    const dir = new THREE.Vector3(Math.cos(a), 0.8 + R() * 0.7, Math.sin(a)).normalize();
-    const len = (height - trunkH) * (0.55 + R() * 0.25);
-    const bend = top.clone().addScaledVector(dir, len * 0.5).add(new THREE.Vector3((R() - 0.5) * 0.5, 0, (R() - 0.5) * 0.5));
-    const curve = new THREE.CatmullRomCurve3([top.clone(), bend, top.clone().addScaledVector(dir, len)]);
+    const dir = new THREE.Vector3(Math.cos(a), S.rise[0] + R() * (S.rise[1] - S.rise[0]), Math.sin(a)).normalize();
+    const len = crownH * (S.reach - 0.1 + R() * 0.25);
+    const from = top.clone().addScaledVector(lean, -R() * trunkH * 0.12);
+    const bend = from.clone().addScaledVector(dir, len * 0.5).add(new THREE.Vector3((R() - 0.5) * 0.5, 0, (R() - 0.5) * 0.5));
+    const curve = new THREE.CatmullRomCurve3([from, bend, from.clone().addScaledVector(dir, len)]);
     geos.push(taperTube(curve, 5, 6, r0 * 0.58, r0 * 0.2));
-    tips.push(curve.getPointAt(1));
+    const end = curve.getPointAt(1);
+    tips.push(end);
+    lobes.push({ c: end.clone().add(new THREE.Vector3(0, crownH * 0.06, 0)), r: crownH * S.lobe * (0.75 + R() * 0.3) });
     for (let k = 0, n = 2 + Math.floor(R() * 2); k < n; k++) {
       const p = curve.getPointAt(0.35 + R() * 0.5);
       const sd = dir.clone().add(new THREE.Vector3((R() - 0.5) * 1.5, 0.25 + R() * 0.5, (R() - 0.5) * 1.5)).normalize();
       const sl = len * (0.35 + R() * 0.25), e = p.clone().addScaledVector(sd, sl);
       geos.push(taperTube(new THREE.CatmullRomCurve3([p, p.clone().addScaledVector(sd, sl * 0.5).add(new THREE.Vector3(0, -0.06 * sl, 0)), e]), 3, 4, r0 * 0.22, r0 * 0.07));
       tips.push(e);
+      if (R() < 0.6) lobes.push({ c: e.clone(), r: crownH * S.lobe * (0.45 + R() * 0.2) });
     }
   }
-  // the crown's middle, and how big it is, for the leaf mass that hides the limbs
+  // the crown's middle, and how big it is, for the mass that fills between the limbs
   const crown = tips.reduce((a, t) => a.add(t), new THREE.Vector3()).divideScalar(tips.length);
   const spread = tips.reduce((a, t) => Math.max(a, Math.hypot(t.x - crown.x, t.z - crown.z)), 1);
-  return { bark: mergeGeometries(geos), tips, r0, crown, spread };
+  lobes.push({ c: crown.clone().add(new THREE.Vector3(0, crownH * 0.08, 0)), r: spread * 0.85 });
+  // squash the crown (a locust's is wide and flat), keeping its underside above the trunk
+  for (const l of lobes) l.c.y = top.y + (l.c.y - top.y) * S.squash + l.r * 0.15;
+  let y0 = Infinity, y1 = -Infinity;
+  for (const l of lobes) { y0 = Math.min(y0, l.c.y - l.r * S.squash); y1 = Math.max(y1, l.c.y + l.r * S.squash); }
+  const ctr = new THREE.Vector3(crown.x, (y0 + y1) / 2, crown.z);
+  return { bark: mergeGeometries(geos), r0, lobes, ctr, y0: Math.max(y0, trunkH * 0.85), y1, squash: S.squash, cards: S.cards, airy: S.airy };
+}
+type TreeKit = ReturnType<typeof treeKit>;
+
+/** a tree's leaves as cards over its crown's lobes, in the kit's own space: mostly near each lobe's
+ *  skin (what's seen), facing out from the whole crown (so it shades like one soft mass, lit on top),
+ *  and darker underneath and inside, where the crown shades itself */
+function crownCards(kit: TreeKit, n: number, R: () => number): Card[] {
+  const out: Card[] = [], w = kit.lobes.map((l) => l.r * l.r), total = w.reduce((a, b) => a + b, 0);
+  const d = new THREE.Vector3(), p = new THREE.Vector3(), nc = new THREE.Vector3(), nl = new THREE.Vector3();
+  const H = Math.max(1, kit.y1 - kit.y0);
+  for (let tries = 0; out.length < n && tries < n * 4; tries++) {
+    let pick = R() * total, li = 0;
+    while (li < w.length - 1 && (pick -= w[li]) > 0) li++;
+    const l = kit.lobes[li];
+    const u = R() * 2 - 1, a = R() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+    d.set(s * Math.cos(a), u, s * Math.sin(a));
+    // airy crowns let more cards sit inside, so light shows through gaps
+    const depth = 0.9 - Math.pow(R(), 1 + (1 - kit.airy) * 2.5) * 0.5;
+    p.set(l.c.x + d.x * l.r * depth, l.c.y + d.y * l.r * depth * kit.squash, l.c.z + d.z * l.r * depth);
+    if (p.y < kit.y0 - 0.2) continue;
+    // a point buried deep in another lobe is never seen
+    if (kit.lobes.some((o, j) => j !== li && p.distanceTo(o.c) < o.r * 0.55)) { if (R() < 0.85) continue; }
+    nc.subVectors(p, kit.ctr); nc.y /= kit.squash; nc.normalize();
+    nl.copy(d);
+    const nx = nc.x * 0.6 + nl.x * 0.4, ny = nc.y * 0.6 + nl.y * 0.4 + 0.3, nz = nc.z * 0.6 + nl.z * 0.4;
+    const hgt = Math.min(1, Math.max(0, (p.y - kit.y0) / H));
+    const out01 = Math.min(1, Math.max(0, p.distanceTo(kit.ctr) / (H * 0.5 + 0.5)));
+    const c = (0.42 + 0.58 * Math.pow(hgt, 0.8)) * (0.62 + 0.38 * out01) * (0.88 + R() * 0.24);
+    out.push({ x: p.x, y: p.y, z: p.z, nx, ny, nz, s: (0.95 + R() * 0.75) * (1 - kit.airy * 0.3), c });
+  }
+  return out;
 }
 
 /** the city's standard bench: three seat slats and two back slats on cast-iron ends (some lost a slat or two) */
@@ -367,12 +424,15 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
 
   // ---- trees: OSM's, in their pits where they stand in the sidewalk; then, since OSM maps only some of
   // the parks' trees, a sparse grove on the lawns wherever none is mapped
-  const kits = [0, 1, 2, 3, 4, 5].map((i) => treeKit(900 + i * 17, 8.5 + (i % 3) * 2.2));
+  const kits = (['linden', 'locust', 'plane', 'linden', 'locust', 'plane', 'linden', 'plane'] as Species[]).map((sp, i) => treeKit(900 + i * 17, (sp === 'plane' ? 10.5 : sp === 'locust' ? 9 : 8.5) + (i % 3) * 1.8, sp));
   const perKit: THREE.Matrix4[][] = kits.map(() => []);
-  const leaves: Card[][] = [[], []];
-  const perTip = quality === 'high' ? 20 : 9;
+  // leaves in three greens (two summers' neglect has yellowed a few)
+  const LEAF = ['#4b6a2e', '#5d7834', '#7a7c38'];
+  const leaves: Card[][] = LEAF.map(() => []);
+  // (Low has half the cards, each larger, so its crowns stay as full)
+  const perTree = quality === 'high' ? 300 : 150, cardScale = quality === 'high' ? 1 : 1.35;
   const dirt = pbrMat('dirt', '#5e5040'), edging = pbrMat('ashlar', '#a8a49c');
-  const v = new THREE.Vector3();
+  const v = new THREE.Vector3(), n = new THREE.Vector3();
   const trunks = new Map<number, [number, number][]>();
   const tkey = (x: number, z: number) => Math.floor(x / 12) * 100003 + Math.floor(z / 12);
   const nearTrunk = (x: number, z: number, r: number) => {
@@ -387,13 +447,14 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
     const key = tkey(x, z);
     if (!trunks.has(key)) trunks.set(key, []);
     trunks.get(key)!.push([x, z]);
-    if (R() > 0.16) {
-      const set = leaves[R() < 0.7 ? 0 : 1];
-      for (const tip of kit.tips) { v.copy(tip).applyMatrix4(m); set.push(...bushCards(v.x, v.y, v.z, 1.5 * s, 1.05 * s, 1.5 * s, perTip, R, 0.8 * s)); }
-      // and a mass through the middle of the crown so it reads as a canopy, not a few twigs
-      v.copy(kit.crown).applyMatrix4(m);
-      const cr = kit.spread * 0.75 * s;
-      set.push(...bushCards(v.x, v.y + 0.4 * s, v.z, cr, cr * 0.6, cr, perTip * 5, R, 0.85 * s));
+    // (one in twenty didn't make it)
+    if (R() > 0.05) {
+      const r = R(), set = leaves[r < 0.5 ? 0 : r < 0.85 ? 1 : 2];
+      for (const c of crownCards(kit, Math.round(perTree * kit.cards), R)) {
+        v.set(c.x, c.y, c.z).applyMatrix4(m);
+        n.set(c.nx, c.ny, c.nz).transformDirection(m);
+        set.push({ x: v.x, y: v.y, z: v.z, nx: n.x, ny: n.y, nz: n.z, s: c.s * s * cardScale, c: c.c });
+      }
     }
   };
   for (const p of d.h.furniture.tree) {
@@ -447,7 +508,7 @@ export function buildStreetscape(d: HarborData, parent: THREE.Object3D, collide:
   const regional: THREE.Object3D[] = [];
   kits.forEach((kit, i) => { for (const xf of byRegion(perKit[i], (m) => [m.elements[12], m.elements[14]])) { const im = instanced(group, kit.bark, getBarkMat(), xf); if (im) { im.name = 'bark'; regional.push(im); } } });
   leaves.forEach((set, i) => byRegion(set, (c) => [c.x, c.z]).forEach((cards, j) => {
-    const im = leafCards(group, cards, 'leaf', i ? '#7a7034' : '#56603a', 31 + i + j * 7);
+    const im = leafCards(group, cards, 'canopy', LEAF[i], 31 + i + j * 7);
     if (im) { im.frustumCulled = true; im.computeBoundingSphere(); im.name = 'leaves'; regional.push(im); }
   }));
   counts.trees = perKit.reduce((a, l) => a + l.length, 0);

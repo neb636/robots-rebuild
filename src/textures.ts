@@ -601,9 +601,10 @@ export const fogTex = () => once('fog', () => canvasTex(128, 128, (c) => {
   c.putImageData(img, 0, 0);
 }));
 
-/** Leaf cluster with alpha (ivy = 3-lobed, leaf = ovate). Neutral green; tint with material color. */
-export const leafTex = (kind: 'ivy' | 'leaf' | 'grass' | 'moss') => once('leaf_' + kind, () => canvasTex(256, 256, (c) => {
-  const r = rng(kind === 'ivy' ? 5 : kind === 'leaf' ? 6 : kind === 'moss' ? 8 : 7);
+/** Leaf cluster with alpha (ivy = 3-lobed, leaf = ovate, canopy = a dense clump of small leaves, lit
+ *  from above). Neutral green; tint with material color. */
+export const leafTex = (kind: 'ivy' | 'leaf' | 'grass' | 'moss' | 'canopy') => once('leaf_' + kind, () => canvasTex(256, 256, (c) => {
+  const r = rng(kind === 'ivy' ? 5 : kind === 'leaf' ? 6 : kind === 'moss' ? 8 : kind === 'canopy' ? 9 : 7);
   const leaf = (x: number, y: number, s: number, a: number, tone: number) => {
     c.save(); c.translate(x, y); c.rotate(a); c.scale(s, s);
     const g = Math.floor(120 + tone * 70), rr = Math.floor(g * 0.72), b = Math.floor(g * 0.42);
@@ -638,6 +639,26 @@ export const leafTex = (kind: 'ivy' | 'leaf' | 'grass' | 'moss') => once('leaf_'
         x = nx; y = ny;
       }
     }
+    return;
+  }
+  if (kind === 'canopy') {
+    // a ragged ball of leaves: the ones underneath and behind are drawn first and darker, the sunlit
+    // ones on top last and lighter, so one card already reads as a clump with depth
+    // a solid, ragged core first (so the card survives mipmapping under the alpha test), in shadow
+    for (let i = 0; i < 9; i++) {
+      const a = r() * Math.PI * 2, d = r() * 34;
+      c.fillStyle = `rgb(${50 + r() * 14 | 0},${70 + r() * 16 | 0},${30 + r() * 10 | 0})`;
+      c.beginPath(); c.arc(128 + Math.cos(a) * d, 132 + Math.sin(a) * d, 50 + r() * 24, 0, Math.PI * 2); c.fill();
+    }
+    const ls: [number, number, number, number, number][] = [];
+    for (let i = 0; i < 260; i++) {
+      const a = r() * Math.PI * 2, d = Math.pow(r(), 0.8) * 98;
+      const x = 128 + Math.cos(a) * d, y = 128 + Math.sin(a) * d * 0.92;
+      const lift = 1 - (y - 24) / 208, edge = d / 98;
+      ls.push([x, y, 0.3 + r() * 0.2, a + Math.PI / 2 + (r() - 0.5) * 1.4, Math.min(1, 0.12 + lift * 0.55 + edge * 0.25 + r() * 0.3)]);
+    }
+    ls.sort((p, q) => p[4] - q[4]);
+    for (const [x, y, sc, ang, tone] of ls) leaf(x, y, sc, ang, tone);
     return;
   }
   if (kind === 'grass') {

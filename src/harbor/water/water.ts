@@ -22,8 +22,12 @@ export const waterUniforms = {
   uShoreBox: { value: new THREE.Vector4() },
   uNormA: { value: null as THREE.Texture | null },
   uNormB: { value: null as THREE.Texture | null },
-  uDeep: { value: new THREE.Color('#06100f') },
-  uScatter: { value: new THREE.Color('#0f2a26') },
+  uNormC: { value: null as THREE.Texture | null },
+  // the harbour's own colour under the reflections: a dark blue-green, lifting to bottle green where
+  // the swell thins toward its crests, and silt-brown green against the walls
+  uDeep: { value: new THREE.Color('#0a1f26') },
+  uScatter: { value: new THREE.Color('#1c4a44') },
+  uShallow: { value: new THREE.Color('#2c3a2a') },
   uFoamCol: { value: new THREE.Color('#b8bcb4') },
   uPlanar: { value: 0 },
   uRefl: { value: null as THREE.Texture | null },
@@ -71,6 +75,8 @@ export function waterMaterial(shore: ShoreField, quality: 'high' | 'low') {
   u.uShore.value = shore.tex; u.uShoreBox.value.copy(shore.box);
   u.uNormA.value ??= chopNormals(256, 11, 0.9);
   u.uNormB.value ??= chopNormals(256, 23, 0.7);
+  // the cat's-paws and wavelets: short, steep, on top of the chop
+  u.uNormC.value ??= chopNormals(256, 37, 1.25);
   u.noiseTex2.value = latticeNoise2D();
   const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.06, metalness: 0, envMapIntensity: 1 });
   mat.onBeforeCompile = (sh) => {
@@ -90,8 +96,8 @@ export function waterMaterial(shore: ShoreField, quality: 'high' | 'low') {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', /* glsl */`#include <common>
         uniform float uTime, uAmp, uChop, uRain, uPlanar; uniform sampler2D uShore; uniform vec4 uShoreBox;
-        uniform sampler2D uNormA, uNormB, uRefl, uReflDepth; uniform mat4 uReflMat, uReflInv;
-        uniform vec3 uDeep, uScatter, uFoamCol;
+        uniform sampler2D uNormA, uNormB, uNormC, uRefl, uReflDepth; uniform mat4 uReflMat, uReflInv;
+        uniform vec3 uDeep, uScatter, uShallow, uFoamCol;
         uniform vec3 fogColor; uniform float density, falloff, fogBase, skyDist;
         varying vec3 vWater; varying float vSwell;
         ${SWELL_GLSL}
@@ -123,20 +129,35 @@ export function waterMaterial(shore: ShoreField, quality: 'high' | 'low') {
         float n = vnoise(vWater.xz * 0.9 + uTime * 0.05) * 0.6 + vnoise(vWater.xz * 3.1 - uTime * 0.11) * 0.4;
         float lap = 0.55 + 0.45 * sin(uTime * 1.1 - sd * 1.6 + n * 3.0);
         float foam = (1.0 - smoothstep(0.15, 1.6 + n * 1.4, sd)) * smoothstep(0.35, 0.65, n + lap * 0.35);
+        // and out on the open water, faint drifting lines of scum and spent foam, laid along the wind
+        vec2 wq = mat2(0.94, -0.34, 0.34, 0.94) * vWater.xz;
+        float lane = vnoise(wq * vec2(0.035, 0.42) + vec2(uTime * 0.01, uTime * 0.03)) * 0.7 + vnoise(wq * 0.6 + uTime * 0.04) * 0.3;
+        foam = max(foam, smoothstep(0.66, 0.8, lane) * 0.28 * smoothstep(4.0, 14.0, sd) * uChop);
         foam *= 1.0 - underDeck;
-        vec3 body = uDeep + uScatter * clamp(vSwell * 6.0 + 0.2, 0.0, 1.0) * (1.0 - underDeck);
-        diffuseColor.rgb = mix(body * (1.0 - underDeck * 0.7), uFoamCol, foam * 0.85);`)
+        float crest = clamp(vSwell * 5.0 + 0.45, 0.0, 1.0);
+        vec3 body = mix(uDeep, uScatter, crest * crest * 0.85);
+        body = mix(uShallow, body, smoothstep(0.5, 7.0, sd));
+        diffuseColor.rgb = mix(body * (1.0 - underDeck * 0.75), uFoamCol, foam * 0.85);`)
       .replace('#include <roughnessmap_fragment>', /* glsl */`#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.6, foam);`)
+        // far off, a pixel covers many wave facets: rougher there, so the sun lays a broad glitter path
+        // instead of aliasing into sparks
+        roughnessFactor = mix(mix(0.045, 0.16, smoothstep(25.0, 320.0, length(vWater - cameraPosition))), 0.6, foam);`)
       .replace('#include <normal_fragment_maps>', /* glsl */`
         // world-space normal: the swell's slope, plus scrolling chop, plus rain rings
         float dampF = smoothstep(0.6, 11.0, sd);
         vec2 g = swellGrad(vWater.xz, uTime) * uAmp * dampF;
         vec2 ca = texture(uNormA, vWater.xz * 0.045 + vec2(uTime * 0.012, uTime * 0.005)).rg * 2.0 - 1.0;
         vec2 cb = texture(uNormB, vWater.xz * 0.11 + vec2(-uTime * 0.008, uTime * 0.017)).rg * 2.0 - 1.0;
+        // two finer layers, turned off the grid of the coarse ones so no tiling lines up
+        vec2 pc = mat2(0.8, -0.6, 0.6, 0.8) * vWater.xz, pd = mat2(0.28, 0.96, -0.96, 0.28) * vWater.xz;
+        vec2 cc = texture(uNormC, pc * 0.31 + vec2(uTime * 0.035, -uTime * 0.021)).rg * 2.0 - 1.0;
+        vec2 cd = texture(uNormC, pd * 0.83 + vec2(-uTime * 0.05, uTime * 0.043)).rg * 2.0 - 1.0;
         float camD = length(vWater - cameraPosition);
         float chopFade = mix(1.0, 0.35, smoothstep(30.0, 260.0, camD));
-        vec2 slope = g + (ca * 0.55 + cb * 0.35) * uChop * chopFade * (0.35 + 0.65 * dampF);
+        // the fine ripples move with the wind, so they breathe: gusts darken patches of water as they pass
+        float gust = 0.7 + 0.3 * vnoise(vWater.xz * 0.025 + vec2(uTime * 0.06, uTime * 0.018));
+        vec2 fine = (cc * 0.26 + cd * 0.15 * (1.0 - smoothstep(25.0, 90.0, camD))) * gust * (1.0 - smoothstep(60.0, 420.0, camD) * 0.6);
+        vec2 slope = g + (ca * 0.28 + cb * 0.26 + fine) * uChop * chopFade * (0.35 + 0.65 * dampF);
         slope += rainRings(vWater.xz, uTime) * 0.35 * uRain * (1.0 - smoothstep(10.0, 40.0, camD));
         vec3 nW = normalize(vec3(-slope.x, 1.0, -slope.y));
         normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);`)
@@ -145,10 +166,10 @@ export function waterMaterial(shore: ShoreField, quality: 'high' | 'low') {
         if (uPlanar > 0.0) {
           // the scene mirrored in the water, nudged by the waves, fogged along its way up
           vec4 rc = uReflMat * vec4(vWater, 1.0);
-          vec2 ruv = rc.xy / rc.w + nW.xz * 0.06;
+          vec2 ruv = rc.xy / rc.w + nW.xz * mix(0.05, 0.025, smoothstep(10.0, 150.0, camD));
           // smear the reflection up and down the screen a little: many wave facets each catch a light,
           // so lamps on the far shore become long streaks rather than dots
-          float smear = 0.004 + 0.012 * uChop * smoothstep(8.0, 120.0, camD);
+          float smear = 0.002 + 0.007 * uChop * smoothstep(8.0, 120.0, camD);
           vec3 rcol = texture(uRefl, ruv).rgb * 0.28;
           rcol += (texture(uRefl, ruv + vec2(0.0, smear)).rgb + texture(uRefl, ruv - vec2(0.0, smear)).rgb) * 0.2;
           rcol += (texture(uRefl, ruv + vec2(0.0, smear * 2.3)).rgb + texture(uRefl, ruv - vec2(0.0, smear * 2.3)).rgb) * 0.11;

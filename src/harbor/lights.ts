@@ -18,21 +18,61 @@ const WARM = new THREE.Color('#ffb066');
 export interface LightSource { x: number; y: number; z: number; flicker: number; head?: number; color?: THREE.Color; power?: number; halo?: number }
 interface Lamp extends LightSource { lit: boolean }
 
-export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGrid, heightAt: (x: number, z: number) => number, quality: 'high' | 'low') {
+// ground classes (header.ground): the carriageway (road, crosswalk, parking lane), and what a lamp can stand on
+const ROADWAY = new Set([0, 1, 2]);
+const FOOTWAY = new Set([4, 5, 6, 7, 8, 9]);
+
+/**
+ * Where a lamp from the city's inventory really stands. Some of its points land out in the carriageway
+ * (a cobra head's pole logged where its arm reaches, or a pole snapped to the street's centreline):
+ * those go to the nearest sidewalk, set back from the curb as Boston's posts are, or nowhere if there's
+ * no sidewalk within reach. Null when the lamp is dropped.
+ */
+function curbside(x: number, z: number, classAt: (x: number, z: number) => number, blocked: (x: number, z: number) => boolean): [number, number] | null {
+  if (!ROADWAY.has(classAt(x, z))) return [x, z];
+  const SET_BACK = 0.65;
+  for (let r = 0.5; r <= 12; r += 0.5) {
+    let best: [number, number] | null = null, bestD = Infinity;
+    for (let k = 0; k < 32; k++) {
+      const a = (k / 32) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      if (!FOOTWAY.has(classAt(x + c * r, z + s * r))) continue;
+      const px = x + c * (r + SET_BACK), pz = z + s * (r + SET_BACK);
+      if (!FOOTWAY.has(classAt(px, pz)) || blocked(px, pz)) continue;
+      const dd = (px - x) ** 2 + (pz - z) ** 2;
+      if (dd < bestD) { bestD = dd; best = [px, pz]; }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGrid, heightAt: (x: number, z: number) => number, classAt: (x: number, z: number) => number, quality: 'high' | 'low') {
   const R = rng(4421);
   const iron = new THREE.MeshStandardMaterial({ color: '#16181b', roughness: 0.5, metalness: 0.7 });
   const glassOn = new THREE.MeshStandardMaterial({ color: '#000000', emissive: WARM, emissiveIntensity: 3.2, roughness: 0.3 });
   const glassOff = new THREE.MeshStandardMaterial({ color: '#1c1e20', roughness: 0.15, metalness: 0.2 });
   const lamps: Lamp[] = [];
+  // where each stands: the ones already on the sidewalk first, so a lamp moved off the road can't land
+  // on one of them (or on another moved one)
+  const spots: { x: number; z: number; moved: boolean }[] = [];
+  let dropped = 0;
   for (const p of d.h.furniture.lamp) {
-    const g = heightAt(p.x, p.z);
-    if (Number.isNaN(g)) continue; // inside a building or past the cordon
+    if (Number.isNaN(heightAt(p.x, p.z))) continue; // inside a building or past the cordon
+    const to = curbside(p.x, p.z, classAt, (x, z) => collide.blocked(x, z, 0.3));
+    if (to) spots.push({ x: to[0], z: to[1], moved: to[0] !== p.x || to[1] !== p.z }); else dropped++;
+  }
+  spots.sort((a, b) => Number(a.moved) - Number(b.moved));
+  for (const sp of spots) {
+    if (sp.moved && lamps.some((l) => (l.x - sp.x) ** 2 + (l.z - sp.z) ** 2 < 4.5 ** 2)) { dropped++; continue; }
+    const g = heightAt(sp.x, sp.z);
+    if (Number.isNaN(g)) { dropped++; continue; }
     const lit = R() < 0.42;
-    const lamp = { x: p.x, y: g, z: p.z, lit, flicker: lit && R() < 0.18 ? 0.6 + R() * 0.3 : R() * 0.08 };
+    const lamp = { x: sp.x, y: g, z: sp.z, lit, flicker: lit && R() < 0.18 ? 0.6 + R() * 0.3 : R() * 0.08 };
     lamps.push(lamp);
     post(cb, iron, lit ? glassOn : glassOff, lamp, R);
-    collide.addCircle(p.x, p.z, 0.16, g + HEAD_Y);
+    collide.addCircle(sp.x, sp.z, 0.16, g + HEAD_Y);
   }
+  console.info('harbor lamps', JSON.stringify({ lamps: lamps.length, offRoad: spots.filter((s) => s.moved).length, dropped }));
   // the pool
   const nPoint = quality === 'high' ? 10 : 4, nHalo = 14;
   const lit: LightSource[] = lamps.filter((l) => l.lit);

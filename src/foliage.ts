@@ -124,7 +124,7 @@ export function grass(parent: THREE.Object3D, pts: { x: number; z: number; y?: n
 
 // -------------------------------------------------------------------------------- leaf cards
 const leafMats = new Map<string, THREE.MeshStandardMaterial>();
-function leafMat(kind: 'ivy' | 'leaf', color: string) {
+function leafMat(kind: 'ivy' | 'leaf' | 'canopy', color: string) {
   const key = kind + color;
   let m = leafMats.get(key);
   if (!m) {
@@ -154,10 +154,12 @@ function leafMat(kind: 'ivy' | 'leaf', color: string) {
   return m;
 }
 
-export interface Card { x: number; y: number; z: number; nx: number; ny: number; nz: number; s: number; }
+/** a leaf card: where, which way it faces (and shades), its size, and optionally how much of the light
+ *  it gets (c: 1 lit, toward 0 deep in a crown) */
+export interface Card { x: number; y: number; z: number; nx: number; ny: number; nz: number; s: number; c?: number }
 
 /** Instanced leaf cards with explicit normals. */
-export function leafCards(parent: THREE.Object3D, cards: Card[], kind: 'ivy' | 'leaf', color: string, seed = 3, castShadow = true) {
+export function leafCards(parent: THREE.Object3D, cards: Card[], kind: 'ivy' | 'leaf' | 'canopy', color: string, seed = 3, castShadow = true) {
   if (!cards.length) return null;
   const R = rng(seed);
   const g = new THREE.PlaneGeometry(1, 1);
@@ -176,7 +178,8 @@ export function leafCards(parent: THREE.Object3D, cards: Card[], kind: 'ivy' | '
     nrm[i * 3] = n.x; nrm[i * 3 + 1] = n.y; nrm[i * 3 + 2] = n.z;
     const k = R();
     tint.setRGB(0.7 + k * 0.5, 0.75 + k * 0.4, 0.7 + k * 0.3);
-    if (R() < 0.12) tint.setRGB(1.3, 0.9, 0.5); // a few dead/brown leaves
+    if (R() < (kind === 'canopy' ? 0.04 : 0.12)) tint.setRGB(1.3, 0.9, 0.5); // a few dead/brown leaves
+    if (c.c !== undefined) tint.multiplyScalar(c.c);
     im.setColorAt(i, tint);
   });
   // per-instance attribute; the geometry is per-mesh so attaching here is safe
