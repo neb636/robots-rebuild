@@ -24,6 +24,7 @@
   "marriott": 1,
   "customHouseBlock": 6,
   "chartHouse": 1,
+  "longWharfPavilion": 1,
   "aquarium": 11,
   "customHouse": 5,
   "harborTowers": 4,
@@ -42,13 +43,13 @@
   "aquariumStation": 1
  },
  "ground": {
-  "landArea": 476307,
+  "landArea": 476614,
   "classes": {
    "road": 163253,
    "crosswalk": 11451,
    "parking": 29968,
    "lot": 80255,
-   "sidewalkBrick": 51557,
+   "sidewalkBrick": 51864,
    "sidewalkConcrete": 47737,
    "pavers": 14294,
    "setts": 468,
@@ -58,8 +59,8 @@
    "deckConcrete": 0
   }
  },
- "groundTriangles": 93472,
- "curbs": 17156,
+ "groundTriangles": 93414,
+ "curbs": 17175,
  "seawallRuns": 1,
  "decks": 24,
  "piles": 851,
@@ -81,13 +82,20 @@
   "signal": 82,
   "fountain": 7,
   "lampOsm": 60,
+  "planter": 13,
+  "flagpole": 3,
+  "compass": 1,
+  "viewpoint": 3,
+  "ferry": 6,
+  "ticket": 3,
+  "seating": 10,
   "lamp": 2273
  },
  "streets": 338,
  "shops": 188,
  "bytes": {
-  "json": 221637,
-  "bin": 4584796,
-  "binGz": 2006372
+  "json": 224513,
+  "bin": 4583784,
+  "binGz": 2005561
  }
 }
