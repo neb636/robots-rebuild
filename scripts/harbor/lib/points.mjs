@@ -100,3 +100,44 @@ export function shops({ osm, inZone }) {
   for (const p of osm.polys) { const [x, z] = centroid(p.outer); take(p.id, p.tags, x, z); }
   return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
+
+// the open spaces, for dressing the parks (the Greenway's parcels, their lawns, beds and seating)
+const PARK_KIND = (t) => t.leisure === 'park' ? 'park' : t.leisure === 'garden' ? 'garden' : t.leisure === 'playground' ? 'playground'
+  : t.landuse === 'grass' || t.natural === 'grass' ? 'grass' : t.landuse === 'flowerbed' ? 'flowerbed' : t.leisure === 'outdoor_seating' ? 'seating' : null;
+
+/**
+ * Parks, gardens, lawns, flowerbeds, playgrounds and outdoor seating areas whose middle is in the zone.
+ * Returns [{ id, kind, name?, outer: [[x, z], ...] }] in id order (rings simplified to 0.3 m).
+ */
+export function parks({ osm, inZone, simplify }) {
+  const out = [];
+  for (const p of osm.polys) {
+    const kind = PARK_KIND(p.tags);
+    if (!kind || p.tags.building) continue;
+    const [x, z] = centroid(p.outer);
+    if (!inZone(x, z)) continue;
+    out.push({ id: p.id, kind, ...(p.tags.name ? { name: p.tags.name } : {}), outer: simplify(p.outer).map(([x, z]) => [r2(x), r2(z)]) });
+  }
+  return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+const ART_KIND = (t) => t.tourism === 'artwork' ? 'artwork' : t.amenity === 'fountain' ? 'fountain'
+  : t.tourism === 'information' && (t.information === 'board' || t.information === 'map') ? 'board'
+  : t.historic === 'memorial' || t.historic === 'monument' ? 'memorial' : null;
+const ART_TAGS = ['name', 'artwork_type', 'artist_name', 'board_type', 'memorial', 'material', 'fountain'];
+
+/**
+ * Public art, fountains, information boards and memorials (named or not; points, and areas at their
+ * middle). Returns [{ id, kind, x, z, ...tags }] in id order.
+ */
+export function art({ osm, inZone }) {
+  const out = [];
+  const take = (id, t, x, z) => {
+    const kind = ART_KIND(t);
+    if (!kind || !inZone(x, z)) return;
+    out.push({ id, kind, x: r2(x), z: r2(z), ...Object.fromEntries(ART_TAGS.filter((k) => t[k]).map((k) => [k, t[k]])) });
+  };
+  for (const p of osm.points) take(p.id, p.tags, p.x, p.z);
+  for (const p of osm.polys) { const [x, z] = centroid(p.outer); take(p.id, p.tags, x, z); }
+  return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}

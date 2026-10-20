@@ -425,6 +425,22 @@
   {
    "type": "Feature",
    "properties": {
+    "kind": "spot",
+    "name": "greenway",
+    "heading": 160,
+    "note": "Wharf District Parks on the Greenway, between the carousel and the Harbor Islands Pavilion, looking south down the park"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0525655,
+     42.3604341
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
     "kind": "hole",
     "name": "state-stairs",
     "note": "the State station stairwell: no ground here; src/harbor/station.ts builds the stairs into it"

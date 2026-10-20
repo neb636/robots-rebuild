@@ -43,7 +43,7 @@ export class SignAtlas {
   readonly blank: UV;
   readonly iron: UV;
   full = false;
-  /** `label` names it in the warning when it fills up */
+  /** `label` is an atlas name, or a complete warning supplied by an area-specific sheet. */
   constructor(readonly W: number, readonly H: number, scale: number, readonly label = 'harbor signs') {
     const cv = document.createElement('canvas');
     cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
@@ -66,7 +66,7 @@ export class SignAtlas {
     // out of room for a new one: any taller shelf with space left
     if (!shelf && this.next + ph > this.H) shelf = this.shelves.filter((s) => s.h >= ph && s.x + pw <= this.W).sort((a, b) => a.h - b.h)[0];
     if (!shelf) {
-      if (this.next + ph > this.H) { if (!this.full) console.warn(`${this.label}: atlas full`); this.full = true; return this.blank; }
+      if (this.next + ph > this.H) { if (!this.full) console.warn(/: (atlas|sheet) full$/.test(this.label) ? this.label : `${this.label}: atlas full`); this.full = true; return this.blank; }
       shelf = { y: this.next, h: ph, x: 0 };
       this.shelves.push(shelf); this.next += ph;
     }

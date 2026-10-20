@@ -12,6 +12,10 @@ export interface Furniture { x: number; z: number; id: string; name?: string; /*
 export interface Street { name: string; kind: string; pts: [number, number][] }
 /** a neighbourhood shop, café, bar or restaurant (no chains), for its storefront sign */
 export interface Shop { x: number; z: number; id: string; name: string; kind: 'shop' | 'bakery' | 'cafe' | 'bar' | 'restaurant' }
+/** an open space from OpenStreetMap (a park parcel, a lawn, a bed, a playground, a seating area), its outline in local metres */
+export interface Park { id: string; kind: 'park' | 'garden' | 'grass' | 'flowerbed' | 'playground' | 'seating'; name?: string; outer: [number, number][] }
+/** public art, a fountain, an information board or a memorial (named or not), with the OSM tags that say what it is */
+export interface Art { id: string; kind: 'artwork' | 'fountain' | 'board' | 'memorial'; x: number; z: number; name?: string; artwork_type?: string; artist_name?: string; board_type?: string; memorial?: string; material?: string; fountain?: string }
 
 export interface Header {
   version: number;
@@ -36,6 +40,8 @@ export interface Header {
   furniture: Record<string, Furniture[]>;
   streets?: Street[];
   shops?: Shop[];
+  parks?: Park[];
+  art?: Art[];
   blobs: Record<string, { type: string; offset: number; length: number }>;
 }
 

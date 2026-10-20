@@ -83,12 +83,29 @@ guide. Nothing here is invented except the decay.
 | The edge | `wharf.ts`, found from the baked seawall lines: granite coping, granite bollards with chains (some broken into the water, a gap every ~18 m), cleats and bitts at the berths, mooring lines (two still tied to floats), life rings (some missing, one on the pavers). The Chart House's and The Landing's patios at OSM's outdoor seating. Mirrored by the water (REFLECT_LAYER). |
 | Cost | Draws against main at the same cinematic views on High: main pass +8 at the end of the wharf (spot), +11 on the plaza, +8 at the pavilion, +1 at the north ferry, +13 at the wharf head, +4 at the Chart House; all passes +4 to +24. The pavilion is 7 draws (brick, granite, vertex colour, metal, compass, flag, halyards). No new lights; the lit letters and the LED board glow by emissive map / `glow`. Walkable area 305,853 m2 (-14), 0 leaks, all spots, 23 ladders as before. |
 
+## Done since: the Rose Kennedy Greenway in detail
+
+The Greenway read as generic lawn, paths, trees and lamps, and the Harbor Islands Pavilion was a
+generic brick box with garage doors. The bake now keeps OSM's open spaces (`header.parks`: parks,
+gardens, lawns, flowerbeds, playgrounds, seating areas with their outlines) and public art
+(`header.art`: artworks, fountains, boards, memorials, named or not). `greenwayzone.ts` turns the
+two Greenway parcels in the play area (OSM w188301033 and w94482763, both just "Rose Kennedy
+Greenway"; the Conservancy calls them Wharf District Parks and North End Parks) into a spine with
+widths, and lists their beds and lawns.
+
+| Piece | What |
+|---|---|
+| Signs | `greenwaysigns.ts`, on its own sheet (2048 x 4096, half on Low; 3160 px used, warns "greenway signs: sheet full"): the Conservancy's three-sided kite signs (7 identification, 3 district kiosks with peeling posters and handbills; wordmark, parcel map with you-are-here), 12 entrance markers (granite or steel, two toppled, three tagged), 7 wayfinding posts with finger blades at the real bearings and walking minutes, the 2026 multilingual "Welcome" banners (green magnolias, blue carousel fox, purple fitness, orange lion dance) on 133 lamps away from the Marketplace's, the Callahan / Fitzgerald / Central Artery workers plaques at their OSM points, the Hanover St leaning rails (real timeline dates; the residents' quotes left weathered, not invented), and 432 Mothers' Walk pavers. `signs.ts` only gained `export`s and an optional atlas label. |
+| Furniture | `greenway.ts`: abandoned trucks and trailers at the four Greenway Mobile Eats spots (carousel/pavilion, Rings Fountain, Rowes Wharf end by High St, North End Parks by Hanover St; generic food words, no real vendors), loose green and white café sets, lounges and A-frame swings, every OSM bed in a broken granite curb gone to goldenrod, asters, dock and yarrow, rough grass round the lawns, and six Light Blades (Color Commons, at OSM's point) that glow in a stuck colour or two at night (a uniform; no lights). Planting is baked per 256 m tile with its wind sway kept. |
+| Landmarks | `landmarks/greenway.ts`: the Harbor Islands Pavilion (`overhead`, so the ground under it is walkable): two curved concrete canopies on slim columns, the granite islands map, eight ferry-island panels, two shuttered slate kiosks with dead screens, solar panels; the North End Parks pergola (vines over 17 bays, one bay collapsed, benches); the brick Turnpike tollbooth on North St with the Pilgrim-hat and Paul Revere logos. |
+| Map and spot | Labels for Wharf District Parks and North End Parks; spot `greenway` (between the carousel and the pavilion, looking south). |
+| Cost | Draws over the PR #44 baseline at four Greenway views (carousel, mid, North End Parks, south end): High +17, +2, +11, +13; Low +6, +3, +17, +10. Triangles +0.07-0.17 M High, +0.04-0.07 M Low. Lights 33 before and after. Walkable area 305,856 m2, 0 leaks, all 13 spots. |
+
 ## Follow-ups (not done)
 
 - Long Wharf: the pavilion's heights are a guess (OSM implies a ~7 m ridge, the LiDAR 4.85 m; built at
   6 m), as are its stepped edge's position and the flag. Tia's (on the Marriott's north annex) isn't in
-  OSM, so it has no sign or patio. The Boston Harbor Islands Welcome Center on the Greenway is left to
-  the Greenway pass.
+  OSM, so it has no sign or patio.
 
 - Signs: street-number plaques, MBTA bus stops (OSM has them, not baked), wall-mounted corner signs
   in the narrow North End lanes where there's no room for a post. Shop names come from OSM as of the
@@ -113,12 +130,19 @@ guide. Nothing here is invented except the decay.
   bake. The State St headhouse of Aquarium station (183 State St, west of Atlantic Ave) is still
   generic. The Simons mural is an original stand-in, not Shepard Fairey's 2021 one.
 - Hipped roofs are built as gables.
+- Greenway: OSM maps no fountains or water features in the North End Parks (the real parks have
+  them), nor the Greenway's food-truck spots; the trucks stand where the Conservancy's vendor list
+  put them. Untitled Landscape (David von Schlegell, the four artwork outlines by Harbor Towers) and
+  the unnamed sculpture by Quincy's east plaza aren't modelled. The Harbor Islands Pavilion's canopy
+  shapes and heights are fitted to its OSM outline and a 7 m height, not surveyed.
+- A shader program still compiles after warm-up once a session moves far enough: the Current guide's
+  spark sprite (`guide.ts`), created at runtime, not the Greenway.
 
 ## How to test (recreate these; the session scratchpad gets wiped)
 
 - Dev server: `npx vite --port 5173`. URL params: `?menu=0&card=0&ui=0&start=harbor&q=high|low&mood=curfew|ashfall|pall&at=<spot>&fps=8&debug=stats`.
   Spots: state, faneuil, quincy, longwharf, aquarium, columbus, customhouse, harbortowers, rowes,
-  northsquare, blackstone, hongkong, ferry, whalewatch, aquariumstation.
+  northsquare, blackstone, hongkong, ferry, whalewatch, aquariumstation, greenway.
 - `window.app` is the game (`pos`, `heading`, `yaw`, `pitch`, `dist`, `player.group`,
   `resetCamera()`, `placeCamera(1, true)`, `built`). It is a DOM element until boot finishes: wait for
   `.loader` to detach and `window.app.built` to exist.
@@ -173,5 +197,9 @@ await page.evaluate((v) => { const a = window.app, b = a.built;
 - Headless Chrome fps numbers are not representative; use draw/triangle counts.
 - Editing any file in the page's module graph (or re-baking `harbor.json`) while a capture is running
   reloads the page under it: finish captures before editing `src/`.
+- A `node_modules` symlinked from another checkout makes Vite refuse the title font (403 from
+  `@fs/...`): harmless for captures with `ui=0`.
+- `built.__greenway` has the Greenway's zone and the signs' and furniture's debug positions (for
+  framing shots).
 - Typecheck can fail on another agent's half-written file; filter with
   `npx tsc --noEmit | grep -v <their file>` while they work.

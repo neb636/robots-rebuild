@@ -142,8 +142,17 @@ signs, departure boards and queue rails, the ticket booths, HarborWalk history p
 bollards and chains along the edge, life rings and mooring lines, the restaurants' patios, and the
 open pavilion at the end with the compass rose, the mast and the lookout.
 
+The Rose Kennedy Greenway (`?at=greenway`) has its own pass: the Conservancy's kite-shaped park signs,
+kiosks, entrance markers and wayfinding posts, its multilingual "Welcome" lamp banners, the Mothers'
+Walk pavers and the North End Parks' Hanover St rails (`src/harbor/greenwaysigns.ts`, on their own
+sign sheet); the food trucks left at the Mobile Eats spots, café chairs, lounges and swings, beds gone
+wild and the Light Blades (`src/harbor/greenway.ts`); and the Harbor Islands Pavilion, the North End
+Parks pergola and the old Turnpike tollbooth on North St (`src/harbor/landmarks/greenway.ts`). Where
+the parcels, beds and art are comes from OpenStreetMap (`header.parks`, `header.art`,
+`src/harbor/greenwayzone.ts`).
+
 - `?at=<spot>` starts at a named place: state, faneuil, quincy, longwharf, aquarium, columbus,
-  customhouse, harbortowers, rowes, northsquare, blackstone, hongkong, ferry, aquariumstation, whalewatch.
+  customhouse, harbortowers, rowes, northsquare, blackstone, hongkong, ferry, aquariumstation, whalewatch, greenway.
 - `?debug=stats` shows what a frame costs (draws and triangles summed over every pass) and warns if
   a shader compiles after warm-up; `?debug=map` adds a top-down map of the walk mesh, colliders,
   the cordon, the tiles drawn, the lit lamps, the drones and the hero.
