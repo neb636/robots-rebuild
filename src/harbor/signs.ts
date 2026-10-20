@@ -43,7 +43,8 @@ export class SignAtlas {
   readonly blank: UV;
   readonly iron: UV;
   full = false;
-  constructor(readonly W: number, readonly H: number, scale: number) {
+  /** `label` names it in the warning when it fills up */
+  constructor(readonly W: number, readonly H: number, scale: number, readonly label = 'harbor signs') {
     const cv = document.createElement('canvas');
     cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
     this.c = cv.getContext('2d')!;
@@ -65,7 +66,7 @@ export class SignAtlas {
     // out of room for a new one: any taller shelf with space left
     if (!shelf && this.next + ph > this.H) shelf = this.shelves.filter((s) => s.h >= ph && s.x + pw <= this.W).sort((a, b) => a.h - b.h)[0];
     if (!shelf) {
-      if (this.next + ph > this.H) { if (!this.full) console.warn('harbor signs: atlas full'); this.full = true; return this.blank; }
+      if (this.next + ph > this.H) { if (!this.full) console.warn(`${this.label}: atlas full`); this.full = true; return this.blank; }
       shelf = { y: this.next, h: ph, x: 0 };
       this.shelves.push(shelf); this.next += ph;
     }
@@ -75,6 +76,7 @@ export class SignAtlas {
     // half a pixel in from the edges, so filtering never reaches the neighbours (the canvas is flipped in v)
     const uv: UV = [(x + 0.5) / this.W, 1 - (y + h - 0.5) / this.H, (x + w - 0.5) / this.W, 1 - (y + 0.5) / this.H];
     this.cells.set(key, uv);
+    this.tex.needsUpdate = true;
     return uv;
   }
 }
@@ -932,4 +934,4 @@ export interface SignKit {
   board(acc: MeshAcc, x: number, y: number, z: number, nx: number, nz: number, w: number, h: number, t: number, uv: UV): void;
   post(acc: MeshAcc, x: number, z: number, y0: number, y1: number, r: number): void;
 }
-export { fitText, weather, roundRect };
+export { fitText, weather, roundRect, measure, quad, board, post, bar, signMaterial };

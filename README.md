@@ -140,7 +140,7 @@ North End's cordon. The trail is on the map too. Every sign face is drawn once o
 so they cost a couple of draws per 128 m tile.
 
 - `?at=<spot>` starts at a named place: state, faneuil, quincy, longwharf, aquarium, columbus,
-  customhouse, harbortowers, rowes, northsquare, blackstone, hongkong.
+  customhouse, harbortowers, rowes, northsquare, blackstone, hongkong, aquariumstation, whalewatch.
 - `?debug=stats` shows what a frame costs (draws and triangles summed over every pass) and warns if
   a shader compiles after warm-up; `?debug=map` adds a top-down map of the walk mesh, colliders,
   the cordon, the tiles drawn, the lit lamps, the drones and the hero.
