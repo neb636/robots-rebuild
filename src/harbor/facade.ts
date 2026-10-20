@@ -114,7 +114,7 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
         vec3 td = vec3(dot(vd, T), vd.y, -dot(vd, N));
         float glass = 0.0;
         float topLimit = H - (kind == 0 ? 1.1 : 0.6);
-        if (!party && v > 0.25 && v < topLimit) {
+        if (!party && v > 0.25 - fw.y && v < topLimit) {
           float gH = A.y, fH = A.x;
           bool gfl = v < gH;
           float fy = gfl ? v : mod(v - gH, fH);
@@ -127,30 +127,41 @@ export function facadeMaterial(styles: string[], quality: 'high' | 'low', far = 
             if (bi >= 0.0 && bi < nb) {
               bool door = mod(bi + floor(r1 * 3.0), 3.0) < 1.0 && abs(cx) < 0.6;
               float top = gH - 1.0, bot = door ? 0.0 : 0.55;
-              if (fy > gH - 0.95 && fy < gH - 0.3 && abs(cx) < sp * 0.5 - 0.1) {
-                // sign band: dark paint, ghost lettering
-                col = mix(vec3(0.07, 0.08, 0.08), vec3(0.22, 0.12, 0.08), r2);
-                float letters = step(0.55, vnoise(vec2(u * 5.0 + seed, 3.0))) * step(0.3, fract(fy * 2.2)) * step(fract(fy * 2.2), 0.8);
-                col = mix(col, vec3(0.55, 0.5, 0.42), letters * 0.5 * step(gH - 0.85, fy) * step(fy, gH - 0.42));
-                rough = 0.7;
-              } else if (abs(cx) < sp * 0.5 - 0.12 && fy > bot && fy < top) {
+              // in from the bay's side; the frame, the opening inside it and the sign band above
+              float ax = sp * 0.5 - abs(cx), foot = cover(v - 0.25, fw.y);
+              float trim = cover(ax - 0.02, fw.x) * cover(top + 0.08 - fy, fw.y) * foot;
+              float open = cover(ax - 0.12, fw.x) * cover(min(fy - bot, top - fy), fw.y) * foot;
+              float band = cover(ax - 0.1, fw.x) * cover(min(fy - (gH - 0.95), gH - 0.3 - fy), fw.y);
+              col = mix(col, trimCol, trim); rough = mix(rough, 0.55, trim);
+              if (open > 0.0) {
+                vec3 oc, oe = vec3(0.0); float orr, om = 0.0, og = 0.0; vec2 ob;
                 if (hs < 0.38) {
-                  // rolling steel shutter, rusting
-                  float corr = 0.5 + 0.5 * sin(fy * 50.0);
-                  col = mix(vec3(0.32, 0.33, 0.33), vec3(0.36, 0.2, 0.1), smoothstep(0.4, 0.8, vnoise(vec2(u * 2.0, fy * 3.0) + seed)));
-                  col *= 0.75 + corr * 0.3; bump = vec2(0.0, (corr - 0.5) * 0.8); rough = 0.6; metal = 0.3;
+                  // rolling steel shutter, rusting; its ribs fade out before they're too fine to draw
+                  float corr = 0.5 + 0.5 * sin(fy * 50.0) * clamp(1.0 - fw.y * 16.0, 0.0, 1.0);
+                  oc = mix(vec3(0.32, 0.33, 0.33), vec3(0.36, 0.2, 0.1), smoothstep(0.4, 0.8, vnoise(vec2(u * 2.0, fy * 3.0) + seed)));
+                  oc *= 0.75 + corr * 0.3; ob = vec2(0.0, (corr - 0.5) * 0.8); orr = 0.6; om = 0.3;
                 } else {
-                  glass = 1.0;
+                  og = 1.0;
                   bool lit = hs > 0.93;
                   vec3 o = vec3(cx, fy, 0.0);
                   vec3 inside = ${interior ? `room(o, normalize(td), vec2(sp * 0.5, 0.0), 5.0, gH, seed + bi * 7.0, lit)` : `vec3(0.05)`};
                   bool broken = hs < 0.62;
-                  col = inside * (lit ? 0.4 : 0.3);
-                  rough = broken ? 0.9 : 0.06;
-                  if (lit) emit = inside * vec3(1.0, 0.75, 0.45) * 2.4;
-                  if (broken) { float shard = step(0.62, vnoise(vec2(u * 6.0, fy * 6.0) + seed)); col = mix(col, vec3(0.1, 0.12, 0.13), shard * 0.5); }
+                  oc = inside * (lit ? 0.4 : 0.3);
+                  orr = broken ? 0.9 : 0.06; ob = bump;
+                  if (lit) oe = inside * vec3(1.0, 0.75, 0.45) * 2.4;
+                  if (broken) { float sw = max(fw.x, fw.y) * 6.0; float shard = smoothstep(0.62 - sw, 0.62 + sw, vnoise(vec2(u * 6.0, fy * 6.0) + seed)); oc = mix(oc, vec3(0.1, 0.12, 0.13), shard * 0.5); }
                 }
-              } else if (abs(cx) < sp * 0.5 - 0.02 && fy < top + 0.08) { col = trimCol; rough = 0.55; }
+                col = mix(col, oc, open); rough = mix(rough, orr, open); metal = mix(metal, om, open); bump = mix(bump, ob, open);
+                emit = oe * open; glass = og * open;
+              }
+              if (band > 0.0) {
+                // sign band: dark paint, ghost lettering
+                vec3 sc = mix(vec3(0.07, 0.08, 0.08), vec3(0.22, 0.12, 0.08), r2);
+                float lw = fw.x * 5.0, q = fract(fy * 2.2);
+                float letters = smoothstep(0.55 - lw, 0.55 + lw, vnoise(vec2(u * 5.0 + seed, 3.0))) * cover(min(q - 0.3, 0.8 - q) / 2.2, fw.y);
+                sc = mix(sc, vec3(0.55, 0.5, 0.42), letters * 0.5 * cover(min(fy - (gH - 0.85), gH - 0.42 - fy), fw.y));
+                col = mix(col, sc, band); rough = mix(rough, 0.7, band);
+              }
             }
           } else if (kind == 1) {
             // curtain wall: mullions every 1.5 m, a spandrel band at every floor line
