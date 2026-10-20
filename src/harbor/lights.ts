@@ -48,7 +48,7 @@ function curbside(x: number, z: number, classAt: (x: number, z: number) => numbe
 
 export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGrid, heightAt: (x: number, z: number) => number, classAt: (x: number, z: number) => number, quality: 'high' | 'low') {
   const R = rng(4421);
-  const iron = new THREE.MeshStandardMaterial({ color: '#16181b', roughness: 0.5, metalness: 0.7 });
+  const iron = thinIron();
   const glassOn = new THREE.MeshStandardMaterial({ color: '#000000', emissive: WARM, emissiveIntensity: 3.2, roughness: 0.3 });
   const glassOff = new THREE.MeshStandardMaterial({ color: '#1c1e20', roughness: 0.15, metalness: 0.2 });
   const lamps: Lamp[] = [];
@@ -154,6 +154,43 @@ export function buildLamps(d: HarborData, cb: ChunkBuilder, collide: CollisionGr
     addSources: (ls: LightSource[]) => { lit.push(...ls); } };
 }
 
+/**
+ * The posts' iron. A post is a few centimetres across, under a pixel wide from mid-street on, and MSAA's
+ * four samples can't hold an edge that thin: it crawled and broke up whenever the camera moved. So each
+ * ring is widened in the vertex shader to at least ~1.5 pixels about its own axis (the \`pole\` attribute:
+ * axis x, z and true radius) and faded by the share of that width the real post covers, through
+ * alpha-to-coverage, so a far post reads as a steady faint line. Without MSAA there's nothing to fade
+ * with, so it only widens to a pixel.
+ */
+function thinIron() {
+  const iron = new THREE.MeshStandardMaterial({ color: '#16181b', roughness: 0.5, metalness: 0.7 });
+  iron.alphaToCoverage = true;
+  const uPx = { value: new THREE.Vector2(1080, 0.75) }, size = new THREE.Vector2();
+  iron.onBeforeRender = (gl) => {
+    const rt = gl.getRenderTarget();
+    uPx.value.set(rt ? rt.height : gl.getDrawingBufferSize(size).y, rt && rt.samples > 0 ? 0.75 : 0.5);
+  };
+  iron.onBeforeCompile = (sh) => {
+    sh.uniforms.uPx = uPx;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute vec3 pole; uniform vec2 uPx; varying float vCover;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        // one pixel's size in metres at this vertex, then the ring's radius held to uPx.y of them
+        float px = 2.0 * length((modelMatrix * vec4(transformed, 1.0)).xyz - cameraPosition) / (projectionMatrix[1][1] * uPx.x);
+        float rw = max(pole.z, px * uPx.y);
+        transformed.xz = pole.xy + (transformed.xz - pole.xy) * (rw / max(pole.z, 1e-4));
+        vCover = pole.z / rw;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying float vCover;`)
+      .replace('#include <alphamap_fragment>', `#include <alphamap_fragment>
+        diffuseColor.a *= vCover;`);
+  };
+  iron.customProgramCacheKey = () => 'harbor-lamp-iron';
+  return iron;
+}
+
 /** a Boston pedestrian lamp: tapered fluted post, collar, a lantern with a cap and finial */
 function post(cb: ChunkBuilder, iron: THREE.Material, glass: THREE.Material, l: Lamp, R: () => number) {
   const acc = cb.at(iron, l.x, l.z, { far: 220 }), gacc = cb.at(glass, l.x, l.z, { cast: false, far: 220 });
@@ -175,8 +212,8 @@ function ring(acc: ReturnType<ChunkBuilder['at']>, l: Lamp, y0: number, r0: numb
   for (let i = 0; i <= n; i++) {
     const a = (i / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
     const ny = slope, len = Math.hypot(1, ny);
-    acc.v(ax + c * r0, l.y + y0, az + s * r0, c / len, ny / len, s / len);
-    acc.v(bx + c * r1, l.y + y1, bz + s * r1, c / len, ny / len, s / len);
+    acc.v(ax + c * r0, l.y + y0, az + s * r0, c / len, ny / len, s / len); acc.attr('pole', 3, ax, az, r0);
+    acc.v(bx + c * r1, l.y + y1, bz + s * r1, c / len, ny / len, s / len); acc.attr('pole', 3, bx, bz, r1);
   }
   for (let i = 0; i < n; i++) { const a = base + i * 2; acc.tri(a, a + 1, a + 3); acc.tri(a, a + 3, a + 2); }
 }
