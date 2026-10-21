@@ -16,14 +16,104 @@ The hand never moves. Only the weather does: clouds creep right, mist slides alo
 falls, a strip of cloth streams from the wrist, and one indicator light breathes. The apartment is
 built after **New Game**, and the street is built during the fade to black.
 
-**Play it:** https://neb636.github.io/robots-rebuild/
-**Quicklink to the harbor district:** https://neb636.github.io/robots-rebuild/?start=harbor
+**Play it:** [Quiet Machines](https://neb636.github.io/robots-rebuild/) · [Jump to a game section](#jump-to-a-game-section)
 
 ```bash
 npm install
 npm run dev        # open http://localhost:5173
 npm run build      # static build in dist/ (any static host, or open via `npm run preview`)
 ```
+
+## Jump to a game section
+
+Use these links to test what is built without playing through earlier areas. They open the
+published main build; a change on a pull request is available at the preview linked in that PR.
+Gameplay links skip the title screen and opening card and use **Partly Sunny** lighting. The
+apartment keeps its fixed morning light; underground, Partly Sunny enables work lights.
+
+### Main areas
+
+| Section | What to test |
+|---|---|
+| [Title screen and Options](https://neb636.github.io/robots-rebuild/?mood=day) | Start a new game, change settings, or view controls and credits. |
+| [Day Zero — Theo’s apartment](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day) | Explore the bedroom, living room and kitchen; try Biscuit, the turntable, TV broadcast and Marcus’s call. |
+| [Acorn Lane — Beacon Hill](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=street) | Explore the outdoor street and find the far stair to Park Street station. |
+| [Tunnel Walk — Park Street to State](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel) | Start the underground journey with Marcus. |
+| [Harbor district — State station](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor) | Explore the waterfront, markets, Greenway and North End. |
+
+### Tunnel Walk checkpoints
+
+These links place Theo and the companions at the matching story progress, so earlier beats can be
+skipped. Advance dialogue with Space / Enter / F.
+
+| Checkpoint | What to test |
+|---|---|
+| [Park Street platform](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=parkstreet) | Opening dialogue and Marcus’s flashlight. |
+| [Stopped Red Line train](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=train) | Approach the converted commuters and inspect the ringing phone through the window. |
+| [Knock code by the train](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=knock) | Let the dialogue finish, then interact with the pipe twice to call Marcus. |
+| [Downtown Crossing](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=downtown) | Drowned platform and Maya’s introduction farther along the platform. |
+| [Transfer passage](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=transfer) | Stairs and passage to the Orange Line, with Maya in the party. |
+| [Orange Line](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=orange) | Companions following north toward State. |
+| [State platform](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=state) | Approach the escalator and exit. |
+| [State exit gate](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=gate) | Walk up to the gate and interact to open it and enter the harbor. |
+
+### Harbor — markets and downtown
+
+| Location | What to test |
+|---|---|
+| [State station and Congress Street cordon](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=state) | Station arrival and the district boundary. |
+| [Faneuil Hall](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=faneuil) | Hall, plaza and Freedom Trail. |
+| [Quincy Market](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=quincy) | Market buildings and surrounding pedestrian streets. |
+| [Blackstone Block](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=blackstone) | Historic streets and Freedom Trail. |
+| [Custom House](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=customhouse) | Tower and surrounding downtown streets. |
+| [Hong Kong storefront](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=hongkong) | Storefront and nearby streets. |
+
+### Harbor — waterfront and Aquarium
+
+| Location | What to test |
+|---|---|
+| [Long Wharf](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=longwharf) | Wharf, pavilion, lookout and waterfront signs. |
+| [Ferry landings](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=ferry) | Ferry signs, queue rails and ticket booths. |
+| [New England Aquarium](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=aquarium) | Aquarium building and plaza. |
+| [Aquarium station](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=aquariumstation) | Station entrance and streetscape. |
+| [Whale-watch landing](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=whalewatch) | Waterfront landing beside the Aquarium. |
+| [Harbor Towers](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=harbortowers) | Residential towers and surrounding grounds. |
+| [Rowes Wharf](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=rowes) | Southern waterfront and wharf buildings. |
+
+### Harbor — parks and North End
+
+| Location | What to test |
+|---|---|
+| [Rose Kennedy Greenway](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=greenway) | Park signs, pavilion, food trucks, seating and planting. |
+| [Christopher Columbus Park](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=columbus) | Park and waterfront paths. |
+| [North Square and Paul Revere House](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=northsquare) | North End streets, historic landmark and Freedom Trail. |
+
+### Tours, navigation and diagnostics
+
+| Test | How to use it |
+|---|---|
+| [Tunnel autopilot](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&walk) | Follows the route; advance dialogue and interact at the pipe and exit gate when prompted. |
+| [Tunnel companion movement variants](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=orange&cast=hurt,sneak,crouch) | Walk and stop to inspect Marcus’s limp and crouch and Maya’s sneak animation. |
+| [Harbor walking tour](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&walk=tour) | Visits the named harbor spots automatically; inspect the console for `walk:leg`, `walk:stuck` and `walk:done`. |
+| [Current navigation to Faneuil Hall](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=state&mark=faneuil) | Follow the blue-white pulse; press G to send it again, and M to inspect the marked map. |
+| [Harbor performance stats](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&debug=stats) | Inspect the live frame, draw-call and triangle overlay. |
+| [Harbor walk-mesh debug map](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&debug=map) | Inspect walkable ground, colliders, cordon and actors in the debug overlay. |
+
+### Character and animation stage
+
+The stage has its own fixed lighting. Select a clip, scrub, adjust speed, or toggle the skeleton
+and in-place controls.
+
+| Character | Direct link |
+|---|---|
+| Theo | [Theo’s animation stage](https://neb636.github.io/robots-rebuild/stage.html?char=theo&mood=day) |
+| Maya | [Maya’s animation stage](https://neb636.github.io/robots-rebuild/stage.html?char=maya&mood=day) |
+| Marcus | [Marcus’s animation stage](https://neb636.github.io/robots-rebuild/stage.html?char=marcus&mood=day) |
+
+For local testing, run `npm run dev` and replace `https://neb636.github.io/robots-rebuild/` in
+any link with `http://localhost:5173/`, keeping the path and query parameters. The model review
+viewer is development-only: [Theo model review](http://localhost:5173/viewer.html?mood=day) or
+[Theo locomotion blend](http://localhost:5173/viewer.html?loco&mood=day).
 
 ## Controls
 
