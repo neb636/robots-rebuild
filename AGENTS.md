@@ -21,6 +21,24 @@ preview path from the workflow or deployment comment; if deployment is pending, 
 documentation-only changes with no runtime behavior to test, link directly to the changed document
 and state that no gameplay testing is needed.
 
+## README links for levels, areas and test states
+
+Whenever adding or modifying a level, area, scene, checkpoint or test entry point, check the
+README's **Jump to a game section** directory and update it in the same change if needed. Add new
+locations, revise links or instructions when behavior changes, and remove obsolete entries.
+Keep the directory grouped by main areas, checkpoints, geographic areas and testing tools so each
+built section is easy to find without playing through earlier content.
+
+Use complete, clickable Markdown links to the published main build at
+`https://neb636.github.io/robots-rebuild/`, with the exact page path and all required parameters
+(such as `menu=0&card=0&start=tunnel&at=gate&mood=day`). Link to supported spawn points and story
+states; verify `start`, `at` and other parameters against the code and confirm standalone pages
+are included in the production build. If a new section cannot be reached directly, add a suitable
+direct entry point so it can be tested independently. Include a short description of what to test
+and any required interaction. Use `mood=day` for gameplay test links as described below; label any
+development-only tools and provide their full localhost URLs. README links target main; PR test
+links target that PR's preview as described above.
+
 ## Audio for new scenes: browser audio first
 
 Write every new scene's audio with what the browser provides: music, ambience and SFX as procedural
