@@ -2,22 +2,42 @@
 //
 //   /stage.html?char=theo&clip=Walking&speed=1&inplace=1
 //
-// Characters come from CHARACTERS below; each one loads a model + clips. Theo's clips are the
-// Mixamo FBXs in art/source/mixamo/animations, already baked onto his rig by
-// art/blender/build_theo.py and shipped inside public/models/theo.glb, so nothing here needs
-// Blender. Re-run that script after adding an FBX and the new clip shows up in the list.
+// Characters come from CHARACTERS below; each one loads a model + clips. Their clips are the
+// Mixamo FBXs in art/source/mixamo (animations/ for Theo, <id>-animations/ for the others),
+// already baked onto each rig by art/blender/build_character.py and shipped inside
+// public/models/<id>.glb, so nothing here needs Blender. Re-run that script after adding an FBX and
+// the new clip shows up in the list.
 //
 // "In place" pins the hips' ground-plane translation to its first frame, for clips with root
 // motion (Walking (1), Stop Walking, Swimming, ...). Keys: up/down clip, space play, left/right frame.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { loadTheo, dressTheo, Theo, THEO_HEIGHT, AUTHORED_HEIGHT } from './theo';
 
 const FPS = 30;
 const FADE = 0.25;
 
 interface Loaded { model: THREE.Object3D; clips: THREE.AnimationClip[]; height: number }
-interface CharacterDef { id: string; name: string; role: string; load(): Promise<Loaded> }
+interface CharacterDef { id: string; name: string; role: string; idle?: string; load(): Promise<Loaded> }
+
+/** A Mixamo character from build_character.py without Theo's game styling: shadows on, and the
+ *  hair shells cast from both sides (see dressTheo). */
+async function loadCharacter(id: string, height: number): Promise<Loaded> {
+  const gltf = await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${id}.glb`);
+  const model = gltf.scene;
+  model.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (!m.isMesh) return;
+    m.castShadow = m.receiveShadow = true;
+    m.frustumCulled = false;
+    const mat = m.material as THREE.MeshStandardMaterial;
+    mat.shadowSide = THREE.DoubleSide;
+    if (mat.map) mat.map.anisotropy = gl.capabilities.getMaxAnisotropy();
+  });
+  model.scale.setScalar(height / AUTHORED_HEIGHT);
+  return { model, clips: gltf.animations, height };
+}
 
 const CHARACTERS: CharacterDef[] = [
   {
@@ -30,6 +50,9 @@ const CHARACTERS: CharacterDef[] = [
       return { model, clips: asset.clips, height: THEO_HEIGHT };
     },
   },
+  // heights relative to Theo: Maya as her procedural stand-in (MAYA in src/tunnel/companion.ts)
+  { id: 'maya', name: 'Maya', role: 'First recruit', load: () => loadCharacter('maya', THEO_HEIGHT * 0.97) },
+  { id: 'marcus', name: 'Marcus', role: 'Best friend', idle: 'Neutral Idle', load: () => loadCharacter('marcus', THEO_HEIGHT * 1.04) },
 ];
 
 // --- renderer, scene, floor
@@ -162,7 +185,8 @@ async function selectCharacter(def: CharacterDef) {
   controls.target.set(0, loaded.height * 0.55, 0);
   renderChars();
   renderClips();
-  setClip(loaded.clips.some((c) => c.name === clipName) ? clipName : loaded.clips[0].name, false);
+  const fallback = def.idle ?? (loaded.clips.some((c) => c.name === 'Idle') ? 'Idle' : loaded.clips[0].name);
+  setClip(loaded.clips.some((c) => c.name === clipName) ? clipName : fallback, false);
   ui.loading.hidden = true;
 }
 
