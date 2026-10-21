@@ -14,7 +14,8 @@ import { rng } from '../noise';
 import { audio } from '../audio';
 import { state, params } from '../settings';
 import type { Built, Mood } from '../scene';
-import { Companion, Flashlight, MARCUS, MAYA } from './companion';
+import { Companion, Flashlight } from './companion';
+import { loadMixamo, MARCUS, MAYA } from '../mixamo';
 import { TunnelWalk } from './walk';
 import { buildTrain } from './train';
 import {
@@ -46,7 +47,8 @@ const WORK: Mood = {
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
-export function buildTunnel(quality: 'high' | 'low'): Built {
+export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
+  const cast = Promise.all([loadMixamo('marcus', quality), loadMixamo('maya', quality)]);
   const scene = new THREE.Scene();
   const root = new THREE.Group(); scene.add(root);
   const b = new Batch();
@@ -373,8 +375,15 @@ export function buildTunnel(quality: 'high' | 'low'): Built {
   // ------------------------------------------------------------------ the two of them, and then three
   const route = new Route(ROUTE_PTS);
   const ground = (x: number, z: number) => floorAt(x, z);
-  const marcus = new Companion(MARCUS, route, 2.8, 1.1, ground, root);
-  const maya = new Companion(MAYA, route, 4.4, -1.1, ground, root);
+  const [marcusAsset, mayaAsset] = await cast;
+  const marcus = new Companion(marcusAsset, MARCUS, route, 2.8, 1.1, ground, root);
+  const maya = new Companion(mayaAsset, MAYA, route, 4.4, -1.1, ground, root);
+  // ?cast=hurt,sneak,crouch: Marcus limping, Maya sneaking, Marcus crouching when he stops. No beat
+  // uses them yet (the ankle, the stealth); for tests
+  const casting = (params.get('cast') ?? '').split(',');
+  if (casting.includes('hurt')) marcus.ch.gait = 'hurt';
+  if (casting.includes('sneak')) maya.ch.gait = 'sneak';
+  if (casting.includes('crouch')) marcus.ch.pose = 'crouch';
   const light = new Flashlight(root, quality);
   let walk: TunnelWalk | null = null;
   const lastHero = new THREE.Vector3(NaN, 0, 0);
@@ -437,8 +446,8 @@ export function buildTunnel(quality: 'high' | 'low'): Built {
       cam.right.setFromMatrixColumn(camera.matrixWorld, 0);
       if (walk) {
         walk.update(dt, hero);
-        marcus.update(dt, hero, walk.heroS, heroSpeed, cam.pos);
-        maya.update(dt, hero, walk.heroS, heroSpeed, cam.pos);
+        marcus.update(dt, hero, walk.heroS, heroSpeed, cam.pos, walk.calm);
+        maya.update(dt, hero, walk.heroS, heroSpeed, cam.pos, walk.calm);
         walk.aim(aim);
       }
       light.update(dt, marcus.ch, state.mood === 'day' ? 30 : 46);

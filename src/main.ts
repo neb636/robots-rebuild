@@ -89,7 +89,7 @@ async function boot() {
   for (let i = 0; i < sets.length; i++) { setLoad((i / sets.length) * 0.7, msgs[i % msgs.length]); await nextFrame(); pbr(sets[i]); }
   setLoad(0.75, harbor ? 'Building the waterfront…' : tunnel ? 'Digging under the city…' : outdoors ? 'Building the street…' : 'Making the bed (badly)…'); await nextFrame();
   const built = harbor ? await harbor.buildHarbor(state.quality, (p, msg) => setLoad(0.75 + p * 0.1, msg))
-    : tunnel ? tunnel.buildTunnel(state.quality)
+    : tunnel ? await tunnel.buildTunnel(state.quality)
     : outdoors ? buildScene(state.quality) : buildApartment(state.quality);
   setLoad(0.85, 'Waking Theo…');
   const theo = await loadTheo(state.quality);
@@ -343,7 +343,7 @@ class App {
   private async enter(to: AreaName) {
     await nextFrame();
     const next = to === 'harbor' ? await buildHarborArea()
-      : to === 'tunnel' ? (await import('./tunnel')).buildTunnel(state.quality)
+      : to === 'tunnel' ? await (await import('./tunnel')).buildTunnel(state.quality)
       : to === 'street' ? buildScene(state.quality) : buildApartment(state.quality);
     await nextFrame();
     this.area = to;

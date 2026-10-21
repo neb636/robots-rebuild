@@ -1,19 +1,19 @@
 // Someone walking with Theo: Marcus (with the flashlight) and, from Downtown Crossing, Maya. They
 // follow the walk's route a few steps behind him, stepping back if he turns round into them, and
-// for the story's beats walk a path of their own and wait at the end of it.
+// for the story's beats walk a path of their own and wait at the end of it. They're the Mixamo cast
+// (src/mixamo.ts); the blob shadow stays, since in the dark the only light that casts shadows is the
+// flashlight in Marcus's hand, which never puts one under either of them.
 import * as THREE from 'three';
-import { Character, Char3DSpec, blobShadow } from '../character';
+import { blobShadow } from '../character';
+import { MixamoCharacter, solveArm, type Arm, type CastSpec, type MixamoAsset } from '../mixamo';
 import { glowMat, ironMat } from '../props';
 import type { Route } from './layout';
-
-export const MARCUS: Char3DSpec = { skin: '#a8724e', hair: '#1a1410', hairStyle: 'short', beard: true, top: '#5a6238', topStyle: 'jacket', bottom: '#3a3e48', shoes: '#4a3424', backpack: '#6a4a2a', seed: 7 };
-export const MAYA: Char3DSpec = { skin: '#8a5a3e', hair: '#141010', hairStyle: 'bun', top: '#3a4656', topStyle: 'jacket', bottom: '#26262c', shoes: '#1e1e1e', backpack: '#4e4e46', seed: 9, scale: 0.97 };
 
 const WALK = 1.7;
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
 export class Companion {
-  ch: Character;
+  ch: MixamoCharacter;
   pos = new THREE.Vector3();
   heading = Math.PI;
   /** how far along the route (following) */
@@ -32,8 +32,8 @@ export class Companion {
 
   /** `side`: metres to walk off the route's line where there's room (+ right of the way on, - left),
    *  so they aren't stood between the camera and Theo; `ground` is the walkable floor's height */
-  constructor(spec: Char3DSpec, private route: Route, public gap: number, private side: number, private ground: (x: number, z: number) => number, parent: THREE.Object3D) {
-    this.ch = new Character(spec);
+  constructor(asset: MixamoAsset, spec: CastSpec, private route: Route, public gap: number, private side: number, private ground: (x: number, z: number) => number, parent: THREE.Object3D) {
+    this.ch = new MixamoCharacter(asset, spec);
     parent.add(this.ch.group, this.shadow);
   }
 
@@ -59,13 +59,16 @@ export class Companion {
   /** back to following, from wherever the route passes nearest */
   follow() { this.s = this.route.project(this.pos); this.mode = 'follow'; this.faceAt = null; this.off = 0; }
 
-  update(dt: number, hero: THREE.Vector3, heroS: number, heroSpeed: number, cam: THREE.Vector3) {
+  /** `calm`: nothing's going on (no dialogue or cutscene), so they can fidget */
+  update(dt: number, hero: THREE.Vector3, heroS: number, heroSpeed: number, cam: THREE.Vector3, calm = true) {
     const from = _w.copy(this.pos);
+    // limping, they can only go so fast
+    const top = this.ch.top;
     if (this.mode === 'follow') {
       const want = heroS - this.gap;
       // far behind (a jump ahead with ?at=, a sprint): catch up, or turn up there
       if (want - this.s > 30) this.s = want - 8;
-      if (this.s < want - 0.05) this.s = Math.min(want, this.s + Math.max(WALK, Math.min(7.5, heroSpeed + (want - this.s) * 1.2)) * dt);
+      if (this.s < want - 0.05) this.s = Math.min(want, this.s + Math.min(top, Math.max(WALK, Math.min(7.5, heroSpeed + (want - this.s) * 1.2))) * dt);
       // he turned round into us: give him room
       else if (this.s > heroS - 0.9) this.s = Math.max(0, this.s - 2.4 * dt);
       this.route.at(this.s, this.pos);
@@ -81,7 +84,7 @@ export class Companion {
     } else if (this.mode === 'path') {
       // a long way from him: hurry
       const hurry = Math.hypot(hero.x - this.pos.x, hero.z - this.pos.z) > 9 ? 3.2 : 1;
-      let step = this.pathSpeed * hurry * dt;
+      let step = Math.min(top, this.pathSpeed * hurry) * dt;
       while (step > 0 && this.path.length) {
         const to = this.path[0], d = this.pos.distanceTo(to);
         if (d <= step) { this.pos.copy(to); this.path.shift(); step -= d; } else { this.pos.addScaledVector(_v.subVectors(to, this.pos), step / d); step = 0; }
@@ -103,7 +106,7 @@ export class Companion {
     g.position.copy(this.pos);
     g.rotation.y = this.heading;
     this.ch.lookAt = _v.copy(this.faceAt ?? hero).setY((this.faceAt ?? hero).y + (this.faceAt ? 0 : 1.4));
-    this.ch.update(dt, this.speed);
+    this.ch.update(dt, this.speed, calm);
     this.shadow.position.set(this.pos.x, this.pos.y + 0.02, this.pos.z);
     // right up against the camera (catching up behind him on a walkway): step out of the picture
     g.visible = Math.hypot(cam.x - this.pos.x, cam.y - (this.pos.y + 1.1), cam.z - this.pos.z) > 1.35;
@@ -112,9 +115,17 @@ export class Companion {
 
 function dirXZ(d: THREE.Vector3): [number, number] { return [d.x, d.z]; }
 
+/** where the arm can point the light, relative to his facing (rad): to his right (-), across his
+ *  body (+), down and up; how far out he holds it (of the arm's length: nearly straight, so the
+ *  forearm points along the beam); the grip past the wrist (m) */
+const POINT = { right: -1.2, across: 0.45, down: -0.9, up: 0.5, reach: 0.96, grip: 0.08 };
+const _s = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _side = new THREE.Vector3();
+const _gq = new THREE.Quaternion(), _gi = new THREE.Quaternion();
+
 /**
  * Marcus's flashlight: a SpotLight carried in his right hand, the walk's main light. Its target is
- * eased toward wherever he's pointing it, so the beam swings rather than snaps.
+ * eased toward wherever he's pointing it, so the beam swings rather than snaps, and his arm follows
+ * it (two-bone IK over his clips).
  */
 export class Flashlight {
   spot: THREE.SpotLight;
@@ -122,6 +133,7 @@ export class Flashlight {
   aim = new THREE.Vector3();
   private body: THREE.Mesh;
   private hand = new THREE.Vector3();
+  private arm: Arm | null = null;
   private cur = new THREE.Vector3();
   private first = true;
   on = true;
@@ -141,15 +153,26 @@ export class Flashlight {
     parent.add(this.body);
   }
 
-  /** after the carrier's animation: raise his right arm to point the light, and move it to his hand */
-  update(dt: number, c: Character, intensity: number) {
-    const r = c.rig;
-    // the arm comes up and forward, the forearm a little bent: holding it out ahead
-    r.shR.rotation.x = -1.05; r.shR.rotation.z = -0.08; r.elR.rotation.x = -0.35;
-    c.group.updateMatrixWorld(true);
-    r.elR.localToWorld(this.hand.set(0, -0.23, 0.04));
+  /** after the carrier's animation: point his right arm along the beam, and put the light in his hand */
+  update(dt: number, c: MixamoCharacter, intensity: number) {
     if (this.first) { this.cur.copy(this.aim); this.first = false; }
     this.cur.lerp(this.aim, 1 - Math.exp(-dt * 5));
+    const arm = this.arm ??= c.arm('Right');
+    c.group.updateMatrixWorld(true);
+    c.group.getWorldQuaternion(_gq);
+    // shoulder -> where the beam's going, in his own frame (he faces +Z, his right is -X), kept to
+    // where a right arm reaches comfortably; held out just short of straight
+    arm.upper.getWorldPosition(_s);
+    _d.subVectors(this.cur, _s).applyQuaternion(_gi.copy(_gq).invert());
+    const yaw = THREE.MathUtils.clamp(Math.atan2(_d.x, _d.z), POINT.right, POINT.across);
+    const pitch = THREE.MathUtils.clamp(Math.atan2(_d.y, Math.hypot(_d.x, _d.z)), POINT.down, POINT.up);
+    _d.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).applyQuaternion(_gq);
+    const len = _s.distanceTo(arm.lower.getWorldPosition(_e)) + _e.distanceTo(arm.hand.getWorldPosition(this.hand));
+    solveArm(arm, _d.multiplyScalar(len * POINT.reach).add(_s), 1, _side.set(1, 0, 0).applyQuaternion(_gq));
+    // the grip: a palm's length past the wrist, along the forearm
+    arm.lower.getWorldPosition(_e);
+    arm.hand.getWorldPosition(this.hand);
+    this.hand.addScaledVector(_d.subVectors(this.hand, _e).normalize(), POINT.grip);
     this.spot.position.copy(this.hand);
     this.spot.target.position.copy(this.cur);
     this.spot.target.updateMatrixWorld();

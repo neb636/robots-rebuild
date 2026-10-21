@@ -145,7 +145,13 @@ volumetric beam (`Built.beam`, which draws it without the compliance scan a dron
 sets off). Otherwise there are a few emergency lamps that never went out. Every mood is dark
 underground except Partly Sunny, which turns on flat work lights so the build can be seen as built.
 Marcus and Maya follow the walk's route (`layout.ts`) a few steps behind, off to one side where the
-floor is wide enough. The story's beats (`walk.ts`) fire from how far along the route Theo is, and
+floor is wide enough. They're the Mixamo models from the character stage (`src/mixamo.ts`: the 4k
+GLBs on High, `maya-2k.glb` / `marcus-2k.glb` on Low), their walks and runs phase-locked and played
+at the rate that matches their ground speed, as Theo's are. Marcus holds the flashlight in his right
+hand, his arm pointed along the beam by two-bone IK, and fidgets (Happy Idle) when left alone.
+`?cast=hurt,sneak,crouch` tries their other ways of moving, which no beat uses yet: Marcus limping
+(Injured Walk / Run, and slowed to his limp's pace), Maya sneaking (Sneak Walk), and Marcus crouching
+(Crouching Idle) whenever he stops. The story's beats (`walk.ts`) fire from how far along the route Theo is, and
 `?at=` puts everything where the story would have it: parkstreet, train, knock, downtown, transfer,
 orange, state, gate. `?walk` walks the route on autopilot (it stops at the pipe and the gate for the
 knock and the gate's button).

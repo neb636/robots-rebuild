@@ -12,8 +12,8 @@
 // motion (Walking (1), Stop Walking, Swimming, ...). Keys: up/down clip, space play, left/right frame.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { loadTheo, dressTheo, Theo, THEO_HEIGHT, AUTHORED_HEIGHT } from './theo';
+import { loadMixamo, dressMixamo, MAYA, MARCUS, type CastSpec } from './mixamo';
 
 const FPS = 30;
 const FADE = 0.25;
@@ -21,22 +21,13 @@ const FADE = 0.25;
 interface Loaded { model: THREE.Object3D; clips: THREE.AnimationClip[]; height: number }
 interface CharacterDef { id: string; name: string; role: string; idle?: string; load(): Promise<Loaded> }
 
-/** A Mixamo character from build_character.py without Theo's game styling: shadows on, and the
- *  hair shells cast from both sides (see dressTheo). */
-async function loadCharacter(id: string, height: number): Promise<Loaded> {
-  const gltf = await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${id}.glb`);
-  const model = gltf.scene;
-  model.traverse((o) => {
-    const m = o as THREE.SkinnedMesh;
-    if (!m.isMesh) return;
-    m.castShadow = m.receiveShadow = true;
-    m.frustumCulled = false;
-    const mat = m.material as THREE.MeshStandardMaterial;
-    mat.shadowSide = THREE.DoubleSide;
-    if (mat.map) mat.map.anisotropy = gl.capabilities.getMaxAnisotropy();
-  });
-  model.scale.setScalar(height / AUTHORED_HEIGHT);
-  return { model, clips: gltf.animations, height };
+/** A Mixamo character from build_character.py without Theo's game styling (see dressMixamo), at
+ *  its game height. */
+async function loadCharacter(spec: CastSpec): Promise<Loaded> {
+  const asset = await loadMixamo(spec.id, 'high');
+  const model = dressMixamo(asset, gl.capabilities.getMaxAnisotropy());
+  model.scale.setScalar(spec.height / AUTHORED_HEIGHT);
+  return { model, clips: asset.clips, height: spec.height };
 }
 
 const CHARACTERS: CharacterDef[] = [
@@ -50,9 +41,9 @@ const CHARACTERS: CharacterDef[] = [
       return { model, clips: asset.clips, height: THEO_HEIGHT };
     },
   },
-  // heights relative to Theo: Maya as her procedural stand-in (MAYA in src/tunnel/companion.ts)
-  { id: 'maya', name: 'Maya', role: 'First recruit', load: () => loadCharacter('maya', THEO_HEIGHT * 0.97) },
-  { id: 'marcus', name: 'Marcus', role: 'Best friend', idle: 'Neutral Idle', load: () => loadCharacter('marcus', THEO_HEIGHT * 1.04) },
+  // heights as in the game (the cast in src/mixamo.ts)
+  { id: 'maya', name: 'Maya', role: 'First recruit', load: () => loadCharacter(MAYA) },
+  { id: 'marcus', name: 'Marcus', role: 'Best friend', idle: 'Neutral Idle', load: () => loadCharacter(MARCUS) },
 ];
 
 // --- renderer, scene, floor

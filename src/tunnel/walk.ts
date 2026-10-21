@@ -85,6 +85,8 @@ export class TunnelWalk {
   private async say(l: Line | Line[]) { await this.h.dlg.say(l); this.saidAt = this.t; }
   /** when the last line closed (game time) */
   private saidAt = -1;
+  /** no beat playing and nothing on screen: the others can fidget */
+  get calm() { return !this.running && !this.h.story.busy(); }
   /** at or past a stage */
   private is(s: Stage) { return ORDER.indexOf(this.stage) >= ORDER.indexOf(s); }
   private set(s: Stage, objective?: string | null) {
