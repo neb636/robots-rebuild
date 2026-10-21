@@ -5,7 +5,10 @@ import * as THREE from 'three';
 import { Batch, wbox } from '../batch';
 import { Character, Char3DSpec } from '../character';
 import { pbrMat, glowMat, ironMat } from '../props';
+import { graffiti } from '../buildings';
+import { rng } from '../noise';
 import { RED, TRAIN } from './layout';
+import { tmat, papers } from './dressing';
 
 /** the car body, around the track's centreline */
 const W = 3.0, FLOOR = 1.15, ROOF = 3.6, BOTTOM = 0.62;
@@ -30,12 +33,15 @@ export function carSpans() {
 }
 
 export function buildTrain(b: Batch, root: THREE.Object3D) {
-  // brushed stainless: plain, so it reads as one clean sheet under the light
-  const steel = new THREE.MeshStandardMaterial({ color: '#9ea2a6', metalness: 0.25, roughness: 0.42 });
-  const dark = pbrMat('metal', '#2a2c2e', { metalness: 0.5 });
-  const red = pbrMat('metal', '#b0201a', { metalness: 0.3 });
+  // fluted stainless, two years of tunnel dust and rust run down it (and the grime climbing from the bed)
+  const steel = tmat('fluted', '#c4c8ca', { metalness: 0.2, grime: 0.5 });
+  const dark = tmat('metal', '#2a2c2e', { metalness: 0.5, grime: 0.6 });
+  const red = tmat('metal', '#a02018', { metalness: 0.3, grime: 0.5 });
   const seat = pbrMat('canvas', '#5a2a24');
-  const floor = pbrMat('stone', '#4a4844');
+  const floor = tmat('stone', '#4a4844', { grime: 0.5 });
+  const glass = glassMat(false), broken = glassMat(true);
+  const ads = adsMat();
+  const R = rng(64);
   const pole = ironMat();
   const strip = glowMat('#9cc8ff', 1.4);
   const X = RED.track, x0 = X - W / 2, x1 = X + W / 2;
@@ -70,6 +76,16 @@ export function buildTrain(b: Batch, root: THREE.Object3D) {
         b.add(wbox(0.08, 1.95, 0.55), steel, xs + s * 0.01, FLOOR + 0.98, zd - 0.33);
         b.add(wbox(0.02, 1.9, 0.02), dark, xs + s * 0.05, FLOOR + 0.98, zd);
       }
+      // the glass between the posts, filthy, a pane here and there smashed in; the ad cards over it inside
+      for (let i = 0; i < n; i++) {
+        const zz = zr - 0.3 - (i + 0.5) * ((L - 0.6) / n), r = R();
+        if (r < 0.08) continue;
+        b.add(new THREE.PlaneGeometry((L - 0.6) / n - 0.07, WIN.y1 - WIN.y0), r < 0.22 ? broken : glass, xs, (WIN.y0 + WIN.y1) / 2, zz, 0, s * Math.PI / 2, 0, 1, 1, 1, false);
+      }
+      const ad = new THREE.PlaneGeometry(L - 2.4, 0.3);
+      const uv = ad.attributes.uv as THREE.BufferAttribute;
+      for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * (L - 2.4) / 3 + ci * 0.37 + (s > 0 ? 0.5 : 0));
+      b.add(ad, ads, xs - s * 0.05, WIN.y1 + 0.22, zc, 0, -s * Math.PI / 2, 0, 1, 1, 1, false);
       // the bench along this side, facing in
       b.add(wbox(0.5, 0.42, L - 2.2), seat, X + s * (W / 2 - 0.35), FLOOR + 0.21, zc);
       b.add(wbox(0.08, 0.5, L - 2.2), seat, X + s * (W / 2 - 0.12), FLOOR + 0.62, zc);
@@ -107,6 +123,14 @@ export function buildTrain(b: Batch, root: THREE.Object3D) {
       }
     }
   });
+
+  // what's been sprayed on the walkway side since, and what was dropped inside
+  b.setBase(x1 + 0.04, 0, 0);
+  graffiti(b, spans[0][0] - 6, 1.25, 'NOT OUR TRAIN', '#c8d0c0', 2.6);
+  graffiti(b, spans[0][0] - 15.5, 1.3, 'SLEEPERS', '#c02818', 2.2);
+  graffiti(b, spans[1][0] - 9, 1.25, 'DONT WAKE THEM', '#e8c040', 2.8);
+  b.resetBase();
+  for (const [zr, zf] of spans) for (let k = 0; k < 4; k++) papers(b, X, FLOOR, zr - 3 - k * 4.6, 0.9, 4, Math.round(-zr) + k);
 
   // ------------------------------------------------------------------ the commuters, posed once and baked
   const people = new THREE.Group();
@@ -152,4 +176,48 @@ function sit(c: Character, phone: boolean) {
   if (phone) { r.shR.rotation.x = -0.6; r.elR.rotation.x = -1.35; r.shL.rotation.x = -0.6; r.elL.rotation.x = -1.3; }
   // eyes front, chin level: staring at nothing on the other side of the car
   r.head.rotation.set(0.04, 0, 0);
+}
+
+/** the cars' glass: grime thickest along the bottom, wiped arcs, scratches; or a pane smashed in, the
+ *  hole ringed by crazing */
+function glassMat(smashed: boolean) {
+  const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
+  const c = cv.getContext('2d')!, r = rng(smashed ? 9 : 5);
+  const g = c.createLinearGradient(0, 128, 0, 0);
+  g.addColorStop(0, 'rgba(70,64,54,0.85)'); g.addColorStop(0.5, 'rgba(60,62,58,0.5)'); g.addColorStop(1, 'rgba(50,56,58,0.35)');
+  c.fillStyle = g; c.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 40; i++) { c.fillStyle = `rgba(${90 + r() * 40},${86 + r() * 30},${74 + r() * 20},${r() * 0.18})`; c.beginPath(); c.arc(r() * 128, r() * 128, 4 + r() * 22, 0, 7); c.fill(); }
+  c.strokeStyle = 'rgba(200,205,200,0.25)'; c.lineWidth = 0.6;
+  for (let i = 0; i < 14; i++) { c.beginPath(); const x = r() * 128, y = r() * 128; c.moveTo(x, y); c.lineTo(x + (r() - 0.5) * 50, y + (r() - 0.5) * 20); c.stroke(); }
+  if (smashed) {
+    const cx = 40 + r() * 48, cy = 40 + r() * 48;
+    c.strokeStyle = 'rgba(220,225,220,0.6)'; c.lineWidth = 0.8;
+    for (let i = 0; i < 16; i++) { c.beginPath(); let x = cx, y = cy; const a = (i / 16) * 6.28 + r() * 0.3; c.moveTo(x, y); for (let k = 0; k < 4; k++) { x += Math.cos(a + (r() - 0.5) * 0.5) * 18; y += Math.sin(a + (r() - 0.5) * 0.5) * 18; c.lineTo(x, y); } c.stroke(); }
+    c.globalCompositeOperation = 'destination-out';
+    c.beginPath(); for (let i = 0; i <= 12; i++) { const a = (i / 12) * 6.28, d = 14 + r() * 16; c.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d); } c.fill();
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.18, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide, alphaTest: 0.02 });
+}
+
+/** the ad cards in the frame over the windows, faded: a strip of them three metres to the repeat */
+function adsMat() {
+  const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 100;
+  const c = cv.getContext('2d')!, r = rng(77);
+  const cards: [string, string, string][] = [
+    ['#2a5a8a', '#f0ece0', 'RIDE CALM'], ['#e8e0c8', '#2a2a2a', 'Dr. Zizmor-ish Skin'], ['#c8402a', '#fff4e0', 'SOLACE · it listens'],
+    ['#3a6a3a', '#f0f0e0', 'Learn English Fast'], ['#f0c838', '#2a2018', 'Injured? Call 1-800'], ['#5a3a6a', '#f0e8f0', 'Harbor Days ’24'],
+  ];
+  const w = 1024 / cards.length;
+  cards.forEach(([bg, fg, text], i) => {
+    c.fillStyle = bg; c.fillRect(i * w + 3, 4, w - 6, 92);
+    c.fillStyle = fg; c.font = 'bold 22px Helvetica, Arial, sans-serif'; c.textBaseline = 'middle';
+    c.fillText(text, i * w + 14, 50, w - 28);
+  });
+  // faded, torn, scribbled on
+  for (let i = 0; i < 120; i++) { c.fillStyle = `rgba(${40 + r() * 40},${36 + r() * 30},${30 + r() * 20},${r() * 0.25})`; c.fillRect(r() * 1024, r() * 100, 4 + r() * 60, 2 + r() * 20); }
+  c.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 5; i++) { const x = r() * 1024; c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 20 + r() * 40, 30 + r() * 50); c.lineTo(x + 50 + r() * 30, 0); c.fill(); }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping;
+  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, transparent: true, alphaTest: 0.5, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.05 });
 }
