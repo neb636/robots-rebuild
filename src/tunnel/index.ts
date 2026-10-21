@@ -28,16 +28,16 @@ import {
 
 // ------------------------------------------------------------------ moods
 // Underground there's no sky and no weather. Ashfall, Curfew and Grey Pall all bring the same low
-// light down here: a cold, damp murk (teal in the shadows, warm in the lamps) just bright enough to
+// light down here: a cold, damp murk (blue-grey in the shadows, warm in the lamps) just bright enough to
 // make out the tunnel past the flashlight. Partly Sunny is the QA view (work lights on, flat and plain).
 const LOW: Mood = {
   name: 'Tunnel (low light)', blurb: 'Under the city: grey daylight through the grates, a few lamps that never went out.',
   sky: { zenith: '#000000', horizon: '#000000', glow: '#000000', glowDir: [0, 1, 0], glowAmt: 0, cloud: '#000000', cloudLit: '#000000', cloudAmt: 0, moon: 0, moonDir: [0, 1, 0], stars: 0 },
-  fog: { color: '#1e2829', sun: '#000000', sunDir: [0, 1, 0], density: 0.032, falloff: 0, base: 0, noise: 0.8, halo: 1.25, skyDist: 60 },
-  grade: { exposure: 1.8, tone: 'agx', lift: [0.004, 0.012, 0.014], gamma: [1.0, 1.0, 1.0], gain: [1.03, 1.0, 0.96], sat: 0.9, contrast: 1.12, shadowTint: '#28484a', highlightTint: '#ffd6a0', split: 0.5, bloom: 0.95, bloomThreshold: 0.75, vignette: 0.55, grain: 0.06 },
+  fog: { color: '#1d2024', sun: '#000000', sunDir: [0, 1, 0], density: 0.034, falloff: 0, base: 0, noise: 0.8, halo: 1.25, skyDist: 60 },
+  grade: { exposure: 1.75, tone: 'agx', lift: [0.006, 0.006, 0.012], gamma: [1.0, 1.0, 1.0], gain: [1.03, 1.0, 0.97], sat: 0.88, contrast: 1.12, shadowTint: '#2e3a4c', highlightTint: '#ffd6a0', split: 0.5, bloom: 0.95, bloomThreshold: 0.75, vignette: 0.55, grain: 0.06 },
   moon: { color: '#000000', intensity: 0, dir: [0.2, 1, 0.1] },
-  hemi: { sky: '#788a88', ground: '#3a3830', intensity: 4 },
-  env: 0.1, lamps: 1.2, fill: 0.7, rim: { color: '#9ac0c0', strength: 0.15 }, ash: 0, rain: false, wet: false, fogBank: '#000000',
+  hemi: { sky: '#7e848e', ground: '#3a3630', intensity: 3.5 },
+  env: 0.1, lamps: 1.2, fill: 0.7, rim: { color: '#a8b4c8', strength: 0.15 }, ash: 0, rain: false, wet: false, fogBank: '#000000',
 };
 const WORK: Mood = {
   name: 'Tunnel (work lights)', blurb: 'Under the city, with the lights on.',
@@ -239,7 +239,7 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
       graffiti(b, zz(-118), 1.8, 'WE ARE STILL HERE', '#c8b070', 3);
     });
     // (its haze kept faint, or the whole tunnel glows red)
-    lamp(RED.wallR - 0.2, 3.3, -44, '#ff3a2a', 1.4, 7, 0.35).base = 0.2;
+    lamp(RED.wallR - 0.2, 3.3, -44, '#ff3a2a', 0.9, 6, 0.35).base = 0.15;
     // a dying lamp over the pipe junction: just enough to find it by
     lamp(RED.wallR - 0.2, 3.4, PIPE.z - 1.2, '#ffb060', 1.4, 6, 0.6, 0);
     const tr = buildTrain(b, root);

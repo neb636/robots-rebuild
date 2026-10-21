@@ -233,7 +233,7 @@ station spawn. About five minutes at a walk:
 Marcus's flashlight is the main light: a SpotLight carried in his hand, and also the fog's
 volumetric beam (`Built.beam`, which draws it without the compliance scan a drone's searchlight
 sets off). Underground, Ashfall, Curfew and Grey Pall all give way to the tunnel's own low-light
-mood: a cold, damp murk (teal in the shadows, warm in the lamps) that lets you make out the walls
+mood: a cold, damp murk (blue-grey in the shadows, warm in the lamps) that lets you make out the walls
 past the flashlight. Grey daylight falls through street grates and the collapse over Downtown
 Crossing, with dust turning in the beams and plants growing where it lands, and a few emergency
 lamps and fluorescent fittings still work. Partly Sunny turns on flat work lights so the build can be

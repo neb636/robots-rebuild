@@ -53,7 +53,7 @@ float gWet = 0.0;`)
   float big = gFbm(gp.xz * 0.16 + gp.y * 0.07);
   vec3 g = diffuseColor.rgb * mix(0.72, 1.1, big);
   g *= mix(vec3(1.0), vec3(0.4, 0.37, 0.31), band * uGrime);
-  g = mix(g, vec3(0.14, 0.15, 0.12) * (0.6 + blot), band * smoothstep(0.55, 0.8, blot) * 0.55 * uGrime);
+  g = mix(g, vec3(0.15, 0.14, 0.12) * (0.6 + blot), band * smoothstep(0.55, 0.8, blot) * 0.55 * uGrime);
   g *= mix(1.0, 0.65, drip * uGrime);
   float fl = smoothstep(0.6, 0.9, gn.y);
   g *= mix(1.0, mix(0.68, 1.0, smoothstep(0.35, 0.75, gFbm(gp.xz * 0.55))), fl * uGrime);
@@ -126,7 +126,7 @@ export function lightShaft(b: Batch, root: THREE.Object3D, lights: FogLight[], o
   top: THREE.Vector3; bot: THREE.Vector3; w: [number, number]; spread?: number; color?: string; strength?: number;
   intensity?: number; grate?: boolean; frame?: THREE.Material; dust?: number;
 }): Shaft {
-  const color = new THREE.Color(o.color ?? '#c8d8dc');
+  const color = new THREE.Color(o.color ?? '#d0d6dc');
   const spread = o.spread ?? 1.35;
   const r0 = Math.max(o.w[0], o.w[1]) * 0.5, r1 = r0 * spread;
   // the beam: an open cone of unit height, sheared from the opening down to the floor in the shader
@@ -194,16 +194,16 @@ export function fitting(b: Batch, root: THREE.Object3D, lights: FogLight[], x: n
   const add = (geo: THREE.BufferGeometry, m: THREE.Material, px: number, py: number, pz: number) => { const me = new THREE.Mesh(geo, m); me.position.set(px, py, pz); me.castShadow = true; me.receiveShadow = true; body.add(me); };
   add(new THREE.BoxGeometry(0.32, 0.09, L), o.housing, 0, -0.045, 0);
   const lit = state === 'lit';
-  const tubeM = lit ? glowMat('#d6efe6', 3.2) : deadTube;
+  const tubeM = lit ? glowMat('#e2eaee', 3.2) : deadTube;
   for (const s of [-1, 1]) {
     // a tube missing here and there
     if (!lit && R() < 0.3) continue;
     add(new THREE.CylinderGeometry(0.018, 0.018, L - 0.1, 8).rotateX(Math.PI / 2), tubeM, s * 0.07, -0.11, 0);
   }
   if (lit) {
-    const pl = new THREE.PointLight('#cfe6dc', o.intensity ?? 5, 9, 2);
+    const pl = new THREE.PointLight('#dce4ea', o.intensity ?? 5, 9, 2);
     pl.position.set(0, -0.35, 0); body.add(pl);
-    lights.push({ obj: pl, color: new THREE.Color('#bfe0d8'), radius: 0.25, base: 0.15, flicker: 0.55, point: pl, pointBase: o.intensity ?? 5, priority: 1 });
+    lights.push({ obj: pl, color: new THREE.Color('#d0dae2'), radius: 0.25, base: 0.15, flicker: 0.55, point: pl, pointBase: o.intensity ?? 5, priority: 1 });
   }
   return turn;
 }

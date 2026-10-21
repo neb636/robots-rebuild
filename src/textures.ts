@@ -579,7 +579,7 @@ const GEN: Record<string, () => PBRSet> = {
     if (id > 0.93) c = hex('#e6e5de'); // a replacement tile, whiter than the rest
     c = mixc(c, mixc(c, hex('#8a8068'), 0.5), (1 - bevel) * 0.35);
     c = mixc(c, hex('#8a6a44'), rust * 0.35);
-    c = mixc(c, hex('#7a8064'), mildew * 0.3);
+    c = mixc(c, hex('#7a7666'), mildew * 0.25);
     c = mixc(c, hex('#6a6050'), craze * 0.35 + crack * 0.8);
     c = mixc(c, hex('#a8a090'), chip * 0.85);
     const comb = vnoise2(u * 6, v * 220, 6, 220, 51);
