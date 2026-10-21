@@ -21,7 +21,7 @@ import { Theo, THEO_HEIGHT, LOCO } from './theo';
 const FPS = 30;
 const MODELS = ['theo', ...(import.meta.env.DEV ? ['theo-2k'] : [])];
 
-// --- the Blender stage (art/blender/build_theo.py: build_stage), Blender Z-up -> three Y-up
+// --- the Blender stage (art/blender/build_character.py: build_stage), Blender Z-up -> three Y-up
 const bl = (x: number, y: number, z: number) => new THREE.Vector3(x, z, -y);
 const deg = THREE.MathUtils.degToRad;
 const WORLD = 0.22;                                   // linear radiance of the grey world

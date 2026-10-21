@@ -1,12 +1,14 @@
-"""Build art/theo.blend from the Tripo + Mixamo sources.
+"""Build art/<id>.blend and public/models/<id>.glb for a Tripo + Mixamo character.
 
-Run inside Blender (Text Editor > Run Script, or `blender -b -P art/blender/build_theo.py`).
-Each step is a function so it can also be run piecemeal over the Blender MCP.
+Run with Blender: `blender -b -P art/blender/build_character.py -- maya marcus` (no ids: all of
+CHARACTERS). Each step is a function so it can also be run piecemeal over the Blender MCP.
 
-Sources (art/source):
-  cartoon man 3d model.glb      Tripo smart mesh, 25k tris, original 4k base-color JPEG
-  mixamo/theo-rigged.fbx        the same mesh auto-rigged by Mixamo (bind pose = Tripo pose)
-  mixamo/animations/*.fbx       Mixamo clips, "without skin" (rest pose = T-pose)
+Sources per character (art/source, see CHARACTERS):
+  tripo        Tripo smart mesh with its original 4k base-color JPEG
+  rigged       the same mesh auto-rigged by Mixamo (bind pose = Tripo pose)
+  animations   Mixamo clips, "without skin" (rest pose = T-pose)
+
+Maya and Marcus went through art/blender/prep_mixamo.py before upload; Theo predates it.
 
 Why the retarget below exists: the clip files rest in a T-pose, the rigged file rests in the
 mesh's bind pose (arms ~56 deg lower). Blender stores pose channels relative to each bone's
@@ -15,8 +17,17 @@ rest, so assigning a clip's action to the rig directly layers the clip on top of
     C = rest_rig_rel^-1 @ rest_clip_rel
 and basis_rig(t) = C @ basis_clip(t), which makes every bone's armature-space transform equal to
 the clip as authored.
+
+A character re-rigged after its clips were downloaded (Marcus) has slightly different bone lengths
+from them. Rotations carry over as is; the hips' armature-space translation is scaled by the
+rig/clip leg-length ratio, so the feet stay on the floor and the stride matches the legs.
+
+Mixamo returns some characters in centimetres (an armature scaled 0.01: Maya and Marcus) and some
+in metres (Theo). The rig's scale is applied on import so every GLB is in metres, and the clips'
+hips translation is converted from whatever units the clip armature uses.
 """
 import os
+import sys
 
 import bpy
 from mathutils import Matrix, Quaternion, Vector
@@ -24,9 +35,15 @@ from mathutils import Matrix, Quaternion, Vector
 # THEO_REPO lets the script be exec'd over the Blender MCP, where __file__ is not set.
 REPO = os.environ.get("THEO_REPO") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SRC = os.path.join(REPO, "art", "source")
-TRIPO_GLB = os.path.join(SRC, "cartoon man 3d model.glb")
-RIGGED_FBX = os.path.join(SRC, "mixamo", "theo-rigged.fbx")
-ANIM_DIR = os.path.join(SRC, "mixamo", "animations")
+CHARACTERS = {
+    "theo": dict(name="Theo", tripo="cartoon man 3d model.glb", rigged="mixamo/theo-rigged.fbx",
+                 animations="mixamo/animations", active="Idle"),
+    "maya": dict(name="Maya", tripo="Maya.glb", rigged="mixamo/rigged/maya.fbx",
+                 animations="mixamo/maya-animations", active="Idle"),
+    "marcus": dict(name="Marcus", tripo="Marcus.glb", rigged="mixamo/rigged/marcus.fbx",
+                   animations="mixamo/marcus-animations", active="Neutral Idle"),
+}
+LEGS = [f"mixamorig:{side}{part}" for side in ("Left", "Right") for part in ("UpLeg", "Leg", "Foot")]
 
 
 def rel_rest(bone):
@@ -69,17 +86,28 @@ def retarget_clip(rig, fbx_path, clip):
     act.use_fake_user = True
     rig.animation_data.action = act
 
-    stats = dict(frames=[f0, f1], child_loc_max=0.0, scale_dev=0.0)
+    rig_unit, src_unit = rig.matrix_world.to_scale()[0], src.matrix_world.to_scale()[0]
+    leg_ratio = (rig_unit * sum(rig.data.bones[n].length for n in LEGS)) / \
+                (src_unit * sum(src.data.bones[n].length for n in LEGS))
+    unit = src_unit / rig_unit   # clip armature units -> rig armature units
+    stats = dict(frames=[f0, f1], child_loc_max=0.0, scale_dev=0.0, leg_ratio=round(leg_ratio, 4))
     for b in rig.data.bones:
-        C = rel_rest(b).inverted() @ rel_rest(src.data.bones[b.name])
+        R, S_ = rel_rest(b), rel_rest(src.data.bones[b.name])
+        S_.translation *= unit
+        C = R.inverted() @ S_
         ch = chans[b.name]
         locs, quats = [], []
         prev = None
         for f in frames:
-            l = Vector([ch['location'][i].evaluate(f) for i in range(3)]) if 'location' in ch else Vector()
+            l = unit * Vector([ch['location'][i].evaluate(f) for i in range(3)]) if 'location' in ch else Vector()
             q = Quaternion([ch['rotation_quaternion'][i].evaluate(f) for i in range(4)]) if 'rotation_quaternion' in ch else Quaternion()
             s = Vector([ch['scale'][i].evaluate(f) for i in range(3)]) if 'scale' in ch else Vector((1, 1, 1))
-            L, Q, S = (C @ Matrix.LocRotScale(l, q.normalized(), s)).decompose()
+            if b.parent is None:
+                M = S_ @ Matrix.LocRotScale(l, q.normalized(), s)   # armature space, as authored
+                M.translation *= leg_ratio
+                L, Q, S = (R.inverted() @ M).decompose()
+            else:
+                L, Q, S = (C @ Matrix.LocRotScale(l, q.normalized(), s)).decompose()
             if prev is not None:
                 Q.make_compatible(prev)
             prev = Q
@@ -114,13 +142,14 @@ def retarget_clip(rig, fbx_path, clip):
     return stats
 
 
-def retarget_all(rig):
+def retarget_all(rig, ch):
     if rig.animation_data is None:
         rig.animation_data_create()
+    anim_dir = os.path.join(SRC, ch["animations"])
     report = {}
-    for fn in sorted(os.listdir(ANIM_DIR)):
+    for fn in sorted(os.listdir(anim_dir)):
         if fn.endswith(".fbx"):
-            report[fn[:-4]] = retarget_clip(rig, os.path.join(ANIM_DIR, fn), fn[:-4])
+            report[fn[:-4]] = retarget_clip(rig, os.path.join(anim_dir, fn), fn[:-4])
     return report
 
 
@@ -138,33 +167,42 @@ def move_to(obj, coll):
     coll.objects.link(obj)
 
 
-def import_rig():
-    """theo-rigged.fbx -> armature "Theo" + mesh "Theo_Body" in collection "Theo"."""
+def import_rig(ch):
+    """The rigged FBX -> armature "Theo" + mesh "Theo_Body" in collection "Theo" (per name)."""
+    name = ch["name"]
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.fbx(filepath=RIGGED_FBX, automatic_bone_orientation=False, ignore_leaf_bones=True)
+    bpy.ops.import_scene.fbx(filepath=os.path.join(SRC, ch["rigged"]), automatic_bone_orientation=False,
+                             ignore_leaf_bones=True)
     new = [o for o in bpy.data.objects if o not in before]
     rig = next(o for o in new if o.type == 'ARMATURE')
     body = next(o for o in new if o.type == 'MESH')
-    body.name = body.data.name = "Theo_Body"
-    rig.name = "Theo"
-    rig.data.name = "Theo_Rig"
-    c = collection("Theo")
+    body.name = body.data.name = f"{name}_Body"
+    rig.name = name
+    rig.data.name = f"{name}_Rig"
+    c = collection(name)
     for o in new:
         move_to(o, c)
+    if abs(rig.scale[0] - 1) > 1e-6:
+        for o in bpy.context.selected_objects:
+            o.select_set(False)
+        rig.select_set(True)
+        body.select_set(True)
+        bpy.context.view_layer.objects.active = rig
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     # Mixamo's own T-pose action ("Armature|mixamo.com|Layer0") is not a clip.
     if rig.animation_data and rig.animation_data.action:
         bpy.data.actions.remove(rig.animation_data.action)
     return rig, body
 
 
-def import_reference_and_texture():
+def import_reference_and_texture(ch):
     """The static Tripo mesh (hidden, for comparison) and its original, untouched 4k JPEG.
 
-    Mixamo re-encodes the texture it embeds in theo-rigged.fbx (1.4 MB vs the original 3.9 MB at
-    the same 4096^2), so the base color comes from the Tripo GLB instead.
+    Mixamo re-encodes the texture it embeds in the rigged FBX (1.4 MB vs the original 3.9 MB at
+    the same 4096^2 for Theo), so the base color comes from the Tripo GLB instead.
     """
     before_o, before_i = set(bpy.data.objects), set(bpy.data.images)
-    bpy.ops.import_scene.gltf(filepath=TRIPO_GLB)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(SRC, ch["tripo"]))
     c = collection("Reference")
     c.hide_render = True
     for o in [o for o in bpy.data.objects if o not in before_o]:
@@ -173,7 +211,7 @@ def import_reference_and_texture():
             o.name = o.data.name = "Tripo_Reference"
     bpy.context.view_layer.layer_collection.children["Reference"].hide_viewport = True
     img = next(i for i in bpy.data.images if i not in before_i and i.size[0] == 4096)
-    img.name = "Theo_BaseColor_4k"
+    img.name = f"{ch['name']}_BaseColor_4k"
     img.colorspace_settings.name = "sRGB"
     img.alpha_mode = 'NONE'
     if img.packed_file is None:
@@ -181,11 +219,11 @@ def import_reference_and_texture():
     return img
 
 
-def build_material(body, img):
+def build_material(body, img, name):
     """Matte PBR: texture straight into base color (Tripo's 0.8 baseColorFactor and 0.5
     roughness darken it and add a plastic sheen), roughness 0.85, default F0 0.04 so the glTF
     export stays a plain MeshStandardMaterial (no KHR_materials_specular)."""
-    mat = bpy.data.materials.get("Theo_Matte") or bpy.data.materials.new("Theo_Matte")
+    mat = bpy.data.materials.get(f"{name}_Matte") or bpy.data.materials.new(f"{name}_Matte")
     mat.use_nodes = True
     nt = mat.node_tree
     nt.nodes.clear()
@@ -297,14 +335,14 @@ def reset_file():
                 coll.remove(block)
 
 
-def build(save_path=None):
+def build(ch, save_path=None):
     reset_file()
-    rig, body = import_rig()
-    img = import_reference_and_texture()
-    report = retarget_all(rig)
-    build_material(body, img)
+    rig, body = import_rig(ch)
+    img = import_reference_and_texture(ch)
+    report = retarget_all(rig, ch)
+    build_material(body, img, ch["name"])
     clean_weights(body)
-    clips = stash_clips(rig)
+    clips = stash_clips(rig, ch["active"])
     build_stage()
     bpy.ops.outliner.orphans_purge(do_recursive=True)
     if save_path:
@@ -312,8 +350,8 @@ def build(save_path=None):
     return dict(clips=clips, retarget=report)
 
 
-def export_glb(path, tex_size=4096, jpeg_quality=92):
-    """Export the "Theo" collection (armature + mesh + all clips) as a binary glTF.
+def export_glb(ch, path, tex_size=4096, jpeg_quality=92):
+    """Export the character's collection (armature + mesh + all clips) as a binary glTF.
 
     At 4096 the packed original JPEG is written through as is; smaller sizes export a resized
     copy, re-encoded as JPEG. Clips are exported one per NLA track, slid to start at t=0, so
@@ -321,17 +359,18 @@ def export_glb(path, tex_size=4096, jpeg_quality=92):
     """
     scene = bpy.context.scene
     vl = bpy.context.view_layer
-    vl.active_layer_collection = vl.layer_collection.children["Theo"]
-    mat = bpy.data.materials["Theo_Matte"]
+    name = ch["name"]
+    vl.active_layer_collection = vl.layer_collection.children[name]
+    mat = bpy.data.materials[f"{name}_Matte"]
     tex = next(n for n in mat.node_tree.nodes if n.type == 'TEX_IMAGE')
     orig = tex.image
     tmp = None
     if tex_size != orig.size[0]:
         tmp = orig.copy()
-        tmp.name = f"Theo_BaseColor_{tex_size // 1024}k"
+        tmp.name = f"{name}_BaseColor_{tex_size // 1024}k"
         tmp.scale(tex_size, tex_size)
         tex.image = tmp
-    rig = bpy.data.objects["Theo"]
+    rig = bpy.data.objects[name]
     active = rig.animation_data.action
     rig.animation_data.action = None   # export the rest pose as the bind pose, clips from NLA
     try:
@@ -353,5 +392,9 @@ def export_glb(path, tex_size=4096, jpeg_quality=92):
 
 
 if __name__ == "__main__":
-    build(os.path.join(REPO, "art", "theo.blend"))
-    export_glb(os.path.join(REPO, "public", "models", "theo.glb"))
+    ids = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else list(CHARACTERS)
+    for cid in ids:
+        ch = CHARACTERS[cid]
+        report = build(ch, os.path.join(REPO, "art", f"{cid}.blend"))
+        export_glb(ch, os.path.join(REPO, "public", "models", f"{cid}.glb"))
+        print(cid, report)

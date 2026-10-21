@@ -247,15 +247,22 @@ While it's open, the arrow keys drive the menu instead of walking (W / S still w
 
 ## Character stage
 
-`/stage.html` (http://localhost:5173/stage.html) lists the characters (Theo for now) and plays any of
+`/stage.html` (http://localhost:5173/stage.html) lists the characters (Theo, Maya and Marcus) and plays any of
 their animation clips on a lit floor: scrub, speed, loop / one-shot, crossfade, skeleton overlay,
 and "in place" to pin root-motion clips (marked ↦). Up/down steps through clips, space plays,
 left/right steps a frame. The state lives in the URL (`?char=theo&clip=Walking&speed=0.5&inplace=1`).
-Theo's clips are the Mixamo FBXs in `art/source/mixamo/animations`, baked onto his rig by
-`art/blender/build_theo.py` into `public/models/theo.glb`; re-run that after adding an FBX.
-A new Tripo character (a GLB in `art/source`) is readied for Mixamo's auto-rigger by
-`blender -b -P art/blender/prep_mixamo.py -- Maya Marcus`, which writes the upload FBX to
-`art/source/mixamo/<name>/<name>.fbx`.
+Each character's clips are Mixamo FBXs (`art/source/mixamo/animations` for Theo,
+`mixamo/<id>-animations` for the others), baked onto its rig by `art/blender/build_character.py`
+into `public/models/<id>.glb`; re-run it for that character after adding an FBX
+(`blender -b -P art/blender/build_character.py -- maya`).
+
+A new Tripo character (a GLB in `art/source`):
+
+1. `blender -b -P art/blender/prep_mixamo.py -- Maya` writes the upload FBX to
+   `art/source/mixamo/maya/maya.fbx`.
+2. Upload it to Mixamo, rig it, and download it With Skin in Original Pose to
+   `mixamo/rigged/maya.fbx`, and its clips Without Skin to `mixamo/maya-animations/`.
+3. Add it to `CHARACTERS` in `build_character.py` and `src/stage.ts`, then build it.
 
 ## Why this tech stack
 
@@ -347,9 +354,9 @@ src/
 art/
   source/        Tripo model, Mixamo rig and clips (inputs)
   blender/prep_mixamo.py  Tripo GLB -> FBX for Mixamo's auto-rigger (welds UV seams)
-  blender/build_theo.py  builds theo.blend (retargeted clips, weights, matte material) and
-                 exports public/models/theo.glb / theo-2k.glb
-  theo.blend
+  blender/build_character.py  builds <id>.blend (retargeted clips, weights, matte material)
+                 and exports public/models/<id>.glb (theo-2k.glb: export_glb at tex_size 2048)
+  theo.blend, maya.blend, marcus.blend
 public/audio/
   vo/            Day Zero voice-over clips (generated)
   sfx/           recorded effects (Biscuit)
