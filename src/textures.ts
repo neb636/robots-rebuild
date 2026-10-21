@@ -555,6 +555,95 @@ const GEN: Record<string, () => PBRSet> = {
     c = mixc(c, hex('#0e0d0c'), gator * 0.9);
     return [c[0], c[1], c[2], n * 0.3 + g * 0.2 + agg * 0.1 - gator * 0.4 + seal * 0.05 + patch * 0.08, 0.9 - n * 0.1 - seal * 0.3 - oil * 0.2];
   }),
+  /** Old subway tile (3×6 inch, running bond) after two years of leaks: yellowed glaze a shade apart
+   *  tile to tile, crazing, chipped corners and cracks, a few tiles gone to the mortar bed, grime in
+   *  the grout, rust and mildew blooms. A metre to the repeat. Own colours. */
+  subwaytile: () => build(512, 3.5, (u, v) => {
+    const cols = 6, rows = 13;
+    const ry = v * rows, row = Math.floor(ry), fy = ry - row;
+    const rx = u * cols + (row % 2) * 0.5, cr = Math.floor(rx), fx = rx - cr, col = ((cr % cols) + cols) % cols;
+    const id = cellHash(col, row, 41), id2 = cellHash(col, row, 42), id3 = cellHash(col, row, 43);
+    // distance to the tile's edge in mm (a tile is 167 × 77 mm), and to its chipped corner
+    const ex = Math.min(fx, 1 - fx) * 167, ey = Math.min(fy, 1 - fy) * 77, e = Math.min(ex, ey);
+    const grout = sstep(1.0, 2.4, e), bevel = sstep(2.4, 7, e);
+    const missing = id < 0.012 ? 1 : 0;
+    const kx = (id3 < 0.5 ? fx : 1 - fx) * 167, ky = (id3 % 0.5 < 0.25 ? fy : 1 - fy) * 77;
+    const chip = id2 < 0.14 ? sstep(13, 9, Math.hypot(kx, ky) + (vnoise(u * 300, v * 300, 300, 44) - 0.5) * 9) * grout : 0;
+    const wob = (vnoise(u * 90, v * 90, 90, 45) - 0.5) * 0.06;
+    const crack = id2 > 0.9 ? (1 - sstep(0.004, 0.012, Math.abs((fx - 0.5) * (id3 - 0.5) * 2 + (fy - 0.5) + wob))) * grout : 0;
+    const [c1, c2] = cellular(u, v, 70, 46);
+    const craze = (1 - sstep(0.0, 0.03, c2 - c1)) * sstep(0.5, 0.75, fbm(u, v, 4, 3, 47));
+    const stain = sstep(0.5, 0.85, fbm(u, v, 3, 4, 48)), rust = sstep(0.68, 0.85, fbm(u, v, 5, 3, 49));
+    const mildew = sstep(0.6, 0.8, fbm(u, v, 6, 3, 50));
+    let c = mixc(hex('#dcd6c4'), hex('#c4b894'), id * 0.7 + stain * 0.3);
+    if (id > 0.93) c = hex('#e6e5de'); // a replacement tile, whiter than the rest
+    c = mixc(c, mixc(c, hex('#8a8068'), 0.5), (1 - bevel) * 0.35);
+    c = mixc(c, hex('#8a6a44'), rust * 0.35);
+    c = mixc(c, hex('#7a8064'), mildew * 0.3);
+    c = mixc(c, hex('#6a6050'), craze * 0.35 + crack * 0.8);
+    c = mixc(c, hex('#a8a090'), chip * 0.85);
+    const comb = vnoise2(u * 6, v * 220, 6, 220, 51);
+    const bed = mixc(hex('#6a655a'), hex('#8a8476'), comb * 0.6 + fbm(u, v, 20, 3, 52) * 0.4);
+    c = mixc(mixc(hex('#3a3630'), hex('#58524a'), fbm(u, v, 30, 3, 53)), c, grout);
+    if (missing) c = bed;
+    const height = missing ? 0.05 + comb * 0.08 : grout * (0.55 + bevel * 0.25) - chip * 0.3 - crack * 0.2;
+    const rough = missing ? 0.95 : lerp(0.95, 0.3 + stain * 0.25 + craze * 0.2 + chip * 0.5 + mildew * 0.2, grout);
+    return [c[0], c[1], c[2], height, rough];
+  }),
+  /** Cast-in-place tunnel concrete: board-form courses, form-tie holes, a blotchy cure, the water that
+   *  has run down it (dark streaks, white efflorescence where it dried), spalls. Two metres to the
+   *  repeat. Own colours (tint it lightly). */
+  tunnelcrete: () => build(512, 2.6, (u, v) => {
+    const n = fbm(u, v, 4, 5, 151), g = vnoise(u * 260, v * 260, 260, 152);
+    const bv = v * 8, board = Math.floor(bv), fb = bv - board;
+    const seam = 1 - sstep(0.0, 0.02, Math.min(fb, 1 - fb) + (vnoise(u * 80, v * 80, 80, 153) - 0.5) * 0.01);
+    const tone = cellHash(board, 0, 154);
+    const tx = (u * 4) % 1, ty = (v * 4 + 0.5) % 1;
+    const tie = sstep(0.016, 0.01, Math.hypot((tx - 0.5) * 0.5, (ty - 0.5) * 0.5));
+    const streak = vnoise2(u * 48, v * 2, 48, 2, 155) * 0.7 + vnoise2(u * 140, v * 4, 140, 4, 156) * 0.3;
+    const wet = sstep(0.55, 0.8, streak) * sstep(0.3, 0.6, fbm(u, v, 3, 3, 157));
+    const eff = sstep(0.62, 0.82, vnoise2(u * 30, v * 3, 30, 3, 158)) * sstep(0.5, 0.7, fbm(u, v, 6, 3, 159));
+    const [s1, , sid] = cellular(u, v, 6, 160);
+    const spall = sid < 0.07 ? sstep(0.26, 0.14, s1 + (fbm(u, v, 12, 4, 161) - 0.5) * 0.3) : 0;
+    const rust = spall * sstep(0.55, 0.7, fbm(u, v, 30, 3, 162));
+    let c = mixc(hex('#8e897e'), hex('#b2ac9e'), n * 0.6 + tone * 0.25 + g * 0.15);
+    c = mixc(c, hex('#5e5a50'), wet * 0.55);
+    c = mixc(c, hex('#bab6aa'), eff * 0.45);
+    c = mixc(c, hex('#7c766a'), spall * 0.6);
+    c = mixc(c, hex('#6e3e20'), rust * 0.5);
+    c = mixc(c, hex('#2e2c28'), seam * 0.5 + tie * 0.85);
+    const height = n * 0.3 + g * 0.08 - seam * 0.12 - tie * 0.4 - spall * 0.35 + eff * 0.04;
+    return [c[0], c[1], c[2], height, 0.9 - wet * 0.3 + spall * 0.05];
+  }),
+  /** Track ballast: crushed granite, angular and dusty, oil-dark in the gaps. Two metres to the repeat. */
+  ballast: () => build(512, 5, (u, v) => {
+    const [d1, d2, id] = cellular(u, v, 26, 171);
+    const [e1, e2, id2] = cellular(u, v, 61, 172);
+    const big = sstep(0.0, 0.1, d2 - d1), small = sstep(0.0, 0.1, e2 - e1);
+    const dust = fbm(u, v, 6, 4, 173), oil = sstep(0.6, 0.8, fbm(u, v, 3, 4, 174));
+    const stone = Math.max(big * (1 - d1 * 0.9), small * (1 - e1) * 0.55);
+    const tone = big > 0.5 ? id : id2;
+    let c = mixc(hex('#58544e'), hex('#8e897e'), tone * 0.8 + dust * 0.2);
+    c = granite(c, u, v, 220, 175);
+    c = mixc(c, hex('#6a4a30'), sstep(0.75, 0.9, fbm(u, v, 8, 3, 176)) * 0.4);
+    c = mixc(c, hex('#1c1a18'), oil * 0.55);
+    c = mixc(hex('#1a1816'), c, sstep(0.05, 0.3, stone));
+    return [c[0], c[1], c[2], stone, 0.92 - oil * 0.25];
+  }),
+  /** Fluted stainless car siding: vertical ribs, brushed, two years of tunnel dust and the rust that
+   *  ran down it. Two metres to the repeat. Near-white (tint it). */
+  fluted: () => build(512, 2.2, (u, v) => {
+    const f = u * 40, ff = f - Math.floor(f);
+    const rib = 0.5 - 0.5 * Math.cos(ff * Math.PI * 2);
+    const brush = vnoise2(u * 600, v * 6, 600, 6, 181);
+    const dust = fbm(u, v, 5, 4, 182);
+    const streak = sstep(0.55, 0.85, vnoise2(u * 60, v * 3, 60, 3, 183)) * sstep(0.35, 0.65, dust);
+    const rust = sstep(0.72, 0.9, vnoise2(u * 26, v * 2, 26, 2, 184)) * sstep(0.5, 0.7, fbm(u, v, 4, 3, 185));
+    let c = mixc(hex('#c8cacb'), hex('#e4e5e4'), brush * 0.5 + rib * 0.3);
+    c = mixc(c, hex('#7a746a'), dust * 0.35 + streak * 0.45);
+    c = mixc(c, hex('#7a4424'), rust * 0.6);
+    return [c[0], c[1], c[2], rib * 0.6 + brush * 0.05, 0.32 + brush * 0.1 + dust * 0.25 + streak * 0.25 + rust * 0.3];
+  }),
 };
 
 export function pbr(name: string): PBRSet {
@@ -564,7 +653,9 @@ export function pbr(name: string): PBRSet {
 }
 /** sets only the harbor district uses: generated on demand there, never at the other areas' boot */
 const HARBOR_ONLY = ['concrete', 'setts', 'pavers', 'pavebrick', 'turf', 'tar'];
-export const PBR_NAMES = Object.keys(GEN).filter((n) => !HARBOR_ONLY.includes(n));
+/** and the tunnels' (their loader warms them) */
+export const TUNNEL_PBR = ['subwaytile', 'tunnelcrete', 'ballast', 'fluted'];
+export const PBR_NAMES = Object.keys(GEN).filter((n) => !HARBOR_ONLY.includes(n) && !TUNNEL_PBR.includes(n));
 
 // ---------------------------------------------------------------------------------- canvas textures
 function canvasTex(w: number, h: number, draw: (c: CanvasRenderingContext2D) => void, srgb = true) {

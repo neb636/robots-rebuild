@@ -232,8 +232,16 @@ station spawn. About five minutes at a walk:
 
 Marcus's flashlight is the main light: a SpotLight carried in his hand, and also the fog's
 volumetric beam (`Built.beam`, which draws it without the compliance scan a drone's searchlight
-sets off). Otherwise there are a few emergency lamps that never went out. Every mood is dark
-underground except Partly Sunny, which turns on flat work lights so the build can be seen as built.
+sets off). Underground, Ashfall, Curfew and Grey Pall all give way to the tunnel's own low-light
+mood: a cold, damp murk (teal in the shadows, warm in the lamps) that lets you make out the walls
+past the flashlight. Grey daylight falls through street grates and the collapse over Downtown
+Crossing, with dust turning in the beams and plants growing where it lands, and a few emergency
+lamps and fluorescent fittings still work. Partly Sunny turns on flat work lights so the build can be
+seen as built. The tunnel's dressing (`dressing.ts`) is in the spirit of an abandoned-subway game:
+world-space grime that climbs the walls from the wet floor and runs down from the ceiling, grimy
+subway tile with missing and chipped tiles, cast concrete, ballast, fittings hanging by one chain,
+sagging cable, standing water, dropped luggage and paper, and a train of fluted stainless with dirty
+and smashed windows, faded ad cards and graffiti.
 Marcus and Maya follow the walk's route (`layout.ts`) a few steps behind, off to one side where the
 floor is wide enough. They're the Mixamo models from the character stage (`src/mixamo.ts`: the 4k
 GLBs on High, `maya-2k.glb` / `marcus-2k.glb` on Low), their walks and runs phase-locked and played

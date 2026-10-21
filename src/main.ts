@@ -6,7 +6,7 @@ import '@fontsource/cormorant-garamond/700.css';
 import './style.css';
 import './shaderpatches';
 import * as THREE from 'three';
-import { PBR_NAMES, pbr, setAnisotropy } from './textures';
+import { PBR_NAMES, TUNNEL_PBR, pbr, setAnisotropy } from './textures';
 import { buildScene, MOODS, Mood, Built, type AreaName, type StoryHost } from './scene';
 import { Post, MAX_LIGHTS } from './post';
 import { blobShadow, rim } from './character';
@@ -85,7 +85,7 @@ async function boot() {
     : outdoors
     ? ['Weathering brick…', 'Laying flagstones…', 'Growing moss…', 'Rusting the cars…', 'Knitting a sweater…', 'Lighting the lamps…']
     : ['Sanding the floorboards…', 'Folding sweaters…', 'Watering Gerald…', 'Brewing coffee…', 'Fluffing the cat…', 'Opening the blinds…'];
-  const sets = harbor ? harbor.HARBOR_PBR : PBR_NAMES;
+  const sets = harbor ? harbor.HARBOR_PBR : tunnel ? [...PBR_NAMES, ...TUNNEL_PBR] : PBR_NAMES;
   for (let i = 0; i < sets.length; i++) { setLoad((i / sets.length) * 0.7, msgs[i % msgs.length]); await nextFrame(); pbr(sets[i]); }
   setLoad(0.75, harbor ? 'Building the waterfront…' : tunnel ? 'Digging under the city…' : outdoors ? 'Building the street…' : 'Making the bed (badly)…'); await nextFrame();
   const built = harbor ? await harbor.buildHarbor(state.quality, (p, msg) => setLoad(0.75 + p * 0.1, msg))

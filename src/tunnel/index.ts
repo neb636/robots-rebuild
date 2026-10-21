@@ -2,12 +2,14 @@
 // south to Downtown Crossing past a train stopped since Day Zero, a drowned platform, the transfer
 // passage up to the Orange Line, and north to State's gate under the harbor district.
 //
-// Dark by design: Marcus's flashlight is the light, with a few emergency lamps that never went
-// out. The Partly Sunny mood (QA) turns the work lights on so the build can be seen as built.
+// Low light by design: Marcus's flashlight is the light to walk by, with daylight falling through
+// the street grates, a few lamps and fittings that never went out, and a cold murk that lets you
+// make out the walls between them. The Partly Sunny mood (QA) turns the work lights on so the build
+// can be seen as built.
 import * as THREE from 'three';
 import { Batch, wbox, wplane } from '../batch';
 import { pbr } from '../textures';
-import { pbrMat, glowMat, flickerUpdate, stationSign, type FogLight } from '../props';
+import { pbrMat, glowMat, flickerUpdate, stationSign, rubble, trashBags, type FogLight } from '../props';
 import { graffiti, poster, type AABB } from '../buildings';
 import { skyDome } from '../sky';
 import { rng } from '../noise';
@@ -18,26 +20,28 @@ import { Companion, Flashlight } from './companion';
 import { loadMixamo, MARCUS, MAYA } from '../mixamo';
 import { TunnelWalk } from './walk';
 import { buildTrain } from './train';
+import { tmat, lightShaft, fitting, cableRun, looseCable, puddle, papers, dropped, overgrowth, type Shaft } from './dressing';
 import {
   RED, ORANGE, PARK, DTX, TRANSFER, ODTX, STATE, ESC, WATER, PIPE,
   floorAt, airFloor, cameraBlock, Route, ROUTE_PTS, SPOTS,
 } from './layout';
 
 // ------------------------------------------------------------------ moods
-// Underground there's no sky and no weather: dark in every mood but Partly Sunny, which is the QA
-// view (work lights on, flat and plain).
-const DARK: Mood = {
-  name: 'Tunnel', blurb: 'Under the city.',
+// Underground there's no sky and no weather. Ashfall, Curfew and Grey Pall all bring the same low
+// light down here: a cold, damp murk (teal in the shadows, warm in the lamps) just bright enough to
+// make out the tunnel past the flashlight. Partly Sunny is the QA view (work lights on, flat and plain).
+const LOW: Mood = {
+  name: 'Tunnel (low light)', blurb: 'Under the city: grey daylight through the grates, a few lamps that never went out.',
   sky: { zenith: '#000000', horizon: '#000000', glow: '#000000', glowDir: [0, 1, 0], glowAmt: 0, cloud: '#000000', cloudLit: '#000000', cloudAmt: 0, moon: 0, moonDir: [0, 1, 0], stars: 0 },
-  fog: { color: '#030405', sun: '#000000', sunDir: [0, 1, 0], density: 0.05, falloff: 0, base: 0, noise: 0.7, halo: 1.2, skyDist: 60 },
-  grade: { exposure: 1.45, tone: 'agx', lift: [0.0, 0.004, 0.01], gamma: [1.0, 1.0, 1.02], gain: [1.02, 1.0, 0.98], sat: 1.0, contrast: 1.1, shadowTint: '#2a3a5a', highlightTint: '#ffd8a8', split: 0.4, bloom: 0.9, bloomThreshold: 0.8, vignette: 0.65, grain: 0.07 },
+  fog: { color: '#1e2829', sun: '#000000', sunDir: [0, 1, 0], density: 0.032, falloff: 0, base: 0, noise: 0.8, halo: 1.25, skyDist: 60 },
+  grade: { exposure: 1.8, tone: 'agx', lift: [0.004, 0.012, 0.014], gamma: [1.0, 1.0, 1.0], gain: [1.03, 1.0, 0.96], sat: 0.9, contrast: 1.12, shadowTint: '#28484a', highlightTint: '#ffd6a0', split: 0.5, bloom: 0.95, bloomThreshold: 0.75, vignette: 0.55, grain: 0.06 },
   moon: { color: '#000000', intensity: 0, dir: [0.2, 1, 0.1] },
-  hemi: { sky: '#3a4658', ground: '#0a0a0c', intensity: 0.24 },
-  env: 0.05, lamps: 1, fill: 0.5, rim: { color: '#8aa0c8', strength: 0.14 }, ash: 0, rain: false, wet: false, fogBank: '#000000',
+  hemi: { sky: '#788a88', ground: '#3a3830', intensity: 4 },
+  env: 0.1, lamps: 1.2, fill: 0.7, rim: { color: '#9ac0c0', strength: 0.15 }, ash: 0, rain: false, wet: false, fogBank: '#000000',
 };
 const WORK: Mood = {
   name: 'Tunnel (work lights)', blurb: 'Under the city, with the lights on.',
-  sky: DARK.sky,
+  sky: LOW.sky,
   fog: { color: '#6c7074', sun: '#000000', sunDir: [0, 1, 0], density: 0.01, falloff: 0, base: 0, noise: 0.4, halo: 0.4, skyDist: 60 },
   grade: { exposure: 1.05, tone: 'neutral', lift: [0.01, 0.01, 0.012], gamma: [1.0, 1.0, 1.0], gain: [1.02, 1.0, 0.98], sat: 1.05, contrast: 1.04, shadowTint: '#5a6a8a', highlightTint: '#fff0d8', split: 0.2, bloom: 0.5, bloomThreshold: 0.95, vignette: 0.2, grain: 0.02 },
   moon: { color: '#f4f2ec', intensity: 0.7, dir: [0.25, 1, 0.15] },
@@ -59,24 +63,28 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
   let gateLock: THREE.Mesh | null = null;
 
   // ------------------------------------------------------------------ materials
-  const concrete = pbrMat('concrete', '#8e8c86', { normalScale: 1.2 });
-  const deck = pbrMat('concrete', '#a8a49c');
-  // (matte: glazed tile under a moving point of light glitters)
-  const tile = pbrMat('tile', '#d8d4c8', { roughnessMap: null, roughness: 0.6, normalScale: 0.6 });
-  const tileDirty = pbrMat('tile', '#a8a498', { roughnessMap: null, roughness: 0.7, normalScale: 0.6 });
-  const ballast = pbrMat('dirt', '#5a5650');
-  const tie = pbrMat('wood', '#4a3a2e');
-  const rail = pbrMat('metal', '#6a625a', { metalness: 0.7, roughness: 0.4 });
-  const steel = pbrMat('metal', '#3e4a52', { metalness: 0.5 });
-  const pipeM = pbrMat('metal', '#6a3a2a', { metalness: 0.4 });
-  const edge = pbrMat('stone', '#c8a830');
+  // (all with the tunnel's grime over them: see dressing.ts)
+  const concrete = tmat('tunnelcrete', '#e8e4dc', { normalScale: 1.3 });
+  const deck = tmat('concrete', '#d0ccc2');
+  const tile = tmat('subwaytile', '#f0ece4', { normalScale: 0.8 });
+  const tileDirty = tmat('subwaytile', '#b8b0a0', { normalScale: 0.8, grime: 1.3 });
+  const ballast = tmat('ballast', '#e0dcd4', { grime: 0.6 });
+  const tie = tmat('wood', '#3e3228', { grime: 0.6 });
+  const rail = tmat('metal', '#6a625a', { metalness: 0.7, roughness: 0.4, grime: 0 });
+  const steel = tmat('metal', '#3e4a52', { metalness: 0.5, grime: 0.7 });
+  const pipeM = tmat('metal', '#6a3a2a', { metalness: 0.4, grime: 0.7 });
+  const edge = tmat('stone', '#c8a830', { grime: 0.5 });
   const voidM = new THREE.MeshBasicMaterial({ color: '#000000' });
-  const granite = pbrMat('ashlar', '#9a968e');
+  const granite = tmat('ashlar', '#9a968e');
+  const cable = new THREE.MeshStandardMaterial({ color: '#141414', roughness: 0.55 });
+  const trim = { red: tmat('subwaytile', '#b8483a', { normalScale: 0.8 }), orange: tmat('subwaytile', '#d08a3a', { normalScale: 0.8 }) };
+  const junk = { dark: tmat('metal', '#1e1e1e', { grime: 0 }), cloth: tmat('canvas', '#4a4a52', { grime: 0 }), metal: tmat('metal', '#5a6058', { metalness: 0.5, side: THREE.DoubleSide, grime: 0 }) };
+  const shafts: Shaft[] = [];
 
   /** a wall in the plane x = at (or z = at), from u0..u1 along it and y0..y1 up it, with rectangular holes */
   const wall = (axis: 'x' | 'z', at: number, u0: number, u1: number, y0: number, y1: number, mat: THREE.Material, holes: [number, number, number, number][] = [], t = 0.3) => {
-    // (subway tile is small: its texture repeats every half metre)
-    const uv = mat === tile || mat === tileDirty ? 2 : 0.5;
+    // (subway tile is small: its texture repeats every metre, concrete every two)
+    const uv = mat === tile || mat === tileDirty ? 1 : 0.5;
     const cuts = [u0, u1, ...holes.flatMap((h) => [h[0], h[1]])].filter((u) => u >= u0 && u <= u1).sort((a, c) => a - c);
     for (let i = 0; i < cuts.length - 1; i++) {
       const a = cuts[i], c = cuts[i + 1];
@@ -146,6 +154,10 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
     lights.push(l);
     return l;
   };
+  /** a course of coloured tile along a wall at x = at (facing ±x), the line's colour */
+  const band = (at: number, face: number, z0: number, z1: number, y: number, mat: THREE.Material) =>
+    b.add(wbox(0.03, 0.2, z1 - z0, 1), mat, at + face * 0.012, y, (z0 + z1) / 2, 0, 0, 0, 1, 1, 1, false);
+  const shaft = (o: Parameters<typeof lightShaft>[3]) => shafts.push(lightShaft(b, root, lights, { frame: steel, ...o }));
 
   // ------------------------------------------------------------------ Park Street (Red Line)
   {
@@ -179,13 +191,28 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
     });
     lamp(back - 0.2, 3.7, -14, '#ffb46a', 4.5, 12, 0.15);
     lamp(5.6, RED.deck + 4.6, z1 + 6.6, '#ffc890', 4, 9, 0.05, 2);
+    // two years on: the line's tile course, a street grate letting the day in (and what's grown under
+    // it), fittings hanging off the ceiling, cable, water standing on the platform, what got dropped
+    band(back, -1, z0, z1, RED.deck + 2.45, trim.red);
+    band(RED.wallL, 1, z0, z1, RED.deck + 2.45, trim.red);
+    shaft({ top: v(5.2, ceil, -20.5), bot: v(5.9, RED.deck, -22.2), w: [1.4, 0.9], grate: true, intensity: 78 });
+    overgrowth(root, { x: 6.2, y: RED.deck, z: -22.2, r: 1.6, seed: 11, wall: { at: back, facing: -1, z0: -24.5, z1: -19.5, y0: RED.deck, y1: RED.deck + 2.6 }, hang: [v(4.6, ceil, -20.2), v(5.7, ceil, -20.9), v(5.0, ceil, -21)] });
+    ([[-26, 'dead'], [-20, 'hanging'], [-14, 'dead'], [-8, 'lit'], [-2, 'hanging'], [3, 'dead']] as const).forEach(([z, st], i) =>
+      fitting(b, root, lights, 3.4, ceil, z, st, { housing: steel, seed: 20 + i, intensity: 3.5 }));
+    cableRun(b, cable, RED.wallL + 0.12, ceil - 0.6, z0, z1 + 8, { seed: 3, drop: 0.25 });
+    cableRun(b, cable, RED.wallL + 0.14, ceil - 0.85, z0, z1 + 8, { seed: 4, sag: 0.12 });
+    puddle(b, 4.4, RED.deck, -12, 1.4, 0.8, 1); puddle(b, 6.6, RED.deck, -21.6, 1.1, 1.5, 2); puddle(b, 3.1, RED.deck, 0.5, 0.9, 0.6, 3);
+    puddle(b, RED.track, 0, -9, 0.5, 2.2, 4);
+    papers(b, 5, RED.deck, -6, 2.2, 14, 5); papers(b, 6.5, RED.deck, -16, 1.6, 9, 6);
+    dropped(b, 'case', 7.1, RED.deck, -9.8, 0.4, junk); dropped(b, 'bin', 6.9, RED.deck, 0.2, 2.2, junk); dropped(b, 'bag', 3.2, RED.deck, -27, 1, junk);
+    b.setBase(0, RED.deck, 0); trashBags(b, 7.3, -28.6, 3, 7); b.resetBase();
   }
 
   // ------------------------------------------------------------------ the Red Line tunnel, and the train in it
   {
     const z0 = DTX.z1, z1 = PARK.z0;
     slab(RED.wallL, RED.edge, z0, z1, 0, ballast);
-    slab(RED.edge, RED.wallR, z0, z1, RED.deck, concrete, RED.deck);
+    slab(RED.edge, RED.wallR, z0, z1, RED.deck, deck, RED.deck);
     wall('x', RED.wallL - 0.15, z0, z1, 0, RED.ceil, concrete);
     wall('x', RED.wallR + 0.15, z0, z1, 0, RED.ceil, concrete);
     ceiling(RED.wallL, RED.wallR, z0, z1, RED.ceil);
@@ -211,7 +238,8 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
       graffiti(b, zz(-76), 2.4, "DON'T LOOK AT THEM", '#d8d0c0', 3.2);
       graffiti(b, zz(-118), 1.8, 'WE ARE STILL HERE', '#c8b070', 3);
     });
-    lamp(RED.wallR - 0.2, 3.3, -44, '#ff3a2a', 2.6, 9, 0.35);
+    // (its haze kept faint, or the whole tunnel glows red)
+    lamp(RED.wallR - 0.2, 3.3, -44, '#ff3a2a', 1.4, 7, 0.35).base = 0.2;
     // a dying lamp over the pipe junction: just enough to find it by
     lamp(RED.wallR - 0.2, 3.4, PIPE.z - 1.2, '#ffb060', 1.4, 6, 0.6, 0);
     const tr = buildTrain(b, root);
@@ -222,6 +250,18 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
       lights.push(l);
     });
     phoneAt.copy(tr.phone);
+    // vent shafts up to the street, the cable trays sagging, water in the bed past the train
+    shaft({ top: v(0.6, RED.ceil, -38), bot: v(1.6, 0.4, -40), w: [1.1, 1.1], grate: true, intensity: 54, strength: 0.85 });
+    overgrowth(root, { x: 2.5, y: RED.deck, z: -40, r: 0.9, seed: 31, wall: { at: RED.wallR, facing: -1, z0: -42, z1: -37.5, y0: RED.deck, y1: RED.deck + 2.4 } });
+    shaft({ top: v(-0.6, RED.ceil, -111), bot: v(-0.1, WATER.y, -112.8), w: [1.1, 1.1], grate: true, intensity: 48, strength: 0.8 });
+    cableRun(b, cable, RED.wallL + 0.12, 3.9, z0, z1, { seed: 8, drop: 0.12, span: 3 });
+    cableRun(b, cable, RED.wallL + 0.14, 3.6, z0, z1, { seed: 9, sag: 0.1, span: 3 });
+    cableRun(b, cable, RED.wallR - 0.14, 3.95, z0, z1, { seed: 10, sag: 0.14, span: 3, drop: 0.08 });
+    for (const [z, len] of [[-47, 1.3], [-58, 0.9], [-109, 1.6], [-119, 1.1]] as const) looseCable(b, cable, 0.5 + (z % 3) * 0.4, RED.ceil, z, len, -z);
+    for (const [z, rx, rz] of [[-34, 0.5, 1.6], [-52, 0.4, 2.6], [-60, 0.55, 1.2]] as const) puddle(b, RED.track, 0.02, z, rx, rz, -z);
+    for (const z of [-48, -70, -101, -120]) puddle(b, 2.45, RED.deck, z, 0.55, 1 + (-z % 5) * 0.2, z);
+    papers(b, 2.45, RED.deck, -56, 1.2, 6, 12);
+    rubble(b, RED.track + 1.2, -110.5, 0.8, 9, 13, [concrete, granite]);
   }
 
   // ------------------------------------------------------------------ Downtown Crossing (Red Line): drowned
@@ -258,6 +298,24 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
     colliders.push({ x0: back - 0.7, z0: -157.4, x1: back, z1: -156.0 });
     lamp(back - 1.05, RED.deck + 1.8, -155.6, '#ffd49a', 3.5, 9, 0.05, 0);
     onWall(back, -1, (zz) => graffiti(b, zz(-143), 2.0, 'MAYA WAS HERE', '#3a8ac0', 2.4));
+    band(back, -1, z0, z1, RED.deck + 2.45, trim.red);
+    band(RED.wallL, 1, z0, z1, RED.deck + 2.45, trim.red);
+    // where the street came through: the day pouring in over the drowned platform, rebar hanging out
+    // of the break, the slab that fell, and green all over what the light reaches
+    shaft({ top: v(2.4, ceil, -146), bot: v(4.4, RED.deck, -148.4), w: [2.4, 3.2], spread: 1.25, intensity: 165, strength: 1.35, dust: 1.6 });
+    for (let i = 0; i < 9; i++) {
+      const zz = -147.6 + i * 0.4, xx = i % 2 ? 1.2 : 3.6;
+      b.add(new THREE.CylinderGeometry(0.012, 0.012, 0.5 + (i % 3) * 0.35, 5), pipeM, xx, ceil - 0.25 - (i % 3) * 0.17, zz, (i % 2 ? 0.4 : -0.4), 0, (i % 3 - 1) * 0.3);
+    }
+    for (let i = 0; i < 6; i++) b.add(wbox(1.1 - (i % 3) * 0.25, 0.22, 0.9), concrete, 2.4 + (i % 3 - 1) * 0.7, WATER.y + 0.04 + (i % 2) * 0.12, -146 - (i - 2.5) * 0.6, 0.3 * (i % 2 ? 1 : -1), i, 0.2);
+    b.setBase(0, RED.deck, 0); rubble(b, 5.8, -147.5, 1.1, 14, 21, [concrete, deck, granite]); b.resetBase();
+    overgrowth(root, { x: 6.3, y: RED.deck, z: -147.5, r: 1.8, seed: 41, wall: { at: back, facing: -1, z0: -151, z1: -143, y0: RED.deck, y1: ceil - 0.2 }, hang: [v(1.4, ceil, -147.4), v(2.2, ceil, -144.6), v(3.4, ceil, -147.6), v(3.6, ceil, -145), v(1.3, ceil, -145.8)] });
+    ([[-128, 'dead'], [-134, 'hanging'], [-140, 'lit'], [-152, 'dead'], [-158, 'hanging']] as const).forEach(([z, st], i) =>
+      fitting(b, root, lights, 4.8, ceil, z, st, { housing: steel, seed: 50 + i, intensity: 3 }));
+    cableRun(b, cable, RED.wallL + 0.12, ceil - 0.6, z0 - 8, z1, { seed: 14, drop: 0.3 });
+    puddle(b, 6.6, RED.deck, -133, 0.9, 1.6, 15); puddle(b, 7, RED.deck, -152, 0.7, 1.4, 16);
+    papers(b, 6.4, RED.deck, -138, 1.4, 10, 17);
+    dropped(b, 'case', 7.4, RED.deck, -134.5, 1.2, junk); dropped(b, 'bag', 6.1, RED.deck, -160.5, 2.4, junk);
   }
   const water = new THREE.Mesh(wplane(DTX.dry - RED.wallL, WATER.z1 - WATER.z0, 0.25), waterMat());
   water.rotation.x = -Math.PI / 2;
@@ -277,6 +335,9 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
     // handrails up the sides
     for (const z of [z0 + 0.12, z1 - 0.12]) b.add(new THREE.CylinderGeometry(0.03, 0.03, Math.hypot(stair1 - stair0, 2), 8).rotateZ(Math.PI / 2 - Math.atan2(2, stair1 - stair0)), steel, (stair0 + stair1) / 2, RED.deck + 1.0 + 1, z);
     lamp(15, ceil - 0.2, (z0 + z1) / 2, '#d8f0ff', 3.5, 12, 0.55);
+    fitting(b, root, lights, 17.5, ceil, (z0 + z1) / 2, 'hanging', { housing: steel, alongX: true, seed: 61 });
+    papers(b, 9.5, RED.deck, (z0 + z1) / 2, 1.2, 7, 18);
+    puddle(b, 18.5, ORANGE.deck, (z0 + z1) / 2 + 0.6, 0.8, 0.6, 19);
   }
 
   // ------------------------------------------------------------------ the Orange Line: Downtown Crossing, the tunnel, State
@@ -305,11 +366,27 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
       onWall(back, 1, (zz) => poster(b, zz(-250), ORANGE.deck + 1.4, 'BE WELL', 'Conversion is care'));
     }
     lamp(back + 0.2, ORANGE.deck + 2.6, room === ODTX ? -172 : -255, room === ODTX ? '#ff3a2a' : '#ffb46a', 3.2, 11, room === ODTX ? 0.3 : 0.12);
+    band(back, 1, z0, z1, ORANGE.deck + 2.9, trim.orange);
+    band(ORANGE.wallR, -1, z0, z1, ORANGE.deck + 2.9, trim.orange);
+    const ks = room === ODTX ? 70 : 80;
+    (room === ODTX ? [[-182, 'hanging'], [-176, 'dead'], [-170, 'dead'], [-164, 'lit'], [-158, 'hanging'], [-152, 'dead']] as const
+      : [[-272, 'dead'], [-260, 'lit'], [-254, 'hanging'], [-248, 'lit']] as const).forEach(([z, st], i) =>
+      fitting(b, root, lights, 23.2, ceil, z, st, { housing: steel, seed: ks + i, drop: 0.9, intensity: 3.5 }));
+    cableRun(b, cable, ORANGE.wallR - 0.12, ceil - 1.2, z0, z1, { seed: ks, drop: 0.2 });
+    if (room === ODTX) {
+      shaft({ top: v(23, ceil, -175.5), bot: v(23.9, ORANGE.deck, -177.6), w: [1.5, 1.0], grate: true, intensity: 90 });
+      overgrowth(root, { x: 21.2, y: ORANGE.deck, z: -177.5, r: 1.5, seed: 71, wall: { at: back, facing: 1, z0: -180, z1: -174.5, y0: ORANGE.deck, y1: ORANGE.deck + 3.2 }, hang: [v(22.4, ceil, -175.2), v(23.6, ceil, -175.9)] });
+      puddle(b, 23.6, ORANGE.deck, -168, 1.3, 0.8, 72); papers(b, 22.5, ORANGE.deck, -160, 1.8, 10, 73);
+      dropped(b, 'bin', 21, ORANGE.deck, -166, 0.7, junk); dropped(b, 'case', 24.6, ORANGE.deck, -181.2, 2.0, junk);
+    } else {
+      puddle(b, 23, ORANGE.deck, -257, 1.2, 1.8, 82); papers(b, 22.5, ORANGE.deck, -250, 1.6, 9, 83);
+      dropped(b, 'bag', 21.1, ORANGE.deck, -270.5, 0.4, junk); b.setBase(0, ORANGE.deck, 0); trashBags(b, 21.2, -246.5, 2, 84); b.resetBase();
+    }
   }
   {
     const z0 = STATE.z1, z1 = ODTX.z0;
     slab(ORANGE.edge, ORANGE.wallR, z0, z1, ORANGE.bed, ballast);
-    slab(ORANGE.wallL, ORANGE.edge, z0, z1, ORANGE.deck, concrete, ORANGE.deck - RED.deck);
+    slab(ORANGE.wallL, ORANGE.edge, z0, z1, ORANGE.deck, deck, ORANGE.deck - RED.deck);
     wall('x', ORANGE.wallL - 0.15, z0, z1, ORANGE.bed - 1, ORANGE.ceil, concrete);
     wall('x', ORANGE.wallR + 0.15, z0, z1, ORANGE.bed, ORANGE.ceil, concrete);
     ceiling(ORANGE.wallL, ORANGE.wallR, z0, z1, ORANGE.ceil);
@@ -320,6 +397,13 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
     track(ORANGE.track, ORANGE.bed, z0, z1, 1);
     pipes(ORANGE.wallL, 1, ORANGE.deck + 1.1, z0, z1);
     onWall(ORANGE.wallL, 1, (zz) => graffiti(b, zz(-214), ORANGE.deck + 1.3, 'BOATS AT NIGHT', '#c8c0b0', 2.8));
+    shaft({ top: v(28.2, ORANGE.ceil, -222), bot: v(27.4, ORANGE.bed + 0.4, -224), w: [1.1, 1.1], grate: true, intensity: 54, strength: 0.85 });
+    cableRun(b, cable, ORANGE.wallR - 0.12, ORANGE.ceil - 0.7, z0, z1, { seed: 91, drop: 0.12, span: 3 });
+    cableRun(b, cable, ORANGE.wallR - 0.14, ORANGE.ceil - 1.0, z0, z1, { seed: 92, sag: 0.1, span: 3 });
+    for (const [z, len] of [[-200, 1.2], [-231, 1.5]] as const) looseCable(b, cable, 28.5, ORANGE.ceil, z, len, -z);
+    for (const z of [-196, -224, -238]) puddle(b, ORANGE.track, ORANGE.bed + 0.02, z, 0.5, 1.8, -z);
+    for (const z of [-205, -230]) puddle(b, 25.55, ORANGE.deck, z, 0.5, 1.1, z);
+    b.setBase(0, ORANGE.deck, 0); rubble(b, 25.6, -226, 0.5, 6, 93, [concrete]); b.resetBase();
   }
 
   // ------------------------------------------------------------------ State's escalator, and the gate
@@ -407,7 +491,7 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
     card: ['UNDER THE CITY', 'Red Line · Park Street to State'],
     brand: 'Prologue · Static',
     music: '', ambience: 'tunnel',
-    get mood() { return state.mood === 'day' ? WORK : DARK; },
+    get mood() { return state.mood === 'day' ? WORK : LOW; },
     camera: { near: 0.08, far: 110 },
     shadow: { lift: 30 },
     cameraBlock,
@@ -439,6 +523,7 @@ export async function buildTunnel(quality: 'high' | 'low'): Promise<Built> {
     ...({ __walk: () => walk } as object),
     update(dt, t, camera, hero) {
       for (let i = 0; i < lights.length; i++) flickerUpdate(lights[i], t, i * 3.7);
+      for (const sh of shafts) sh.update(t);
       if (Number.isNaN(lastHero.x)) lastHero.copy(hero);
       heroSpeed += (Math.hypot(hero.x - lastHero.x, hero.z - lastHero.z) / Math.max(dt, 1e-3) - heroSpeed) * Math.min(1, dt * 6);
       lastHero.copy(hero);
