@@ -15,21 +15,14 @@
 // landing line up with the game's arc, then its landing recovery in real time. The game supplies
 // the height, so the clip's own lift (how high it raises the feet) is taken back off the model.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { loadMixamo, dressMixamo, findBone, findArm, rotateWorld, solveArm, AUTHORED_HEIGHT, THEO_HEIGHT, type Arm, type MixamoAsset } from './mixamo';
 
-export interface TheoAsset { scene: THREE.Group; clips: THREE.AnimationClip[] }
-
+export type TheoAsset = MixamoAsset;
 /** High quality gets the original 4096² texture, Low the 2048² export (same model and clips). */
-export async function loadTheo(quality: 'high' | 'low'): Promise<TheoAsset> {
-  const file = quality === 'high' ? 'theo.glb' : 'theo-2k.glb';
-  const gltf = await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${file}`);
-  return { scene: gltf.scene, clips: gltf.animations };
-}
+export const loadTheo = (quality: 'high' | 'low'): Promise<TheoAsset> => loadMixamo('theo', quality);
 
 /** model height as exported (metres) and as the game wants him (matches the procedural hero) */
-export const AUTHORED_HEIGHT = 1.0;
-export const THEO_HEIGHT = 1.56;
+export { AUTHORED_HEIGHT, THEO_HEIGHT };
 /** Locomotion tuning. Clip ground speeds are at the authored height (m/s), calibrated in the
  *  viewer's ?loco mode so the planted foot doesn't slide (residual slip ~0.04 m/s). Rates bound
  *  how far a clip is sped up or slowed down before the next one takes over. */
@@ -47,17 +40,7 @@ export const THEO_FILL = 0.6;
 /** A styled copy of Theo at his authored height (1 m): shadows, the skin-tone correction and the
  *  fill term wired to `fill`'s uniforms. Shared by the game's Theo and the character stage. */
 export function dressTheo(asset: TheoAsset, fill: Theo['fill'], anisotropy = 8): THREE.Object3D {
-  const model = cloneSkinned(asset.scene);
-  model.traverse((o) => {
-    const m = o as THREE.SkinnedMesh;
-    if (!m.isMesh) return;
-    m.castShadow = m.receiveShadow = true;
-    m.frustumCulled = false;   // bind-pose bounds don't cover every clip
-    const mat = m.material as THREE.MeshStandardMaterial;
-    // three draws a single-sided material's back faces into the shadow map; the hair tufts are
-    // open shells, so that leaks light through them as pale slivers
-    mat.shadowSide = THREE.DoubleSide;
-    if (mat.map) mat.map.anisotropy = anisotropy;
+  return dressMixamo(asset, anisotropy, (mat) => {
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uFillColor = fill.color;
       sh.uniforms.uFill = fill.strength;
@@ -83,7 +66,6 @@ export function dressTheo(asset: TheoAsset, fill: Theo['fill'], anisotropy = 8):
     };
     mat.customProgramCacheKey = () => 'theo-fill-skin';
   });
-  return model;
 }
 
 
@@ -110,20 +92,8 @@ const REACH_FADE = 0.5;
 
 const ease = (k: number) => k * k * (3 - 2 * k);
 const approach = (v: number, to: number, step: number) => (v < to ? Math.min(to, v + step) : Math.max(to, v - step));
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3();
-const _u = new THREE.Vector3(), _w = new THREE.Vector3(), _axis = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _p = new THREE.Quaternion(), _r = new THREE.Quaternion();
-
-/** rotate a bone by a world-space rotation (keeps its children attached) */
-function rotateWorld(bone: THREE.Object3D, r: THREE.Quaternion) {
-  bone.parent!.getWorldQuaternion(_p);
-  // local' = P^-1 R P local
-  _q.copy(_p).invert().multiply(r).multiply(_p);
-  bone.quaternion.premultiply(_q);
-  bone.updateMatrixWorld(true);
-}
-
-interface Arm { upper: THREE.Bone; lower: THREE.Bone; hand: THREE.Bone }
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _axis = new THREE.Vector3();
+const _r = new THREE.Quaternion();
 
 export class Theo {
   group = new THREE.Group();
@@ -202,15 +172,8 @@ export class Theo {
     this.idle.setEffectiveWeight(1);
     this.idle.time = Math.random() * this.idle.getClip().duration;
 
-    // three strips the ':' from Mixamo's bone names
-    const bone = (n: string) => {
-      let found: THREE.Bone | undefined;
-      model.traverse((o) => { if (!found && (o as THREE.Bone).isBone && o.name.replace(/^mixamorig:?/, '') === n) found = o as THREE.Bone; });
-      if (!found) throw new Error(`theo.glb has no "${n}" bone`);
-      return found;
-    };
-    const arm = (s: string): Arm => ({ upper: bone(`${s}Arm`), lower: bone(`${s}ForeArm`), hand: bone(`${s}Hand`) });
-    this.bones = { spine: [bone('Spine'), bone('Spine1'), bone('Spine2')], neck: bone('Neck'), head: bone('Head'), left: arm('Left'), right: arm('Right') };
+    const bone = (n: string) => findBone(model, n);
+    this.bones = { spine: [bone('Spine'), bone('Spine1'), bone('Spine2')], neck: bone('Neck'), head: bone('Head'), left: findArm(model, 'Left'), right: findArm(model, 'Right') };
   }
 
   private action(name: string, clip = this.clips.find((k) => k.name === name)) {
@@ -442,24 +405,6 @@ export class Theo {
     rotateWorld(neck, _r.setFromAxisAngle(side, 0.22 * w));
     rotateWorld(head, _r.setFromAxisAngle(side, 0.14 * w));
 
-    const q0 = arm.upper.quaternion.clone(), q1 = arm.lower.quaternion.clone();
-    arm.upper.getWorldPosition(_a); arm.lower.getWorldPosition(_b); arm.hand.getWorldPosition(_c);
-    const lab = _a.distanceTo(_b), lcb = _b.distanceTo(_c);
-    const lat = THREE.MathUtils.clamp(_a.distanceTo(target), 0.01, lab + lcb - 0.01);
-    // 1. open or close the elbow so shoulder -> wrist is the distance to the target
-    _u.subVectors(_a, _b).normalize(); _w.subVectors(_c, _b).normalize();
-    const now = Math.acos(THREE.MathUtils.clamp(_u.dot(_w), -1, 1));
-    const want = Math.acos(THREE.MathUtils.clamp((lat * lat - lab * lab - lcb * lcb) / (-2 * lab * lcb), -1, 1));
-    _t.crossVectors(_u, _w);
-    if (_t.lengthSq() < 1e-8) _t.copy(side);
-    rotateWorld(arm.lower, _r.setFromAxisAngle(_t.normalize(), want - now));
-    // 2. swing the upper arm so the wrist lands on the target
-    arm.hand.getWorldPosition(_c);
-    _r.setFromUnitVectors(_u.subVectors(_c, _a).normalize(), _w.subVectors(target, _a).normalize());
-    rotateWorld(arm.upper, _r);
-    // blend from the clip's pose
-    arm.upper.quaternion.slerpQuaternions(q0, arm.upper.quaternion.clone(), w);
-    arm.lower.quaternion.slerpQuaternions(q1, arm.lower.quaternion.clone(), w);
-    arm.upper.updateMatrixWorld(true);
+    solveArm(arm, target, w, side);
   }
 }

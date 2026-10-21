@@ -1,7 +1,8 @@
 """Build art/<id>.blend and public/models/<id>.glb for a Tripo + Mixamo character.
 
 Run with Blender: `blender -b -P art/blender/build_character.py -- maya marcus` (no ids: all of
-CHARACTERS). Each step is a function so it can also be run piecemeal over the Blender MCP.
+CHARACTERS). Each character is exported twice: <id>.glb (4k texture, High quality) and <id>-2k.glb
+(Low). Each step is a function so it can also be run piecemeal over the Blender MCP.
 
 Sources per character (art/source, see CHARACTERS):
   tripo        Tripo smart mesh with its original 4k base-color JPEG
@@ -397,4 +398,6 @@ if __name__ == "__main__":
         ch = CHARACTERS[cid]
         report = build(ch, os.path.join(REPO, "art", f"{cid}.blend"))
         export_glb(ch, os.path.join(REPO, "public", "models", f"{cid}.glb"))
+        # Low quality's copy: same model and clips, a 2048 texture
+        export_glb(ch, os.path.join(REPO, "public", "models", f"{cid}-2k.glb"), tex_size=2048)
         print(cid, report)
