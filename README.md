@@ -253,6 +253,9 @@ and "in place" to pin root-motion clips (marked ↦). Up/down steps through clip
 left/right steps a frame. The state lives in the URL (`?char=theo&clip=Walking&speed=0.5&inplace=1`).
 Theo's clips are the Mixamo FBXs in `art/source/mixamo/animations`, baked onto his rig by
 `art/blender/build_theo.py` into `public/models/theo.glb`; re-run that after adding an FBX.
+A new Tripo character (a GLB in `art/source`) is readied for Mixamo's auto-rigger by
+`blender -b -P art/blender/prep_mixamo.py -- Maya Marcus`, which writes the upload FBX to
+`art/source/mixamo/<name>/<name>.fbx`.
 
 ## Why this tech stack
 
@@ -343,6 +346,7 @@ src/
   style.css      loader, HUD, title card, story text box and notifications, touch stick
 art/
   source/        Tripo model, Mixamo rig and clips (inputs)
+  blender/prep_mixamo.py  Tripo GLB -> FBX for Mixamo's auto-rigger (welds UV seams)
   blender/build_theo.py  builds theo.blend (retargeted clips, weights, matte material) and
                  exports public/models/theo.glb / theo-2k.glb
   theo.blend
