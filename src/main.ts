@@ -147,7 +147,10 @@ class App {
   stats: StatsOverlay | null = null;
   /** ?bench's per-frame sampler (bench.ts) */
   benchTick: ((interval: number) => void) | null = null;
-  drs = new DynamicRes(() => this.resize());
+  // resizing clears the canvas: a step is taken at the start of the next frame, just before it's
+  // drawn, not after this one, which would leave a cleared (black) canvas up until the next frame
+  drs = new DynamicRes(() => { this.resizeDue = true; });
+  private resizeDue = false;
   keys = new Set<string>();
   stick = { x: 0, y: 0 };
   look = { dx: 0, dy: 0 };
@@ -380,6 +383,7 @@ class App {
       // (not counting the interval after a frame the profiler serialized: ?debug=stats)
       const skewed = perf.serialized;
       if (!skewed) this.fps += (1 / Math.max(real, 1e-3) - this.fps) * 0.05;
+      if (this.resizeDue) { this.resizeDue = false; this.resize(); }
       const t0 = performance.now();
       this.frame(Math.min(0.05, real), real * 1000);
       if (!skewed && !perf.serialized) this.drs.tick(real * 1000, performance.now() - t0, now);
