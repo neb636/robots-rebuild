@@ -38,6 +38,7 @@ import type { Post } from '../post';
 import { flickerUpdate, type FogLight } from '../props';
 import { audio } from '../audio';
 import { perf } from '../perf';
+import { slim, slimMark } from './slim';
 
 /** What the harbor offers beyond the shell's Built (for the swim, the boat, tests). */
 export interface HarborHooks {
@@ -66,6 +67,7 @@ const bob = { m: new THREE.Matrix4(), q: new THREE.Quaternion(), e: new THREE.Eu
 
 export async function buildHarbor(quality: 'high' | 'low', progress: (p: number, msg: string) => void): Promise<Built> {
   progress(0, 'Unfolding the map…');
+  const mark = slimMark();
   const d = await loadHarbor();
   const scene = new THREE.Scene();
   const root = new THREE.Group(); scene.add(root);
@@ -340,6 +342,9 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   const map = params.get('debug') === 'map' ? debugMap(d, collide, (i) => (flags[i] & 1) === 1) : null;
   let mapT = 0;
   let paper: AreaMap | undefined;
+
+  // everything is built: let the page's copies go once the GPU has them (and on Low, shrink the big textures)
+  console.info('harbor slim', JSON.stringify(slim(root, mark, quality)));
 
   progress(1, 'Lighting the lamps…');
   return {
