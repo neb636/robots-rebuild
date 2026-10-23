@@ -344,11 +344,12 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
   let paper: AreaMap | undefined;
 
   // everything is built: let the page's copies go once the GPU has them (and on Low, shrink the big textures)
-  console.info('harbor slim', JSON.stringify(slim(root, mark, quality)));
+  const slimmed = slim(root, mark, quality);
+  if (params.has('debug')) console.info('harbor slim', JSON.stringify(slimmed));
 
   progress(1, 'Lighting the lamps…');
   return {
-    kind: 'street',
+    kind: 'street', slimmed: true,
     scene, sky, lights: [...lamps.pool, beacon, ...landmarkLights, ...(station ? [station.fog] : [])], colliders: [],
     items: station ? [station.item] : [], converted: [], moon, hemi, wetMats: [], puddles: new THREE.Group(),
     heightAt, spawn,
