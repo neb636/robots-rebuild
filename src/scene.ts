@@ -173,6 +173,9 @@ export interface Built {
   lanternPivots?: THREE.Group[];
   pois?: THREE.Vector3[];
 
+  /** the area freed its CPU copies of buffers and textures once uploaded (harbor/slim.ts), so a lost
+   *  WebGL context can't be restored in place: the shell reloads into the same spot instead */
+  slimmed?: boolean;
   // ---- optional hooks, so the shell doesn't need to know any one area
   /** a hero of radius r standing at (x, z) would hit something (default: the AABB colliders) */
   blocked?: (x: number, z: number, r: number) => boolean;

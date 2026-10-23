@@ -176,6 +176,8 @@ class App {
   built!: Built;
   /** the pause menu is up (the frame loop stops; game time and scripted waits stop with it) */
   paused = false;
+  /** the context was lost under a slimmed area: nothing is drawn again before the reload */
+  private contextGone = false;
   pauseMenu: PauseMenu;
   mapView: MapView;
   /** the Current: the way to the player's mark (areas with a map) */
@@ -186,6 +188,11 @@ class App {
 
   constructor(public gl: THREE.WebGLRenderer, built: Built, theo: TheoAsset, public area: AreaName, private resume: Resume | null) {
     this.resumedFrom = !!resume;
+    // An area that freed its CPU copies (the harbor) can't come back from a lost WebGL context: three
+    // would re-upload buffers that are gone. Stop drawing when it's lost, and reload into the same spot
+    // once it's back (three already asks the browser to restore it).
+    gl.domElement.addEventListener('webglcontextlost', () => { if (this.built.slimmed) this.contextGone = true; });
+    gl.domElement.addEventListener('webglcontextrestored', () => { if (this.contextGone) this.reloadHere(); });
     const pm = params.get('perf');
     perf.init(gl, params.get('debug') === 'stats' || params.has('bench'), params.has('bench') ? 'sync' : pm === 'timer' || pm === 'sync' ? pm : undefined);
     this.player = new Theo(theo, Math.min(8, gl.capabilities.getMaxAnisotropy()));
@@ -376,6 +383,7 @@ class App {
   start() {
     let last = performance.now();
     frameLoop((now) => {
+      if (this.contextGone) return;
       this.pollPause();
       // paused: nothing moves and nothing is drawn (the last frame stays up behind the menu)
       if (this.paused) { if (!this.mapView.isOpen) this.pauseMenu.update(); last = now; return; }
@@ -890,6 +898,7 @@ class App {
 
   /** one frame; `interval` is the real time since the last one (ms, 0 for the warm-up frames) */
   frame(dt: number, interval = 0) {
+    if (this.contextGone) return;
     perf.beginFrame();
     this.t += dt;
     wind.value += dt;

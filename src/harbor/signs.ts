@@ -76,6 +76,7 @@ export class SignAtlas {
     // half a pixel in from the edges, so filtering never reaches the neighbours (the canvas is flipped in v)
     const uv: UV = [(x + 0.5) / this.W, 1 - (y + h - 0.5) / this.H, (x + w - 0.5) / this.W, 1 - (y + 0.5) / this.H];
     this.cells.set(key, uv);
+    // (cells must all be drawn during the build: once the harbor is built, slim() frees this canvas)
     this.tex.needsUpdate = true;
     return uv;
   }

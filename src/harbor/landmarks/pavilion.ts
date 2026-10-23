@@ -428,6 +428,7 @@ export const longWharfPavilion: LandmarkBuilder = (ctx) => {
     const fw = 2.6, fh = 1.37, nx = hi ? 14 : 8, ny = hi ? 7 : 4;
     flagGeo = new THREE.PlaneGeometry(fw, fh, nx, ny).translate(fw / 2 + 0.1, -fh / 2, 0);
     flagBase = (flagGeo.attributes.position.array as Float32Array).slice();
+    (flagGeo.attributes.position as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
     const flag = new THREE.Mesh(flagGeo, cached('pvFlagMat', () => new THREE.MeshStandardMaterial({ map: flagTex(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 })));
     flag.position.set(x, y + 0.8 + MH - 0.35, z); flag.rotation.y = 0.35; flag.name = 'pavilion:flag'; flag.castShadow = true;
     flagGeo.computeBoundingSphere(); flagGeo.boundingSphere!.radius += 1;
@@ -437,6 +438,7 @@ export const longWharfPavilion: LandmarkBuilder = (ctx) => {
     for (const k of [-1, 1]) parts.push(new THREE.BoxGeometry(0.014, H, 0.014, 1, 16, 1).translate(k * 0.11, H / 2, 0.09));
     hal = merge(parts);
     halBase = (hal.attributes.position.array as Float32Array).slice();
+    (hal.attributes.position as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
     halPhase = new Float32Array(hal.attributes.position.count);
     for (let i = 0; i < halPhase.length; i++) halPhase[i] = halBase[i * 3] < 0 ? 0 : 2.1;
     const hm = new THREE.Mesh(hal, ironMat());
