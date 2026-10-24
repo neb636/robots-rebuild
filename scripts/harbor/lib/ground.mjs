@@ -72,8 +72,10 @@ export function paintGround({ zone, land, buildings, sidewalks, parcels, osm, lo
   const parcelPaths = parcels?.length ? union(polysToPaths(parcels.flatMap(geoPolys))) : [];
   const row = parcelPaths.length ? difference(intersect(land, zone), parcelPaths) : [];
 
-  // 1. crosswalks: OSM crossings, 3 m wide, only where there's carriageway
-  const crossings = lines((t) => t.footway === 'crossing' || t.highway === 'crossing' || (t.highway === 'footway' && t.crossing));
+  // 1. crosswalks: OSM crossings with paint on the road, 3 m wide, only where there's carriageway
+  // (an unmarked crossing is just road, and a 'surface' one is set apart by its paving, not stripes)
+  const painted = (t) => t.crossing !== 'unmarked' && !['no', 'surface'].includes(t['crossing:markings']);
+  const crossings = lines((t) => (t.footway === 'crossing' || t.highway === 'crossing' || (t.highway === 'footway' && t.crossing)) && painted(t));
   crossingLines = crossings.map((l) => l.pts);
   take(G.crosswalk, intersect(bufferLines(crossings.map((l) => l.pts), 3.0), union([...roads, ...row])));
   // 2. sidewalks (city inventory), grown up to the facades they stop just short of
@@ -154,12 +156,33 @@ const ringBoundsOf = (r) => {
  * Cut every class into cell x cell squares and triangulate, so long pieces get interior vertices
  * that follow the terrain. yAt(cls, x, z) gives each vertex its height.
  * walkable(x, z) flags triangles inside the play area.
+ * pieces: a class split into parts that each carry a direction byte (crosswalk stripes), as
+ * { [cls]: [{ paths, dir }] }; dir is a byte, or a function of (x, z) asked per triangle.
+ * Where a piece's corner lands partway along a neighbour's edge, the neighbour gets a vertex there too,
+ * or the seam between them would crack open (a T-junction) and the sky would show through in dots.
  */
-export function triangulateGround(classes, cell, yAt, walkable, dirAt = () => 0) {
+export function triangulateGround(classes, cell, yAt, walkable, pieces = {}) {
   const verts = [], cls = [], flags = [], idx = [], dirs = [];
-  for (let c = 0; c < classes.length; c++) {
-    const paths = classes[c];
-    if (!paths.length) continue;
+  const pins = new Grid(cell);
+  const pinAll = (paths) => { for (const path of paths) for (const [x, z] of fromPath(path)) pins.insert([x, z], { x0: x, z0: z, x1: x, z1: z }); };
+  classes.forEach(pinAll);
+  for (const ps of Object.values(pieces)) for (const p of ps) pinAll(p.paths);
+  const pinRing = (r) => {
+    const out = [];
+    for (let i = 0; i < r.length; i++) {
+      const [ax, az] = r[i], [bx, bz] = r[(i + 1) % r.length], dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
+      out.push(r[i]);
+      if (L < 0.01) continue;
+      const on = [];
+      for (const [px, pz] of pins.query({ x0: Math.min(ax, bx) - 0.01, z0: Math.min(az, bz) - 0.01, x1: Math.max(ax, bx) + 0.01, z1: Math.max(az, bz) + 0.01 })) {
+        const u = ((px - ax) * dx + (pz - az) * dz) / (L * L);
+        if (u * L > 0.005 && (1 - u) * L > 0.005 && Math.abs((px - ax) * dz - (pz - az) * dx) / L < 0.003 && !on.some((o) => Math.abs(o[0] - u) * L < 0.005)) on.push([u, px, pz]);
+      }
+      on.sort((p, q) => p[0] - q[0]).forEach(([, px, pz]) => out.push([px, pz]));
+    }
+    return out;
+  };
+  const cut = (c, paths, dirOf) => {
     const g = new Grid(cell * 4);
     paths.forEach((p) => g.insert(p, pathsBounds([p])));
     const b = pathsBounds(paths);
@@ -167,7 +190,7 @@ export function triangulateGround(classes, cell, yAt, walkable, dirAt = () => 0)
       const cand = g.query({ x0: x, z0: z, x1: x + cell, z1: z + cell });
       if (!cand.length) continue;
       for (const poly of clipRect(cand, x, z, x + cell, z + cell)) {
-        const t = triangulate(poly);
+        const t = triangulate({ outer: pinRing(poly.outer), holes: poly.holes.map(pinRing) });
         if (!t.tris.length) continue;
         const base = verts.length / 3;
         for (let i = 0; i < t.verts.length; i += 2) verts.push(t.verts[i], yAt(c, t.verts[i], t.verts[i + 1]), t.verts[i + 1]);
@@ -180,28 +203,58 @@ export function triangulateGround(classes, cell, yAt, walkable, dirAt = () => 0)
           else idx.push(base + a, base + cc, base + bb);
           cls.push(c);
           flags.push(walkable(mx, mz) ? 1 : 0);
-          dirs.push(GROUND[c].name === 'crosswalk' ? dirAt(mx, mz) : 0);
+          dirs.push(typeof dirOf === 'function' ? dirOf(mx, mz) : dirOf);
         }
       }
     }
+  };
+  for (let c = 0; c < classes.length; c++) {
+    if (!classes[c].length) continue;
+    if (pieces[c]) for (const p of pieces[c]) { if (p.paths.length) cut(c, p.paths, p.dir); }
+    else cut(c, classes[c], 0);
   }
   return { verts: new Float32Array(verts), tris: new Uint32Array(idx), triClass: new Uint8Array(cls), triFlags: new Uint8Array(flags), triDir: new Uint8Array(dirs) };
 }
 
-/** For crosswalk stripes: the direction of the crossing nearest (x, z), as a byte (0..255 = 0..pi). */
-export function crossingDirs(lines) {
-  const g = new Grid(20), segs = [];
+/**
+ * For crosswalk stripes: the crosswalk area split into one piece per crossing segment, each with that
+ * segment's direction as a byte (0..255 = 0..pi), so the bars of a crossing run straight across it.
+ * Longer segments go first and keep their whole band where crossings overlap (a crossing's bars
+ * stop at the edge of the one it meets); any corner left over takes the nearest segment's direction.
+ */
+export function crosswalkPieces(area, lines, width = 3.0) {
+  const segs = [];
   for (const l of lines) for (let i = 0; i < l.length - 1; i++) {
-    const s = [l[i][0], l[i][1], l[i + 1][0], l[i + 1][1]];
-    segs.push(s);
-    g.insert(s, { x0: Math.min(s[0], s[2]) - 4, z0: Math.min(s[1], s[3]) - 4, x1: Math.max(s[0], s[2]) + 4, z1: Math.max(s[1], s[3]) + 4 });
+    const [ax, az] = l[i], [bx, bz] = l[i + 1], L = Math.hypot(bx - ax, bz - az);
+    if (L > 0.05) segs.push({ ax, az, bx, bz, L });
   }
-  return (x, z) => {
-    let best = null, bd = Infinity;
-    for (const s of g.query({ x0: x, z0: z, x1: x, z1: z })) { const d = segDist(x, z, s[0], s[1], s[2], s[3]).d; if (d < bd) { bd = d; best = s; } }
-    if (!best) return 0;
-    let a = Math.atan2(best[3] - best[1], best[2] - best[0]);
+  segs.sort((a, b) => b.L - a.L);
+  const byte = (s) => {
+    let a = Math.atan2(s.bz - s.az, s.bx - s.ax);
     if (a < 0) a += Math.PI;
-    return Math.min(255, Math.round((a / Math.PI) * 255));
+    return Math.round((a / Math.PI) * 255) % 255;
   };
+  const out = [];
+  let left = area;
+  for (const s of segs) {
+    if (!left.length) break;
+    // half a band past each end, so the corner where a crossing bends is covered
+    const ex = ((s.bx - s.ax) / s.L) * width * 0.5, ez = ((s.bz - s.az) / s.L) * width * 0.5;
+    // (a hair wider than the area's own buffer, so no sliver is left along a band's edge)
+    const band = bufferLines([[[s.ax - ex, s.az - ez], [s.bx + ex, s.bz + ez]]], width + 0.2);
+    const piece = intersect(left, band);
+    if (!piece.length) continue;
+    out.push({ paths: piece, dir: byte(s) });
+    left = difference(left, piece);
+  }
+  if (left.length) {
+    const g = new Grid(20);
+    segs.forEach((s) => g.insert(s, { x0: Math.min(s.ax, s.bx) - 4, z0: Math.min(s.az, s.bz) - 4, x1: Math.max(s.ax, s.bx) + 4, z1: Math.max(s.az, s.bz) + 4 }));
+    out.push({ paths: left, dir: (x, z) => {
+      let best = null, bd = Infinity;
+      for (const s of g.query({ x0: x, z0: z, x1: x, z1: z })) { const d = segDist(x, z, s.ax, s.az, s.bx, s.bz).d; if (d < bd) { bd = d; best = s; } }
+      return best ? byte(best) : 0;
+    } });
+  }
+  return out;
 }
