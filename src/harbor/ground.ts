@@ -10,7 +10,8 @@ export function buildGround(d: HarborData, parent: THREE.Object3D, quality: 'hig
   const v = d.get('gVert'), t = d.get<Uint32Array>('gTri'), cls = d.get<Uint8Array>('gTriClass'), dir = d.get<Uint8Array>('gTriDir');
   const mat = groundMaterial(d.h.ground, quality);
   const cb = new ChunkBuilder(128, 'ground');
-  // each chunk maps the bake's vertex indices to its own
+  // each chunk maps the bake's vertex indices to its own; a crosswalk's triangles can face different
+  // crossings, so a vertex is shared only between triangles with the same stripe direction
   const local = new Map<object, Map<number, number>>();
   for (let i = 0; i < t.length / 3; i++) {
     const a = t[i * 3], b = t[i * 3 + 1], c = t[i * 3 + 2];
@@ -19,12 +20,13 @@ export function buildGround(d: HarborData, parent: THREE.Object3D, quality: 'hig
     let m = local.get(acc);
     if (!m) local.set(acc, (m = new Map()));
     const idx = [a, b, c].map((g) => {
-      let li = m!.get(g);
+      const key = g * 256 + dir[i];
+      let li = m!.get(key);
       if (li === undefined) {
         li = acc.v(v[g * 3], v[g * 3 + 1], v[g * 3 + 2], 0, 1, 0);
         acc.attr('aClass', 1, cls[i]);
         acc.attr('aDir', 1, dir[i]);
-        m!.set(g, li);
+        m!.set(key, li);
       }
       return li;
     });

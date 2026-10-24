@@ -18,7 +18,7 @@ import { parseOsm } from './lib/osm.mjs';
 import { landFromCoast } from './lib/coast.mjs';
 import { Dem, terrainGrid, terrainAt, gridSize } from './lib/terrain.mjs';
 import { buildParts, STYLES, ROOFS, TIERS } from './lib/buildings.mjs';
-import { paintGround, curbLines, triangulateGround, crossingDirs, GROUND, CURB_H } from './lib/ground.mjs';
+import { paintGround, curbLines, triangulateGround, crosswalkPieces, GROUND, CURB_H } from './lib/ground.mjs';
 import { piers, waterCells, seawalls, pileLayout } from './lib/water.mjs';
 import { cordon } from './lib/cordon.mjs';
 import { points, streets, shops, parks, art } from './lib/points.mjs';
@@ -135,7 +135,8 @@ painted.classes[deckIdx] = G.difference(decks, footprints);
 const curbs = curbLines(painted.classes).map((l) => l.map(([x, z]) => [G.round2(x), G.round2(tAt(x, z)), G.round2(z)]));
 const yAt = (c, x, z) => (GROUND[c].off === null ? tAt(x, z) + CURB_H : tAt(x, z) + GROUND[c].off);
 const walkable = (x, z) => G.inRing(x, z, playRing) && (!window || Math.hypot(x - window.x, z - window.z) < window.r);
-const ground = triangulateGround(painted.classes, GROUND_CELL, yAt, walkable, crossingDirs(painted.crossings));
+const cwIdx = GROUND.findIndex((g) => g.name === 'crosswalk');
+const ground = triangulateGround(painted.classes, GROUND_CELL, yAt, walkable, { [cwIdx]: crosswalkPieces(painted.classes[cwIdx], painted.crossings) });
 log(`  ${ground.tris.length / 3} triangles, ${ground.verts.length / 3} vertices, ${curbs.length} curbs`);
 
 // ------------------------------------------------------------------ which walls face the street
