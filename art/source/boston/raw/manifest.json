@@ -2,7 +2,7 @@
   "about": "Raw source snapshots for the harbor district, written by scripts/harbor/fetch.mjs (npm run harbor:fetch). Vector files are gzipped JSON in lon/lat (EPSG:4326) rounded to 7 decimals and sorted by a stable id; sha256 and bytes are of the uncompressed content.",
   "bboxes": {
     "DETAIL": {
-      "w": -71.0585,
+      "w": -71.0605,
       "s": 42.3548,
       "e": -71.0425,
       "n": 42.3665
@@ -33,7 +33,7 @@
       "url": "https://gis.boston.gov/arcgis/rest/services/Infrastructure/OpenData/MapServer/6/query",
       "query": {
         "where": "1=1",
-        "geometry": "-71.0585,42.3548,-71.0425,42.3665",
+        "geometry": "-71.0605,42.3548,-71.0425,42.3665",
         "geometryType": "esriGeometryEnvelope",
         "inSR": "4326",
         "spatialRel": "esriSpatialRelIntersects",
@@ -43,13 +43,13 @@
       },
       "paging": "returnIdsOnly=true, then objectIds POSTed back in batches of 500",
       "license": "PDDL-1.0 (Open Data Commons Public Domain Dedication and License; City of Boston open data)",
-      "fetched": "2026-10-17",
-      "count": 268,
-      "sha256": "17cdb59e3eae59a72e79d96838267e8ba8da9a2f0b9c4765575637a1013e593e",
-      "bytes": 350697,
-      "gzipBytes": 82581,
+      "fetched": "2026-10-24",
+      "count": 314,
+      "sha256": "57123d082eb15552206d5dd420524939f6d6fd4ea654b3cdcc9636e69cb69a60",
+      "bytes": 400781,
+      "gzipBytes": 94318,
       "notes": [
-        "layer 13 (also named \"Curbs\") returned exactly the same 268 features within DETAIL (same OBJECTIDs, TYPE and geometry), so it is not saved separately"
+        "layer 13 (also named \"Curbs\") returned exactly the same 314 features within DETAIL (same OBJECTIDs, TYPE and geometry), so it is not saved separately"
       ]
     },
     "boston-lights.geojson.gz": {
@@ -57,7 +57,7 @@
       "url": "https://gis.boston.gov/arcgis/rest/services/Infrastructure/OpenData/MapServer/11/query",
       "query": {
         "where": "1=1",
-        "geometry": "-71.0585,42.3548,-71.0425,42.3665",
+        "geometry": "-71.0605,42.3548,-71.0425,42.3665",
         "geometryType": "esriGeometryEnvelope",
         "inSR": "4326",
         "spatialRel": "esriSpatialRelIntersects",
@@ -67,13 +67,13 @@
       },
       "paging": "returnIdsOnly=true, then objectIds POSTed back in batches of 500",
       "license": "PDDL-1.0 (Open Data Commons Public Domain Dedication and License; City of Boston open data)",
-      "fetched": "2026-10-17",
-      "count": 2656,
-      "sha256": "77bc6ca377bfd24b326bee22c2ee842f241353705acebc6785d5d0067d196505",
-      "bytes": 569063,
-      "gzipBytes": 46621,
+      "fetched": "2026-10-24",
+      "count": 3035,
+      "sha256": "b8fe20469ac5e093626a22ccdfd9a59b9ed5c087da74372844452af8f6d6e6ca",
+      "bytes": 650526,
+      "gzipBytes": 53547,
       "notes": [
-        "ELEV: 0 2655, (null) 1 (no usable heights)"
+        "ELEV: 0 3034, (null) 1 (no usable heights)"
       ]
     },
     "boston-parcels.geojson.gz": {
@@ -81,7 +81,7 @@
       "url": "https://gisportal.boston.gov/arcgis/rest/services/Parcels/Parcels24/MapServer/0/query",
       "query": {
         "where": "1=1",
-        "geometry": "-71.0585,42.3548,-71.0425,42.3665",
+        "geometry": "-71.0605,42.3548,-71.0425,42.3665",
         "geometryType": "esriGeometryEnvelope",
         "inSR": "4326",
         "spatialRel": "esriSpatialRelIntersects",
@@ -91,16 +91,16 @@
       },
       "paging": "returnIdsOnly=true, then objectIds POSTed back in batches of 500",
       "license": "PDDL-1.0 (Open Data Commons Public Domain Dedication and License; City of Boston open data)",
-      "fetched": "2026-10-17",
-      "count": 1257,
-      "sha256": "afb6c9a134c16302e3885a36c489ae40404ea9acb4853b899ffe2772f16b70c5",
-      "bytes": 11886772,
-      "gzipBytes": 2824422,
+      "fetched": "2026-10-24",
+      "count": 1364,
+      "sha256": "05dbc00600e4ab134bdcae0a41fc2a044a7454abe2f62be5b0b9cc1d9280b0de",
+      "bytes": 11974814,
+      "gzipBytes": 2838431,
       "notes": [
-        "POLY_TYPE: FEE 1256, (null) 1",
+        "POLY_TYPE: FEE 1363, (null) 1",
         "id 97676 (MAP_PAR_ID \"MASSGIS\") is not a parcel but the city-wide remainder: a polygon whose holes are the parcels, i.e. the street right-of-way as one feature; skip or clip it when baking",
         "open harbour water lies in no polygon, but wharf parcels reach well out over the water, so parcels are no land/water mask",
-        "id 97676 alone has 443623 of the file's 457025 vertices (204 polygons, 4525 rings) and spans lon -71.1847..-70.9943, lat 42.2320..42.3960, far past the bbox"
+        "id 97676 alone has 443623 of the file's 458679 vertices (204 polygons, 4525 rings) and spans lon -71.1847..-70.9943, lat 42.2320..42.3960, far past the bbox"
       ]
     },
     "boston-ramps.geojson.gz": {
@@ -108,7 +108,7 @@
       "url": "https://gis.boston.gov/arcgis/rest/services/Infrastructure/OpenData/MapServer/3/query",
       "query": {
         "where": "1=1",
-        "geometry": "-71.0585,42.3548,-71.0425,42.3665",
+        "geometry": "-71.0605,42.3548,-71.0425,42.3665",
         "geometryType": "esriGeometryEnvelope",
         "inSR": "4326",
         "spatialRel": "esriSpatialRelIntersects",
@@ -118,18 +118,18 @@
       },
       "paging": "returnIdsOnly=true, then objectIds POSTed back in batches of 500",
       "license": "PDDL-1.0 (Open Data Commons Public Domain Dedication and License; City of Boston open data)",
-      "fetched": "2026-10-17",
-      "count": 701,
-      "sha256": "8831f8a51acdbaa011e21e9e70966f85a44cfa8e59982bcb7e2df95d267d29bf",
-      "bytes": 510472,
-      "gzipBytes": 44127
+      "fetched": "2026-10-24",
+      "count": 839,
+      "sha256": "e4f4fafea1f9900ac206305656eed65e41f8d38ea0c4525a00af39baf2c98e36",
+      "bytes": 611200,
+      "gzipBytes": 52978
     },
     "boston-segments.geojson.gz": {
       "source": "City of Boston: Boston Segments, street centrelines (Infrastructure/OpenData MapServer, layer 8)",
       "url": "https://gis.boston.gov/arcgis/rest/services/Infrastructure/OpenData/MapServer/8/query",
       "query": {
         "where": "1=1",
-        "geometry": "-71.0585,42.3548,-71.0425,42.3665",
+        "geometry": "-71.0605,42.3548,-71.0425,42.3665",
         "geometryType": "esriGeometryEnvelope",
         "inSR": "4326",
         "spatialRel": "esriSpatialRelIntersects",
@@ -139,14 +139,14 @@
       },
       "paging": "returnIdsOnly=true, then objectIds POSTed back in batches of 500",
       "license": "PDDL-1.0 (Open Data Commons Public Domain Dedication and License; City of Boston open data)",
-      "fetched": "2026-10-17",
-      "count": 572,
-      "sha256": "ae8023c307ab264fec5f11ccb78538369b46c7a6b382b28f14aacc2aa53d5774",
-      "bytes": 412264,
-      "gzipBytes": 38036,
+      "fetched": "2026-10-24",
+      "count": 655,
+      "sha256": "7f21eebbcd7b202440fd992f4a05c6f33b304f793a99134f2f6dc67eac814b35",
+      "bytes": 470777,
+      "gzipBytes": 43186,
       "notes": [
-        "52 segments have a negative F_ZLEV or T_ZLEV (below grade: the I-93 tunnel and its ramps)",
-        "38 segments have no ST_NAME; CFCC: A41 315, A31 124, A63 38, A73 23, A15 19, A71 18, A70 13, A35 10, (blank \"\") 6, A60 4, A74 2"
+        "55 segments have a negative F_ZLEV or T_ZLEV (below grade: the I-93 tunnel and its ramps)",
+        "40 segments have no ST_NAME; CFCC: A41 351, A31 137, A63 40, A35 28, A73 28, A15 22, A71 20, A70 15, (blank \"\") 6, A60 6, A74 2"
       ]
     },
     "boston-sidewalks.geojson.gz": {
@@ -154,7 +154,7 @@
       "url": "https://gis.boston.gov/arcgis/rest/services/Infrastructure/OpenData/MapServer/0/query",
       "query": {
         "where": "1=1",
-        "geometry": "-71.0585,42.3548,-71.0425,42.3665",
+        "geometry": "-71.0605,42.3548,-71.0425,42.3665",
         "geometryType": "esriGeometryEnvelope",
         "inSR": "4326",
         "spatialRel": "esriSpatialRelIntersects",
@@ -164,15 +164,15 @@
       },
       "paging": "returnIdsOnly=true, then objectIds POSTed back in batches of 500",
       "license": "PDDL-1.0 (Open Data Commons Public Domain Dedication and License; City of Boston open data)",
-      "fetched": "2026-10-17",
-      "count": 738,
-      "sha256": "b4e0b2ead9adf21ab27c2ee6b474706699a6a045c03b16159e449cb03e20b112",
-      "bytes": 1213138,
-      "gzipBytes": 236502,
+      "fetched": "2026-10-24",
+      "count": 839,
+      "sha256": "52afbaf220d653e33566f44db1a88f2e8e3d3a0ddda7c5a1a7df297a42044e99",
+      "bytes": 1408480,
+      "gzipBytes": 278464,
       "notes": [
-        "MATERIAL: CC 389, BR 203, (blank \" \") 49, GB 46, BL 24, CB 13, BC 10, OT 4",
-        "SWK_WIDTH is text, apparently feet; 150 of 738 are \"0\" or blank (unmeasured)",
-        "curb_type: Vertical Granite 686, (blank \" \") 50, Asphalt 1, Concrete 1"
+        "MATERIAL: CC 454, BR 217, (blank \" \") 59, GB 49, BL 25, CB 16, BC 15, OT 4",
+        "SWK_WIDTH is text, apparently feet; 160 of 839 are \"0\" or blank (unmeasured)",
+        "curb_type: Vertical Granite 776, (blank \" \") 61, Asphalt 1, Concrete 1"
       ]
     },
     "bpda-buildings-far.geojson.gz": {
@@ -233,8 +233,8 @@
       "source": "USGS 3D Elevation Program (3DEP) bare-earth DEM, via the 3DEPElevation ImageServer",
       "url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage",
       "query": {
-        "bbox": "-71.0585,42.3548,-71.0425,42.3665",
-        "size": "1316,1294",
+        "bbox": "-71.0605,42.3548,-71.0425,42.3665",
+        "size": "1481,1294",
         "bboxSR": "4326",
         "imageSR": "4326",
         "format": "tiff",
@@ -245,15 +245,15 @@
         "f": "image"
       },
       "license": "Public domain (U.S. Government work: USGS 3D Elevation Program)",
-      "fetched": "2026-10-17",
-      "count": 1702904,
-      "sha256": "4da27cb20d16cee6995dac138ab05312fadd2ae1657e112990c9f90ba5cc1d7e",
-      "bytes": 3405808,
-      "gzipBytes": 883083,
+      "fetched": "2026-10-24",
+      "count": 1916414,
+      "sha256": "a681e6ce6dbf79b5af9e67f8c7a589cd525d034e06fa2b846ab4c38585623afe",
+      "bytes": 3832828,
+      "gzipBytes": 1106160,
       "tiling": "1 tile(s) of at most 8000×8000 px (the service's limit)",
       "notes": [
-        "1316×1294 Int16 centimetres NAVD88 (header: dem.json); count is pixels",
-        "elevations -3.01 m to 11.27 m; 0 nodata pixels",
+        "1481×1294 Int16 centimetres NAVD88 (header: dem.json); count is pixels",
+        "elevations -3.01 m to 19.58 m; 0 nodata pixels",
         "spot checks (bilinear): -71.0562,42.36: 2.7 m (getSamples 2.71 m); -71.0535,42.3637: 6.52 m (getSamples 6.53 m); -71.0475,42.3603: -1.63 m (getSamples -1.63 m)",
         "adjustAspectRatio=false matters: by default the service keeps pixels square in degrees and silently grows the latitude extent (to 42.35278..42.36852 for DETAIL), misplacing every row"
       ]
@@ -262,8 +262,8 @@
       "source": "USGS 3D Elevation Program (3DEP) bare-earth DEM, via the 3DEPElevation ImageServer",
       "url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage",
       "license": "Public domain (U.S. Government work: USGS 3D Elevation Program)",
-      "fetched": "2026-10-17",
-      "sha256": "3dbbf87d2bd1b094309ed1592e601248f7a1c3b7c4994b3b4a718e3e0fc084e7",
+      "fetched": "2026-10-24",
+      "sha256": "5b652fbbf1685920589dc13ea73abc03f64abc9eb56d3206f6d6e4396105db39",
       "bytes": 644,
       "notes": [
         "header for dem.i16.gz"
@@ -302,30 +302,30 @@
       "source": "OpenStreetMap via the Overpass API (Overpass API 0.7.62.11 87bfad18)",
       "url": "https://overpass-api.de/api/interpreter",
       "query": {
-        "data": "[out:json][timeout:240][bbox:42.3548,-71.0585,42.3665,-71.0425];\n(\n  way[building];\n  relation[building];\n  way[\"building:part\"];\n  relation[\"building:part\"];\n  way[highway];\n  way[\"area:highway\"];\n  node[highway];\n  way[railway];\n  node[railway];\n  way[man_made];\n  relation[man_made];\n  node[man_made];\n  way[natural];\n  relation[natural];\n  node[natural];\n  way[leisure];\n  relation[leisure];\n  node[leisure];\n  way[landuse];\n  relation[landuse];\n  way[amenity];\n  relation[amenity];\n  node[amenity];\n  way[barrier];\n  node[barrier];\n  way[waterway];\n  way[place];\n  relation[place];\n  node[historic];\n  way[historic];\n  node[tourism];\n  way[tourism];\n  node[emergency];\n  node[entrance];\n  way[public_transport];\n  node[public_transport];\n  node[shop];\n  way[parking];\n);\nout geom(42.3548,-71.0585,42.3665,-71.0425);"
+        "data": "[out:json][timeout:240][bbox:42.3548,-71.0605,42.3665,-71.0425];\n(\n  way[building];\n  relation[building];\n  way[\"building:part\"];\n  relation[\"building:part\"];\n  way[highway];\n  way[\"area:highway\"];\n  node[highway];\n  way[railway];\n  node[railway];\n  way[man_made];\n  relation[man_made];\n  node[man_made];\n  way[natural];\n  relation[natural];\n  node[natural];\n  way[leisure];\n  relation[leisure];\n  node[leisure];\n  way[landuse];\n  relation[landuse];\n  way[amenity];\n  relation[amenity];\n  node[amenity];\n  way[barrier];\n  node[barrier];\n  way[waterway];\n  way[place];\n  relation[place];\n  node[historic];\n  way[historic];\n  node[tourism];\n  way[tourism];\n  node[emergency];\n  node[entrance];\n  way[public_transport];\n  node[public_transport];\n  node[shop];\n  way[parking];\n);\nout geom(42.3548,-71.0605,42.3665,-71.0425);"
       },
       "license": "ODbL-1.0 (© OpenStreetMap contributors; attribution required, share-alike for derived databases)",
-      "fetched": "2026-10-17",
-      "count": 6603,
-      "sha256": "188cd0338fc7f8ba6d3f726da62febac986dc4084e4b3a28040a3452717ecbc5",
-      "bytes": 3475189,
-      "gzipBytes": 542756,
-      "osmBase": "2026-10-17T05:45:35Z",
+      "fetched": "2026-10-24",
+      "count": 7728,
+      "sha256": "7389604943bec9b86911edeb0bbb2c6099323517c0e5b2dbf46d5bb8f17422a9",
+      "bytes": 3942930,
+      "gzipBytes": 624016,
+      "osmBase": "2026-10-24T06:08:36Z",
       "breakdown": {
-        "nodes": 2396,
-        "ways": 4182,
-        "relations": 25,
-        "buildings": 1185,
-        "buildingParts": 631,
-        "highwayWays": 1945,
+        "nodes": 2952,
+        "ways": 4748,
+        "relations": 28,
+        "buildings": 1284,
+        "buildingParts": 677,
+        "highwayWays": 2274,
         "piers": 102,
         "coastline": 6,
-        "trees": 242
+        "trees": 402
       },
       "notes": [
         "raw Overpass JSON elements sorted by type (node, way, relation) then id; timestamp/version/changeset/user/uid dropped, tags sorted by key",
         "out geom(bbox) clips geometry to DETAIL: a way keeps every id in `nodes`, but `geometry` holds null for nodes past the first one outside the bbox",
-        "5224 of 5287 relation way-members lie wholly outside the bbox and carry an empty (or all-null) geometry"
+        "5221 of 5292 relation way-members lie wholly outside the bbox and carry an empty (or all-null) geometry"
       ]
     }
   }

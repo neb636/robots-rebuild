@@ -26,5 +26,6 @@
   "aquariumStation": { "name": "Aquarium Station", "osm": ["w240311347", "w240311444", "w240311383", "w240311448", "w212122931", "w240311348"] },
   "harborIslandsPavilion": { "name": "Boston Harbor Islands Pavilion", "osm": ["w212123007"], "overhead": ["w212123007"] },
   "northEndPergola": { "name": "North End Parks pergola", "osm": ["w847845680"] },
-  "turnpikeTollbooth": { "name": "Turnpike tollbooth", "osm": ["w828995405"] }
+  "turnpikeTollbooth": { "name": "Turnpike tollbooth", "osm": ["w828995405"] },
+  "oneBostonPlaceLobby": { "name": "One Boston Place", "osm": ["w816273227"] }
 }

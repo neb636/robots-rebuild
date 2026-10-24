@@ -1,5 +1,6 @@
-// The harbor district: Boston's downtown waterfront two years after, from the Congress St cordon to
-// the end of Long Wharf. Built from real map data (scripts/harbor/), loaded on demand.
+// The harbor district: Boston's downtown waterfront two years after, from the Old State House and the
+// cordon at One Boston Place to the end of Long Wharf. Built from real map data (scripts/harbor/),
+// loaded on demand.
 import * as THREE from 'three';
 import type { Built, CineShot } from '../scene';
 import type { AreaMap } from '../map';
@@ -237,8 +238,8 @@ export async function buildHarbor(quality: 'high' | 'low', progress: (p: number,
     shot(at(-282, 1.7, -172), at(-276, 1.8, -158), at(-266, 6, -130), at(-264, 9, -125)),
     // under the Columbus Park trellis
     shot(at(136, 1.7, -104), at(140, 1.8, -92), at(146, 2.6, -78), at(156, 2.6, -64)),
-    // the checkpoint where State Street meets the Congress Street wall
-    shot(at(-205, 3, 125), at(-209, 4, 128), at(-226, 6, 142), at(-226, 8, 142)),
+    // up State Street past the Old State House to the Court Street gate, One Boston Place over it
+    shot(at(-238, 3, 123), at(-250, 3.6, 124), at(-338, 5, 123), at(-338, 8, 123)),
   ];
 
   // ---------------------------------------------------------------- frozen matrices

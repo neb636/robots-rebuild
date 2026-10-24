@@ -5,7 +5,7 @@
    "type": "Feature",
    "properties": {
     "kind": "cordon",
-    "note": "The play area. Hand-tuned from the screenshot sketch: west edge moved onto the Congress St median so Faneuil Hall, Dock Square and the Blackstone Block are inside."
+    "note": "The play area. Hand-tuned from the screenshot sketch: north of City Hall the west edge runs along Congress St so Faneuil Hall, Dock Square and the Blackstone Block are inside. From City Hall Plaza south it swings west to take in Washington Mall, State St and the Old State House: across the plaza north of the Bill Russell statue, through the Ames Building block (gate on Court St), along One Boston Place’s Washington St front, across Washington St at its south corner (gate), then east through the State St buildings (gates on Devonshire St and Congress St)."
    },
    "geometry": {
     "type": "Polygon",
@@ -136,20 +136,44 @@
        42.358553
       ],
       [
-       -71.0566624,
-       42.3585078
+       -71.056869,
+       42.3585168
       ],
       [
-       -71.0568083,
-       42.3588786
+       -71.0570879,
+       42.3584987
       ],
       [
-       -71.0569055,
-       42.3591228
+       -71.0574161,
+       42.3584626
       ],
       [
-       -71.0569906,
-       42.3594393
+       -71.0576957,
+       42.358336
+      ],
+      [
+       -71.0581577,
+       42.358336
+      ],
+      [
+       -71.0581455,
+       42.3586796
+      ],
+      [
+       -71.0580969,
+       42.3590052
+      ],
+      [
+       -71.0580118,
+       42.3593217
+      ],
+      [
+       -71.057951,
+       42.3595026
+      ],
+      [
+       -71.0576471,
+       42.3597558
       ],
       [
        -71.0571122,
@@ -435,6 +459,54 @@
     "coordinates": [
      -71.0525655,
      42.3604341
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "oldstatehouse",
+    "heading": 265,
+    "note": "at the State St / Devonshire St corner, looking west across the Boston Massacre Site at the Old State House’s east front (balcony, lion and unicorn, clock); the Court St gate and One Boston Place behind"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0569298,
+     42.3588062
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "onebostonplace",
+    "heading": 205,
+    "note": "at the Washington / State / Court junction, looking along One Boston Place’s Washington St front to the cordon gate across Washington St"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0578902,
+     42.3587339
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "kind": "spot",
+    "name": "cityhallplaza",
+    "heading": 20,
+    "note": "at the north end of Washington Mall beside the Bill Russell statue, looking at the cordon across City Hall Plaza with City Hall over it"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -71.0577079,
+     42.3596202
     ]
    }
   },

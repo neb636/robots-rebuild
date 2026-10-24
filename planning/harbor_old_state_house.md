@@ -2,7 +2,12 @@
 
 You're picking this up in the Quiet Machines repo with no earlier context. Read `AGENTS.md` first
 (commit / push / PR rules, the **Test this** section, the browser lock, QA in Partly Sunny), then
-carry out the plan below in order. Facts, coordinates and line numbers were checked against main at
+carry out the plan below in order.
+
+> **Status:** built on branch `neb636/boston-old-state-house`; what was done and measured is under
+> "Done since: the Old State House and the west cordon" in `planning/harbor_remaining.md`. One change
+> from step 3: photos showed One Boston Place's unmeasured base parts are two-storey glass lobbies, not
+> a canopy, so they're a solid landmark (`oneBostonPlaceLobby`), not `overhead`. Facts, coordinates and line numbers were checked against main at
 `d246137` on 2026-10-24; if the code has moved since, find things again by the names given.
 
 ## Context

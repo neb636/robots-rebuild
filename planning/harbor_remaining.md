@@ -10,8 +10,8 @@ browser runs.
 ## What the area is
 
 A walkable, real-map recreation of Boston's downtown waterfront two years after the machines took
-over: from the Congress St cordon (State station spawn) east to the end of Long Wharf, Faneuil
-Hall / Quincy Market, the Greenway, Columbus Park, the Aquarium, Harbor Towers, Rowes Wharf and the
+over: from the Old State House and the cordon against One Boston Place (State station spawn on State
+St) east to the end of Long Wharf, Faneuil Hall / Quincy Market, the Greenway, Columbus Park, the Aquarium, Harbor Towers, Rowes Wharf and the
 southern North End. Boot it with `?start=harbor`. The Tunnel Walk (`src/tunnel/`, `?start=tunnel`)
 connects it to Acorn Lane: it ends at the gate under State station and hands off to the `state`
 spawn. A later session has Theo swim out to
@@ -102,7 +102,32 @@ widths, and lists their beds and lawns.
 | Map and spot | Labels for Wharf District Parks and North End Parks; spot `greenway` (between the carousel and the pavilion, looking south). |
 | Cost | Draws over the PR #44 baseline at four Greenway views (carousel, mid, North End Parks, south end): High +17, +2, +11, +13; Low +6, +3, +17, +10. Triangles +0.07-0.17 M High, +0.04-0.07 M Low. Lights 33 before and after. Walkable area 305,856 m2, 0 leaks, all 13 spots. |
 
+## Done since: the Old State House and the west cordon
+
+The cordon's west edge was one 420 m wall down the Congress St median, with the Old State House just
+past it. The plan is `planning/harbor_old_state_house.md`. The play area now swings west from City
+Hall Plaza: the wall runs north of the Bill Russell statue, through the Ames Building block, along One
+Boston Place's Washington St front, and back through the State St buildings. Photos checked
+(Wikimedia Commons) before modelling.
+
+| Piece | What |
+|---|---|
+| Data | `DETAIL.w` -71.0585 to -71.0605 (x -535), so the 160 m ground ring and the terrain reach past One Boston Place. Re-fetched only the DETAIL-scoped sources (`fetch.mjs osm-detail dem boston-*`). OSM is as of 2026-10-24; every OSM id the project references still resolves. The DEM is 1481x1294. |
+| Boundary | Ring entries 31-34 (the Congress St median from (-219,165) to (-246,62)) replaced by ten vertices, each 2-4 m inside a footprint. Gates went from 12 to 16: Congress St at (-221, 163) south of State St; Devonshire St (-269, 168); Washington St (-316, 184) at One Boston Place's south corner; Court St (-338, 123) against the Ames Building; and the southbound Congress St carriageway (-262, 15) where the north wall leaves the median. The old State St checkpoint gate at (-226, 142) is gone. New spots: `oldstatehouse`, `onebostonplace`, `cityhallplaza`. |
+| Old State House | `historic.ts` `oldStateHouse` now reads walkable ground (`heightAt`, terrain fallback). The doors stand one to four granite steps (0.17 m) above their own sidewalk, as on the real south door, not 1.6 m up. The porches have fluted columns on granite pedestals, the steps run down between them, and the porches collide. The State station stair doorway is on the south side only (OSM n7675912985), with a black State band (Orange and Blue Line stripes) and the T disc on a bracket. The Boston Massacre Site (OSM n632018853, found by name in `furniture.statue`) is a flush disc of granite setts round a starred stone. |
+| One Boston Place | Its two unmeasured base parts (BPDA 678279 and 678281, under the plaza w816273227) baked as 9 m masonry blocks. Landmark `oneBostonPlaceLobby` (`landmarks/onebostonplace.ts`) builds them as two-storey glass lobbies in dark bronze frames, panes cracked and boarded. The map inks them plainly and labels the tower "One Boston Place". The tower keeps the generic facade. |
+| Bill Russell | Built by City Hall's builder (it stands on the plaza, inside the wall): bronze, 6'10", the ball at his chest, facing west (OSM `direction=270`) on a low granite base, eleven dark granite blocks round him, colliding. |
+| Freedom Trail | `ROUTE` starts at the Washington St gate and runs along the Old State House's south sidewalk, past the Massacre Site, down State St to the old start on Congress St (+140 m). Stops are anchored with `lengthTo()`. New stops: Old State House (by the south door) and Boston Massacre Site. The old "Old State House / behind you" stop is gone. |
+| Other | The cinematic gate shot looks up State St past the Old State House to the Court St gate. The map draws the trail from Washington St. |
+| Cost | Walkable 315,344 m2 (+9.5k), 0 leaks, all 19 spots. `harbor.bin.gz` 2.01 MB to 2.16 MB, ground triangles 93.4k to 100.8k. Measured headless on a loaded machine (`?debug=stats`, scene pass). `state` High 250 draws / 0.88 M (all passes 363 / 1.22 M), Low 171 / 0.46 M. `oldstatehouse` High 127 / 0.34 M, Low 120 / 0.30 M. `onebostonplace` High 153 / 0.26 M, Low 109 / 0.21 M. `cityhallplaza` High 202 / 0.39 M, Low 172 / 0.31 M. All within the main-pass budget (High 291 / 1.13 M, Low 206 / 0.53 M). |
+| Side effects | The re-bake reshuffles district-wide what's seeded in data order (lit lamps, street furniture, cordon dressing), so screenshot and perf baselines moved. The spawn is now ~52 m from the nearest wall (the Congress St gate), so the arrival hum (`index.ts` `near01(wd, 3, 45)`) is silent there; not changed, to judge by ear. |
+
 ## Follow-ups (not done)
+
+- West expansion: One Boston Place as a hand-built tower (Belluschi's dark steel, the diagonal exterior
+  bracing, the rooftop box); the T sign on 28 State St's entrance on Washington Mall; the two children's
+  statues added beside Bill Russell in 2014; the Old State House's west portico is the south door's
+  design, not checked against a photo of the west end.
 
 - Long Wharf: the pavilion's heights are a guess (OSM implies a ~7 m ridge, the LiDAR 4.85 m; built at
   6 m), as are its stepped edge's position and the flag. Tia's (on the Marriott's north annex) isn't in
@@ -143,7 +168,8 @@ widths, and lists their beds and lawns.
 
 - Dev server: `npx vite --port 5173`. URL params: `?menu=0&card=0&ui=0&start=harbor&q=high|low&mood=curfew|ashfall|pall&at=<spot>&fps=8&debug=stats`.
   Spots: state, faneuil, quincy, longwharf, aquarium, columbus, customhouse, harbortowers, rowes,
-  northsquare, blackstone, hongkong, ferry, whalewatch, aquariumstation, greenway.
+  northsquare, blackstone, hongkong, ferry, whalewatch, aquariumstation, greenway, oldstatehouse,
+  onebostonplace, cityhallplaza.
 - `window.app` is the game (`pos`, `heading`, `yaw`, `pitch`, `dist`, `player.group`,
   `resetCamera()`, `placeCamera(1, true)`, `built`). It is a DOM element until boot finishes: wait for
   `.loader` to detach and `window.app.built` to exist.

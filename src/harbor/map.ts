@@ -38,9 +38,13 @@ const PLACES: MapLabel[] = [
   { text: 'Whale Watch', x: 329.7, z: 68, kind: 'place' },
   // the IMAX, one of the Aquarium's extra outlines (so it has no label of its own)
   { text: 'Simons Theatre', x: 315.5, z: 131.3, kind: 'landmark' },
+  // the tower the west cordon stands against (its lobbies are a landmark, the tower isn't)
+  { text: 'One Boston Place', x: -360, z: 163, kind: 'place' },
 ];
 /** landmarks the map names as a place instead (PLACES) */
-const UNLABELLED = new Set(['aquariumStation']);
+const UNLABELLED = new Set(['aquariumStation', 'oneBostonPlaceLobby']);
+/** landmarks that are only a modern building's base: inked like any other building, not in ochre */
+const PLAIN = new Set(['oneBostonPlaceLobby']);
 
 export function harborMap(d: HarborData, parts: Part[]): AreaMap {
   const b = d.h.bounds, ppm = Math.min(2.4, 3072 / Math.max(b.x1 - b.x0, b.z1 - b.z0));
@@ -95,7 +99,7 @@ export function harborMap(d: HarborData, parts: Part[]): AreaMap {
   const body = new Path2D(), marks = new Path2D();
   for (const p of parts) {
     if (p.overhead) continue;
-    const path = p.landmark ? marks : body;
+    const path = p.landmark && !PLAIN.has(p.landmark) ? marks : body;
     for (const r of [p.outer, ...p.holes]) {
       r.forEach(([x, z], i) => (i ? path.lineTo(x, z) : path.moveTo(x, z)));
       path.closePath();
@@ -106,7 +110,7 @@ export function harborMap(d: HarborData, parts: Part[]): AreaMap {
   g.fillStyle = OCHRE; g.fill(marks, 'evenodd');
   g.strokeStyle = 'rgba(20, 14, 10, 0.7)'; g.lineWidth = 0.5; g.stroke(body); g.stroke(marks);
 
-  // the Freedom Trail, a red line from the cordon at State St to the North End
+  // the Freedom Trail, a red line from the cordon on Washington St, past the Old State House, to the North End
   g.strokeStyle = 'rgba(176, 44, 32, 0.9)'; g.lineWidth = 2.2; g.lineCap = 'round'; g.lineJoin = 'round';
   g.beginPath(); FREEDOM_TRAIL.forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.stroke();
 

@@ -15,8 +15,8 @@ export const project = (lon, lat) => [(lon - ORIGIN.lon) * M_PER_DEG_LON, (ORIGI
 export const unproject = (x, z) => [ORIGIN.lon + x / M_PER_DEG_LON, ORIGIN.lat - z / M_PER_DEG_LAT];
 
 // Bounding boxes as { w, s, e, n } in degrees.
-/** everything detailed: the play area, the 60 m edge ring and some slack (x -370..946, z -719..575) */
-export const DETAIL = { w: -71.0585, s: 42.3548, e: -71.0425, n: 42.3665 };
+/** everything detailed: the play area, its 120 m edge ring and 160 m ground ring, and some slack (x -535..946, z -719..575) */
+export const DETAIL = { w: -71.0605, s: 42.3548, e: -71.0425, n: 42.3665 };
 /** every building in the near backdrop (~400 m past the cordon) */
 export const BACKDROP = { w: -71.064, s: 42.351, e: -71.038, n: 42.3705 };
 /** tall buildings only (> FAR_MIN_HEIGHT_FT) for the distant skyline (~1.5 km past the cordon) */

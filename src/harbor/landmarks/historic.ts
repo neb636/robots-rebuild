@@ -1,6 +1,8 @@
-// The historic landmarks: the Paul Revere House on North Square (in the play area, seen up close), the
-// Old State House and Boston City Hall (across the cordon on Congress St, so they're backdrop: the
-// silhouette and the night look come first) and the Greenway Carousel, stopped on its lawn. Each is
+// The historic landmarks: the Paul Revere House on North Square and the Old State House at the head of
+// State St (both in the play area, seen up close: the Old State House with its porches, the State
+// station stair and the Boston Massacre Site in front of it), Boston City Hall (just past the cordon on
+// City Hall Plaza, so the silhouette and the night look come first; the Bill Russell statue stands on
+// the plaza inside the wall) and the Greenway Carousel, stopped on its lawn. Each is
 // modelled in its own frame (x along its main front, y up, absolute; z out of the front) into one Batch,
 // so a building costs about one draw call per material. Two years on: broken and boarded glass,
 // streaks, weeds, faded paint; a lantern by Revere's door and a room lit upstairs, the belfry still
@@ -155,6 +157,8 @@ class Kit {
 }
 
 interface Hole { u0: number; u1: number; y0: number; y1: number; d: number }
+/** the Old State House's State station doorway: on wall W at u, sidewalk g, opening up to `top` */
+interface StationDoor { W: Wall; u: number; g: number; top: number }
 
 /** a wall face with rectangular openings, as a full grid (so colours can streak under each opening),
  *  and the openings' reveals running `d` back into the wall */
@@ -249,6 +253,41 @@ function canvasTex(w: number, h: number, draw: (c: CanvasRenderingContext2D) => 
   return t;
 }
 const gold = () => cached('gold', () => new THREE.MeshStandardMaterial({ color: '#d0a650', metalness: 0.55, roughness: 0.38 }));
+/** the MBTA's T disc (left quarter) and a black station band with the Orange and Blue Line stripes */
+const tSign = () => cached('tSign', () => new THREE.MeshStandardMaterial({ roughness: 0.55, side: THREE.DoubleSide, map: canvasTex(512, 128, (c) => {
+  c.fillStyle = '#f2f0ea'; c.beginPath(); c.arc(64, 64, 62, 0, 7); c.fill();
+  c.strokeStyle = '#111'; c.lineWidth = 9; c.beginPath(); c.arc(64, 64, 55, 0, 7); c.stroke();
+  c.fillStyle = '#111'; c.fillRect(30, 30, 68, 15); c.fillRect(56, 30, 16, 70);
+  c.fillStyle = '#141414'; c.fillRect(128, 0, 384, 128);
+  c.fillStyle = '#ed8b00'; c.fillRect(128, 110, 192, 10); c.fillStyle = '#003da5'; c.fillRect(320, 110, 192, 10);
+  c.fillStyle = '#eceae4'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = 'bold 66px Helvetica, Arial, sans-serif'; c.fillText('State', 320, 56);
+  const R = rng(1904);
+  for (let i = 0; i < 70; i++) { c.fillStyle = `rgba(${60 + R() * 40},${40 + R() * 20},20,${0.08 + R() * 0.25})`; c.beginPath(); c.arc(R() * 512, R() * 128, 2 + R() * 12, 0, 7); c.fill(); }
+}) }));
+/** the Boston Massacre Site from above: grey granite setts in rings round a stone cut with a star */
+const massacreMat = () => cached('massacre', () => new THREE.MeshStandardMaterial({ roughness: 0.92, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, map: canvasTex(512, 512, (c) => {
+  const R = rng(1770), cx = 256, cy = 256;
+  c.fillStyle = '#8f8a82'; c.fillRect(0, 0, 512, 512);
+  // rings of setts, each a little rounded block in the mortar
+  for (let r = 50; r < 252; r += 26) {
+    const n = Math.round((2 * Math.PI * r) / 40), off = R();
+    for (let i = 0; i < n; i++) {
+      const a = ((i + off) / n) * Math.PI * 2, kk = 92 + R() * 46;
+      c.save(); c.translate(cx + Math.cos(a) * r, cy + Math.sin(a) * r); c.rotate(a);
+      c.fillStyle = rgb(kk, kk * 0.97, kk * 0.99); c.beginPath(); c.roundRect(-11, -16, 22, 32, 5); c.fill();
+      c.fillStyle = 'rgba(20,18,16,0.25)'; c.fillRect(-11, 12, 22, 4);
+      c.restore();
+    }
+  }
+  // the centre stone and its star
+  c.fillStyle = '#a19c94'; c.beginPath(); c.arc(cx, cy, 38, 0, 7); c.fill();
+  c.strokeStyle = '#5e5a54'; c.lineWidth = 3; c.stroke();
+  c.beginPath();
+  for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 11 : 28; c.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+  c.closePath(); c.fillStyle = '#7a756d'; c.fill(); c.strokeStyle = '#4a4640'; c.lineWidth = 2; c.stroke();
+  // grit and two years of leaves in the joints
+  for (let i = 0; i < 260; i++) { c.fillStyle = `rgba(${40 + R() * 50},${30 + R() * 40},${20 + R() * 20},${R() * 0.3})`; c.fillRect(R() * 512, R() * 512, 1 + R() * 4, 1 + R() * 4); }
+}) }));
 const weedMat = () => cached('weeds', () => new THREE.MeshStandardMaterial({ map: leafTex('grass'), color: '#a2a87a', alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.95, vertexColors: true }));
 
 /** a tuft of weeds: two crossed cards */
@@ -809,11 +848,14 @@ export const oldStateHouse: LandmarkBuilder = (ctx) => {
   const xE = Math.max(...l0.map((q) => q[0])), xW = Math.min(...l0.map((q) => q[0])), zN = Math.min(...l0.map((q) => q[1])), zS = Math.max(...l0.map((q) => q[1]));
   const [ox, oz] = F0.world((xE + xW) / 2, (zN + zS) / 2);
   const F = new Frame(ox, oz, ux, uz), hx = (xE - xW) / 2, hz = (zS - zN) / 2;
-  const terr = (lx: number, lz: number) => { const [x, z] = F.world(lx, lz); return ctx.terrainAt(x, z); };
-  const E = Math.min(terr(hx + 2.5, 0), terr(hx + 1, -hz - 1.5), terr(hx + 1, hz + 1.5));
-  const gSide = (x: number, s: number) => terr(x, s * (hz + 1.8));
+  // the walkable ground where there is some (the sidewalks stand a curb above the terrain), else the terrain
+  const ground = (lx: number, lz: number) => { const [x, z] = F.world(lx, lz), h = ctx.heightAt(x, z); return Number.isFinite(h) ? h : ctx.terrainAt(x, z); };
+  const E = Math.min(ground(hx + 2.5, 0), ground(hx + 1, -hz - 1.5), ground(hx + 1, hz + 1.5));
+  const gSide = (x: number, s: number) => ground(x, s * (hz + 1.8));
   // a raised basement (the street falls away to the east), two tall storeys, a steep slate roof
   const yB = p.base - 0.2, yWT = E + 2.45, yBelt = E + 6.8, yTop = E + 12.0;
+  // the doors stand up one to four granite steps from their own sidewalk (the floor inside makes up the rest)
+  const RISE = 0.17, sillOf = (g: number) => clamp(yWT, g + RISE, g + 4 * RISE);
   const w1: [number, number] = [E + 3.5, E + 6.15], w2: [number, number] = [E + 8.55, E + 11.6];
   const yEv = yTop + 0.42, zEv = hz + 0.52, yRg = yEv + zEv;
 
@@ -843,16 +885,19 @@ export const oldStateHouse: LandmarkBuilder = (ctx) => {
   // ---- the long sides: eleven bays, a pedimented door in the middle, the State station stair at the east end
   const bays = Array.from({ length: 11 }, (_, i) => -hx + 1.75 + (i * (2 * hx - 3.5)) / 10);
   const longs = [{ W: new Wall(hx, -hz, -hx, -hz), s: -1 }, { W: new Wall(-hx, hz, hx, hz), s: 1 }];
+  // (set inside the forEach below, so TypeScript can't see it change)
+  let station = null as StationDoor | null;
   for (const { W, s } of longs) {
     const uOf = (x: number) => (s < 0 ? hx - x : x + hx), xOf = (u: number) => (s < 0 ? hx - u : u - hx);
     const holes: Hole[] = [], fills: [Hole, string][] = [];
     bays.forEach((x, i) => {
       const u = uOf(x), g = gSide(x, s);
-      if (i === 5) { const d = { u0: u - 0.65, u1: u + 0.65, y0: yWT, y1: E + 5.45, d: 0.45 }; holes.push(d); fills.push([d, 'door']); }
+      if (i === 5) { const y0 = sillOf(g), d = { u0: u - 0.65, u1: u + 0.65, y0, y1: Math.min(E + 5.45, y0 + 3.1), d: 0.45 }; holes.push(d); fills.push([d, 'door']); }
       else { const h = { u0: u - 0.58, u1: u + 0.58, y0: w1[0], y1: w1[1], d: 0.22 }; holes.push(h); fills.push([h, 'sash' + kindOf(i * 13 + s * 5)]); }
       const h2 = { u0: u - 0.6, u1: u + 0.6, y0: w2[0], y1: w2[1], d: 0.22 }; holes.push(h2);
       fills.push([h2, 'sash' + (s < 0 && i === 9 ? 3 : kindOf(i * 17 + s * 3 + 1))]);
-      if (i === 10) { const st = { u0: u - 0.95, u1: u + 0.95, y0: g - 0.05, y1: E + 2.3, d: 0.7 }; holes.push(st); fills.push([st, 'grille']); }
+      // the State station stair goes down inside the east end, from a doorway on the south side
+      if (i === 10 && s > 0) { const st = { u0: u - 0.95, u1: u + 0.95, y0: g - 0.05, y1: Math.max(g + 2.15, E + 2.0), d: 0.7 }; holes.push(st); fills.push([st, 'grille']); station = { W, u, g, top: st.y1 }; }
       else if (g < E + 0.6 && i !== 5) { const bh = { u0: u - 0.45, u1: u + 0.45, y0: E + 0.95, y1: E + 1.6, d: 0.2 }; holes.push(bh); fills.push([bh, hash(i, s) < 0.5 ? 'grille' : 'glass']); }
     });
     holedWall(brick, W, 0, W.len, yB, yTop, holes, 1 / 1.6, brickCol(holes, (u) => gSide(xOf(u), s)));
@@ -862,27 +907,33 @@ export const oldStateHouse: LandmarkBuilder = (ctx) => {
     // downpipes
     for (const i of [1, 8]) { const q = W.P(uOf(bays[i] + 1.54), 0, 0.12), g = gSide(bays[i] + 1.54, s); k.add(new THREE.CylinderGeometry(0.075, 0.075, yTop - g, 6, 1, true), iron, q[0], (yTop + g) / 2, q[2]); k.onWall(W, iron, uOf(bays[i] + 1.54), yTop - 0.2, 0, 0.3, 0.3, 0.26); }
   }
+  /** a door's porch, as on the south side: fluted columns on granite pedestals either side of the
+   *  steps, an entablature and a pediment over them; the steps run down between the pedestals */
   function portico(W: Wall, uc: number, g: number) {
-    const out = 0.85;
+    const out = 0.85, y0 = sillOf(g), GRANITE: Col = [0.56, 0.57, 0.6];
     for (const du of [-0.95, 0.95]) {
-      const q = W.P(uc + du, yWT, out - 0.12);
+      k.onWall(W, stoneM, uc + du, (g - 0.05 + y0) / 2, 0, 0.62, y0 - g + 0.05, out + 0.05, GRANITE, 0.6);
+      const q = W.P(uc + du, y0, out - 0.12);
       k.add(columnGeo(2.9, seg), paintM, q[0], q[1], q[2], 0, 0, 0, 1, 1, 1, [0.9, 0.88, 0.84]);
-      k.onWall(W, paintM, uc + du, yWT + 1.45, 0, 0.36, 2.9, 0.08, [0.86, 0.84, 0.8]);
+      k.onWall(W, paintM, uc + du, y0 + 1.45, 0, 0.36, 2.9, 0.08, [0.86, 0.84, 0.8]);
     }
-    k.onWall(W, paintM, uc, yWT + 3.12, 0, 2.6, 0.44, out + 0.12, [0.9, 0.88, 0.84]);
-    slab(paint, offsetWall(W, out + 0.12), [[uc - 1.38, yWT + 3.34], [uc + 1.38, yWT + 3.34], [uc, yWT + 4.02]], out + 0.12, 0.5, () => [0.9, 0.88, 0.84]);
-    const n = Math.max(0, Math.ceil((yWT - g) / 0.18)), r = n ? (yWT - g) / n : 0;
-    for (let i = 0; i < n; i++) k.onWall(W, stoneM, uc, yWT - (i + 0.5) * r, 0, 2.4 + i * 0.12, r, 0.95 + i * 0.3, STONE, 0.6);
+    k.onWall(W, paintM, uc, y0 + 3.12, 0, 2.6, 0.44, out + 0.12, [0.9, 0.88, 0.84]);
+    slab(paint, offsetWall(W, out + 0.12), [[uc - 1.38, y0 + 3.34], [uc + 1.38, y0 + 3.34], [uc, y0 + 4.02]], out + 0.12, 0.5, () => [0.9, 0.88, 0.84]);
+    const n = Math.max(1, Math.round((y0 - g) / RISE)), r = (y0 - g) / n;
+    for (let i = 0; i < n; i++) k.onWall(W, stoneM, uc, y0 - (i + 0.5) * r, 0, i === n - 1 ? 2.2 : 1.28, r, 0.6 + i * 0.25, GRANITE, 0.6);
+    // the porch is solid to the hero and the camera
+    const depth = 0.6 + (n - 1) * 0.25, cs = [W.P(uc - 1.25, 0, 0), W.P(uc - 1.25, 0, Math.max(depth, out + 0.1)), W.P(uc + 1.25, 0, Math.max(depth, out + 0.1)), W.P(uc + 1.25, 0, 0)].map((q) => F.world(q[0], q[2]));
+    for (let i = 0; i < 3; i++) ctx.collide.addSeg(cs[i][0], cs[i][1], cs[i + 1][0], cs[i + 1][1], y0 + 4.1);
   }
 
   // ---- the ends: three bays each; the east has the balcony, the west its portico
   const east = new Wall(hx, hz, hx, -hz), west = new Wall(-hx, -hz, -hx, hz), W2 = 2 * hz;
   const eb = [hz - 3.4, hz, hz + 3.4];
   for (const [W, isEast] of [[east, true], [west, false]] as [Wall, boolean][]) {
-    const g = isEast ? E : terr(-hx - 2.5, 0);
+    const g = isEast ? E : ground(-hx - 2.5, 0);
     const holes: Hole[] = [], fills: [Hole, string][] = [];
     eb.forEach((u, i) => {
-      if (!isEast && i === 1) { const d = { u0: u - 0.65, u1: u + 0.65, y0: yWT, y1: E + 5.45, d: 0.45 }; holes.push(d); fills.push([d, 'door']); }
+      if (!isEast && i === 1) { const y0 = sillOf(g), d = { u0: u - 0.65, u1: u + 0.65, y0, y1: Math.min(E + 5.45, y0 + 3.1), d: 0.45 }; holes.push(d); fills.push([d, 'door']); }
       else { const h = { u0: u - 0.58, u1: u + 0.58, y0: w1[0], y1: w1[1], d: 0.22 }; holes.push(h); fills.push([h, 'sash' + kindOf(i * 7 + (isEast ? 1 : 2))]); }
       if (isEast && i === 1) { const d = { u0: u - 0.72, u1: u + 0.72, y0: E + 7.35, y1: E + 11.1, d: 0.3 }; holes.push(d); fills.push([d, 'door']); }
       else { const h = { u0: u - 0.6, u1: u + 0.6, y0: w2[0], y1: w2[1], d: 0.22 }; holes.push(h); fills.push([h, 'sash' + (isEast && i === 2 ? 3 : kindOf(i * 11 + (isEast ? 5 : 6)))]); }
@@ -1030,6 +1081,34 @@ export const oldStateHouse: LandmarkBuilder = (ctx) => {
   k.add(new THREE.BoxGeometry(1.3, 0.06, 0.04), goldM, 0, c1 + 3.55, 0, 0, 0.7, 0);
   k.add(new THREE.BoxGeometry(0.5, 0.34, 0.03), goldM, -0.42 * Math.cos(0.7), c1 + 3.55, 0.42 * Math.sin(0.7), 0, 0.7, 0);
 
+  // ---- the State station stair: a black STATE band over its doorway, the T disc on a bracket beside it
+  if (station) {
+    const { W, u, top } = station, tm = tSign();
+    const band = W.P(u, top + 0.2, 0.19);
+    k.add(cellUV(new THREE.PlaneGeometry(1.2, 0.3), [0.25, 0, 1, 1]), tm, band[0], band[1], band[2], 0, W.yaw, 0);
+    k.onWall(W, iron, u + 1.3, top + 1.3, 0, 0.05, 0.05, 0.72);
+    for (const side of [1, -1]) {
+      const q = W.P(u + 1.3, top + 0.92, 0.46);
+      // it hangs a little off true, on one good bolt
+      k.add(cellUV(new THREE.CircleGeometry(0.32, 24), [0, 0, 0.25, 1]), tm, q[0] + W.ux * side * 0.012, q[1], q[2] + W.uz * side * 0.012, 0, W.yaw + (side * Math.PI) / 2, 0.06);
+    }
+  }
+
+  // ---- the Boston Massacre Site, on the island off the east end: a disc of granite setts laid in rings
+  //      round a starred stone, flush with the pavement (no collision)
+  const site = ctx.d.h.furniture.statue?.find((f) => /massacre/i.test(f.name ?? ''));
+  if (site) {
+    const [cx, cz] = F.local(site.x, site.z), acc = k.acc(massacreMat()), RAD = 1.3, NR = 4, NA = 36;
+    const P = (r: number, a: number): V3 => { const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r; return [x, ground(x, z) + 0.014, z]; };
+    const T = (r: number, a: number) => [0.5 + (Math.cos(a) * r) / (2 * RAD), 0.5 - (Math.sin(a) * r) / (2 * RAD)];
+    for (let i = 0; i < NR; i++) for (let j = 0; j < NA; j++) {
+      const r0 = (i / NR) * RAD, r1 = ((i + 1) / NR) * RAD, a0 = (j / NA) * Math.PI * 2, a1 = ((j + 1) / NA) * Math.PI * 2;
+      // wound counter-clockwise seen from above (z is south)
+      acc.triN(P(r0, a0), P(r1, a1), P(r1, a0), [0, 1, 0], [...T(r0, a0), ...T(r1, a1), ...T(r1, a0)], WHITE);
+      if (i) acc.triN(P(r0, a0), P(r0, a1), P(r1, a1), [0, 1, 0], [...T(r0, a0), ...T(r0, a1), ...T(r1, a1)], WHITE);
+    }
+  }
+
   const group = new THREE.Group(); group.name = `landmark:${ctx.key}`;
   k.flush(group);
   const [bx, bz] = F.world(0, 0);
@@ -1037,7 +1116,6 @@ export const oldStateHouse: LandmarkBuilder = (ctx) => {
   return { group, lights: [belfry], update: (_dt, t) => flickerUpdate(belfry, t, 23) };
 };
 
-// =============================================================================== stubs for now
 // =============================================================================== Boston City Hall
 
 /** a floor that follows the terrain over polygon `poly` (local x/z), clipped cell by cell on a grid;
@@ -1304,6 +1382,7 @@ export const cityHall: LandmarkBuilder = (ctx) => {
   for (let z = Z0 + 6; z < Z1 - 4; z += 14) k.add(new THREE.SphereGeometry(0.16, 6, 5), eyeM, X1 - 0.3, T + 0.15, z, 0, 0, 0, 1, 1, 1, WHITE, false);
   for (let x = X0 + 6; x < X1 - 4; x += 14) k.add(new THREE.SphereGeometry(0.16, 6, 5), eyeM, x, T + 0.15, Z0 + 0.3, 0, 0, 0, 1, 1, 1, WHITE, false);
   for (let i = 0; i < (hi ? 16 : 8); i++) tuft(k, X0 + 2 + R() * (X1 - X0 - 4), T, Z0 + 2 + R() * (Z1 - Z0 - 4), 0.5 + R() * 0.4, R, 0.4);
+  russell(ctx, k, F, hi);
   const group = new THREE.Group(); group.name = `landmark:${ctx.key}`;
   k.flush(group);
   const [mx, mz] = F.world(mast[0], mast[2]);
@@ -1598,3 +1677,53 @@ export const carousel: LandmarkBuilder = (ctx) => {
     },
   };
 };
+
+// =============================================================================== the Bill Russell statue
+
+const bronze = () => cached('bronze', () => new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.35, roughness: 0.5 }));
+
+/** Ann Hirsch's Bill Russell (2013) on City Hall Plaza, at OpenStreetMap's point (inside the cordon,
+ *  so City Hall's builder places it): 6'10" of bronze in his Celtics jersey, the ball held high at his
+ *  chest for the outlet pass, facing west on a low granite base, with dark polished granite blocks
+ *  carved with his words standing round him at knee height */
+function russell(ctx: LandmarkCtx, k: Kit, F: Frame, hi: boolean) {
+  const site = ctx.d.h.furniture.statue?.find((f) => /russell/i.test(f.name ?? ''));
+  if (!site) return;
+  const R = rng(1956), seg = hi ? 10 : 7;
+  const gy = (() => { const h = ctx.heightAt(site.x, site.z); return Number.isFinite(h) ? h : ctx.terrainAt(site.x, site.z); })();
+  const [lx, lz] = F.local(site.x, site.z);
+  // OSM says he faces west: that direction in City Hall's frame
+  const yaw = Math.atan2(F.ux, -F.uz);
+  const granite = pbrMat('ashlar', '#ffffff', { vertexColors: true });
+  const DARK: Col = [0.2, 0.2, 0.22], BZ: Col = [0.2, 0.135, 0.08], BZ2: Col = [0.16, 0.11, 0.065], VG: Col = [0.26, 0.36, 0.3];
+  k.add(wbox(1.4, 0.26, 1.4, 0.6), granite, lx, gy + 0.13, lz, 0, yaw, 0, 1, 1, 1, [0.36, 0.36, 0.38]);
+  const S = new Sculpt(seg);
+  // feet, the left one forward; legs; the shorts
+  S.add(new THREE.BoxGeometry(0.13, 0.09, 0.32), BZ2, 0.14, 0.045, 0.08).add(new THREE.BoxGeometry(0.13, 0.09, 0.32), BZ2, -0.14, 0.045, -0.06);
+  S.rod(BZ, [0.14, 0.08, 0.07], [0.15, 0.58, 0.04], 0.065, 0.085).rod(BZ, [-0.14, 0.08, -0.07], [-0.15, 0.58, -0.03], 0.065, 0.085);
+  S.rod(BZ, [0.15, 0.56, 0.04], [0.12, 0.98, 0], 0.09, 0.11).rod(BZ, [-0.15, 0.56, -0.03], [-0.12, 0.98, 0], 0.09, 0.11);
+  S.add(new THREE.CylinderGeometry(0.25, 0.27, 0.3, seg + 4), BZ2, 0, 0.98, 0);
+  // the jersey, the shoulders turned a little into the pass; the neck and head
+  S.ball(BZ, 0, 1.33, 0, 0.25, 0.33, 0.165, 0, 0.2, 0);
+  for (const sx of [-1, 1]) S.ball(BZ, sx * 0.25, 1.6, sx * 0.03, 0.1, 0.09, 0.1);
+  S.rod(BZ, [0, 1.64, 0], [0, 1.79, 0.02], 0.065);
+  S.ball(BZ, 0, 1.9, 0.03, 0.105, 0.13, 0.12);
+  S.ball(BZ2, 0, 1.86, 0.11, 0.05, 0.06, 0.04);
+  // the ball at his chest, both hands on it; the arms bent round it
+  // the ball rubbed bright by two years of hands that came anyway
+  S.ball([0.5, 0.36, 0.2], -0.1, 1.5, 0.38, 0.12, 0.12, 0.12);
+  S.rod(BZ, [-0.26, 1.6, -0.03], [-0.34, 1.38, 0.14], 0.055, 0.065).rod(BZ, [-0.34, 1.38, 0.14], [-0.2, 1.47, 0.36], 0.045, 0.055);
+  S.rod(BZ, [0.26, 1.6, 0.03], [0.3, 1.4, 0.18], 0.055, 0.065).rod(BZ, [0.3, 1.4, 0.18], [0.03, 1.52, 0.4], 0.045, 0.055);
+  S.ball(BZ2, -0.2, 1.48, 0.38, 0.06, 0.07, 0.05).ball(BZ2, 0.02, 1.53, 0.42, 0.06, 0.07, 0.05);
+  // two years of rain: verdigris on the tops of the shoulders, the head and the ball
+  for (const [x, y, z] of [[0.25, 1.68, 0.03], [-0.25, 1.68, -0.03], [0, 2.0, 0.03], [-0.1, 1.6, 0.34]]) S.ball(VG, x, y, z, 0.06, 0.02, 0.06);
+  S.place(k, bronze(), xform(lx, gy + 0.26, lz, yaw));
+  ctx.collide.addCircle(site.x, site.z, 0.85, gy + 2.4);
+  // the blocks round him, some knocked out of true
+  for (let i = 0; i < 11; i++) {
+    const a = yaw + Math.PI * 0.25 + (i / 11) * Math.PI * 1.5 + (R() - 0.5) * 0.12, r = 2.6 + R() * 0.5;
+    const bx = lx + Math.sin(a) * r, bz = lz + Math.cos(a) * r, h = 0.55 + R() * 0.2, [wx, wz] = F.world(bx, bz);
+    k.add(wbox(0.5, h, 0.5, 0.6), granite, bx, gy + h / 2, bz, i === 4 ? 0.06 : 0, a + (R() - 0.5) * 0.3, i === 8 ? -0.05 : 0, 1, 1, 1, DARK);
+    ctx.collide.addCircle(wx, wz, 0.38, gy + h);
+  }
+}
