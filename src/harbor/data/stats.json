@@ -49,22 +49,22 @@
  "ground": {
   "landArea": 523772,
   "classes": {
-   "road": 176762,
-   "crosswalk": 12191,
-   "parking": 31081,
+   "road": 177768,
+   "crosswalk": 10863,
+   "parking": 31083,
    "lot": 95419,
-   "sidewalkBrick": 53517,
-   "sidewalkConcrete": 54084,
-   "pavers": 15819,
+   "sidewalkBrick": 53621,
+   "sidewalkConcrete": 54227,
+   "pavers": 15877,
    "setts": 468,
-   "path": 24083,
-   "grass": 60363,
+   "path": 24092,
+   "grass": 60367,
    "deckWood": 0,
    "deckConcrete": 0
   }
  },
- "groundTriangles": 100754,
- "curbs": 18560,
+ "groundTriangles": 105226,
+ "curbs": 18739,
  "seawallRuns": 1,
  "decks": 24,
  "piles": 851,
@@ -101,7 +101,7 @@
  "art": 38,
  "bytes": {
   "json": 267782,
-  "bin": 4898168,
-  "binGz": 2156076
+  "bin": 5056236,
+  "binGz": 2227495
  }
 }

@@ -43,7 +43,7 @@ export function groundMaterial(classes: { name: string }[], quality: 'high' | 'l
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
         attribute float aClass; attribute float aDir;
-        varying vec3 vW; flat varying int vClass; varying float vDir;`)
+        varying vec3 vW; flat varying int vClass; flat varying float vDir;`)
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
         vW = (modelMatrix * vec4(transformed, 1.0)).xyz; vClass = int(aClass + 0.5); vDir = aDir;`);
     sh.fragmentShader = sh.fragmentShader
@@ -52,7 +52,7 @@ export function groundMaterial(classes: { name: string }[], quality: 'high' | 'l
         precision highp sampler2DArray;
         uniform sampler2DArray uAlb, uNrm;
         uniform vec4 uSurf[${n}]; uniform vec3 uTint[${n}]; uniform float uRelief[${n}]; uniform float uWet;
-        varying vec3 vW; flat varying int vClass; varying float vDir;
+        varying vec3 vW; flat varying int vClass; flat varying float vDir;
         ${VNOISE_2D_GLSL}`)
       .replace('#include <map_fragment>', `
         vec4 S = uSurf[vClass];
@@ -93,9 +93,15 @@ export function groundMaterial(classes: { name: string }[], quality: 'high' | 'l
         if (vClass == ${classes.findIndex((c) => c.name === 'crosswalk')}) {
           float a = vDir * 3.14159265 / 255.0;
           float s = dot(vW.xz, vec2(cos(a), sin(a)));
-          float bar = smoothstep(0.04, 0.0, abs(fract(s / 1.1) - 0.5) - 0.24);
-          float worn = smoothstep(0.35, 0.65, vnoise(vW.xz * 1.7));
-          col = mix(col, vec3(0.72, 0.72, 0.68), bar * worn * 0.85);
+          // antialiased by the pixel's footprint, and eased to the bars' average cover where they're
+          // too thin on screen to resolve, so they don't crawl and shimmer as the camera moves
+          float x = s / 1.1, w = fwidth(x);
+          float bar = smoothstep(0.5 * w + 0.03, -0.5 * w, abs(fract(x) - 0.5) - 0.24);
+          bar = mix(bar, 0.48, smoothstep(0.2, 0.5, w));
+          // worn thin in patches (never through to bare asphalt in big holes), the asphalt's grain showing
+          float worn = 0.6 + 0.4 * smoothstep(0.2, 0.6, vnoise(vW.xz * 0.8 + 3.0));
+          vec3 paint = vec3(0.72, 0.72, 0.68) * (0.8 + 0.25 * dot(tex.rgb, vec3(0.333)));
+          col = mix(col, paint, bar * worn * 0.85);
         }
         diffuseColor.rgb *= col;`)
       .replace('#include <roughnessmap_fragment>', `
