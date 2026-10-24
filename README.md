@@ -61,7 +61,10 @@ skipped. Advance dialogue with Space / Enter / F.
 
 | Location | What to test |
 |---|---|
-| [State station and Congress Street cordon](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=state) | Station arrival and the district boundary. |
+| [State station](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=state) | Station arrival on State St; the Old State House stands up the street behind you. |
+| [Old State House and the Boston Massacre Site](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=oldstatehouse) | The east front (balcony, lion and unicorn, clock), the Massacre Site's ring of setts, the State station stair on the south side, the porch over the museum door and the Freedom Trail's first stops. |
+| [One Boston Place and the west cordon](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=onebostonplace) | The wall along One Boston Place's front, its glass lobbies, and the gates across Washington St and Court St. |
+| [Washington Mall and City Hall Plaza](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=cityhallplaza) | The Bill Russell statue, Washington Mall down to the Old State House, and the wall across City Hall Plaza under City Hall. |
 | [Faneuil Hall](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=faneuil) | Hall, plaza and Freedom Trail. |
 | [Quincy Market](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=quincy) | Market buildings and surrounding pedestrian streets. |
 | [Blackstone Block](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=blackstone) | Historic streets and Freedom Trail. |
@@ -96,6 +99,7 @@ skipped. Advance dialogue with Space / Enter / F.
 | [Tunnel companion movement variants](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=tunnel&at=orange&cast=hurt,sneak,crouch) | Walk and stop to inspect Marcus’s limp and crouch and Maya’s sneak animation. |
 | [Harbor walking tour](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&walk=tour) | Visits the named harbor spots automatically; inspect the console for `walk:leg`, `walk:stuck` and `walk:done`. |
 | [Current navigation to Faneuil Hall](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=state&mark=faneuil) | Follow the blue-white pulse; press G to send it again, and M to inspect the marked map. |
+| [Current navigation to the Old State House](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&at=state&mark=old-state-house) | Follow the pulse up State St; press M to see the mark on the map. |
 | [Harbor performance stats](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&debug=stats) | Inspect the live frame, draw-call and triangle overlay. |
 | [Harbor walk-mesh debug map](https://neb636.github.io/robots-rebuild/?menu=0&card=0&mood=day&start=harbor&debug=map) | Inspect walkable ground, colliders, cordon and actors in the debug overlay. |
 
@@ -263,8 +267,8 @@ Day Zero call).
 ## The harbor district
 
 `?start=harbor` (or `?menu=0&card=0&start=harbor`) starts in a walkable recreation of Boston's
-downtown waterfront two years on: from the State station stairs and the Congress Street cordon out
-to the end of Long Wharf, Faneuil Hall and Quincy Market, the Greenway, Columbus Park, the Aquarium,
+downtown waterfront two years on: from the Old State House and the cordon against One Boston Place
+out to the end of Long Wharf, Faneuil Hall and Quincy Market, the Greenway, Columbus Park, the Aquarium,
 Harbor Towers, Rowes Wharf and the southern North End. It's built at load time from real map data,
 baked into `src/harbor/data/` by `scripts/harbor/` (see `art/source/boston/README.md` for the
 pipeline and its inputs), with the landmarks modelled by hand in `src/harbor/landmarks/`.
@@ -276,8 +280,8 @@ emergency arteries, resident permits, street cleaning, tow zones, and now and th
 think of parking here*), the HarborWalk's blue markers along the water, the neighbourhood's own
 storefronts on their real buildings (OpenStreetMap's shops, cafés, bars and restaurants; anything
 tagged as a chain brand is left out), Massachusetts plates on the cars, a little graffiti, and the
-Freedom Trail: the red brick line with its bronze medallions and its stop signs, from the cordon at
-State St round Faneuil Hall, through the Blackstone Block and up Hanover St to the Paul Revere House,
+Freedom Trail: the red brick line with its bronze medallions and its stop signs, from the cordon on
+Washington St past the Old State House and the Boston Massacre Site, round Faneuil Hall, through the Blackstone Block and up Hanover St to the Paul Revere House,
 then under the wall toward the Old North Church, whose steeple (two lanterns lit) stands past the
 North End's cordon. The trail is on the map too. Every sign face is drawn once onto one canvas atlas,
 so they cost a couple of draws per 128 m tile. Long Wharf has its own: the ferry landings' MBTA
@@ -295,7 +299,8 @@ the parcels, beds and art are comes from OpenStreetMap (`header.parks`, `header.
 `src/harbor/greenwayzone.ts`).
 
 - `?at=<spot>` starts at a named place: state, faneuil, quincy, longwharf, aquarium, columbus,
-  customhouse, harbortowers, rowes, northsquare, blackstone, hongkong, ferry, aquariumstation, whalewatch, greenway.
+  customhouse, harbortowers, rowes, northsquare, blackstone, hongkong, ferry, aquariumstation, whalewatch, greenway,
+  oldstatehouse, onebostonplace, cityhallplaza.
 - `?debug=stats` shows what a frame costs (draws and triangles summed over every pass) and warns if
   a shader compiles after warm-up; `?debug=map` adds a top-down map of the walk mesh, colliders,
   the cordon, the tiles drawn, the lit lamps, the drones and the hero.

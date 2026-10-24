@@ -1,10 +1,11 @@
-// The Freedom Trail: the red brick line set into the pavement that leads from the Old State House
-// (just past the cordon at Congress and State) round Faneuil Hall, through the Holocaust Memorial's
-// park and the Blackstone Block, over the Greenway and up Hanover St into the North End to the Paul
-// Revere House, and on toward the Old North Church, which is on the far side of the wall now. The
-// route follows OpenStreetMap's own Freedom Trail ways where it maps them (round Faneuil Hall, Union
-// Park, the Greenway crossing) and the sidewalks in between. Bronze medallions every so often, and
-// the trail's red signs at its stops.
+// The Freedom Trail: the red brick line set into the pavement. It comes through the cordon on
+// Washington St (from the Old South Meeting House, on the far side of the wall now), passes the Old
+// State House's door and the Boston Massacre Site, then runs down State St and up Congress St, round
+// Faneuil Hall, through the Holocaust Memorial's park and the Blackstone Block, over the Greenway and up
+// Hanover St into the North End to the Paul Revere House, and on toward the Old North Church, past the
+// wall again. The route follows OpenStreetMap's own Freedom Trail ways where it maps them (the Old
+// State House's south side, round Faneuil Hall, Union Park, the Greenway crossing) and the sidewalks
+// in between. Bronze medallions every so often, and the trail's red signs at its stops.
 import type { WalkMesh } from './walk';
 import type { CollisionGrid } from './collide';
 import type { MeshAcc } from './chunks';
@@ -13,7 +14,15 @@ import { rng } from '../noise';
 
 /** the route, local metres (x east, z south) */
 export const ROUTE: [number, number][] = [
-  // Congress St's east sidewalk, from State St (the Old State House is across the wall) past the station
+  // up Washington St's east sidewalk from the wall
+  [-309.8, 181.5], [-309.8, 152],
+  // along the Old State House's south side, past its door (OSM's way, on the sidewalk by the wall)
+  [-309.6, 149], [-272.8, 149],
+  // round the east end to the Boston Massacre Site
+  [-268.5, 149], [-264, 146], [-261.5, 137.5],
+  // over State St, down its north sidewalk and over Congress St
+  [-256.5, 129], [-256, 121], [-240, 119.5], [-224, 120],
+  // Congress St's east sidewalk, from State St past the station
   [-221.5, 121], [-224.2, 104], [-229.2, 80], [-236, 48.8], [-243.2, 15.5],
   // Dock Square, along the south face of Faneuil Hall
   [-226, 16.5], [-205, 16], [-162, 11],
@@ -36,12 +45,17 @@ export const ROUTE: [number, number][] = [
   [38.8, -449.9], [26.1, -459.6], [11.2, -470.4], [7, -478], [12, -488],
 ];
 
+/** metres along the route to its point `n` */
+const lengthTo = (n: number) => ROUTE.slice(1, n + 1).reduce((s, [x, z], i) => s + Math.hypot(x - ROUTE[i][0], z - ROUTE[i][1]), 0);
+/** where the route reaches Congress St at State St (the later stops are measured on from there) */
+const CONGRESS = lengthTo(11);
 /** the trail's signs: where along the route (metres from the start), and what they say */
 const STOPS: { at: number; lines: string[] }[] = [
-  { at: 5, lines: ['Old State House', 'behind you', 'Next stop', 'Faneuil Hall'] },
-  { at: 150, lines: ['Faneuil Hall', '"Cradle of Liberty"', 'Next stop', 'Paul Revere House'] },
-  { at: 650, lines: ['North End', 'via Hanover St', 'Next stop', 'Paul Revere House'] },
-  { at: 924, lines: ['Paul Revere House', 'c. 1680', 'Next stop', 'Old North Church'] },
+  { at: lengthTo(2) + 18, lines: ['Old State House', '1713', 'Next stop', 'Boston Massacre Site'] },
+  { at: lengthTo(6) + 2, lines: ['Boston Massacre Site', 'March 5, 1770', 'Next stop', 'Faneuil Hall'] },
+  { at: CONGRESS + 150, lines: ['Faneuil Hall', '"Cradle of Liberty"', 'Next stop', 'Paul Revere House'] },
+  { at: CONGRESS + 650, lines: ['North End', 'via Hanover St', 'Next stop', 'Paul Revere House'] },
+  { at: CONGRESS + 924, lines: ['Paul Revere House', 'c. 1680', 'Next stop', 'Old North Church'] },
 ];
 
 const WIDTH = 0.36, STEP = 0.25, LIFT = 0.012, TILE = 0.6, EPS = 1e-6;

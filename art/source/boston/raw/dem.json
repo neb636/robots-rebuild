@@ -1,17 +1,17 @@
 {
   "bbox": {
-    "w": -71.0585,
+    "w": -71.0605,
     "s": 42.3548,
     "e": -71.0425,
     "n": 42.3665
   },
-  "width": 1316,
+  "width": 1481,
   "height": 1294,
   "units": "cm NAVD88",
   "rowOrder": "north-to-south",
   "nodata": -32768,
   "source": "USGS 3D Elevation Program (3DEP) bare-earth DEM, via the 3DEPElevation ImageServer (exportImage, bilinear resampling to a lon/lat grid)",
-  "fetched": "2026-10-17",
+  "fetched": "2026-10-24",
   "file": "dem.i16.gz",
   "encoding": "Int16 little-endian, row-major: row 0 is the north edge, column 0 the west edge",
   "pixels": "bbox is the grid's outer edge; pixel (i, j) is centred at (w + (i + 0.5)·(e − w)/width, n − (j + 0.5)·(n − s)/height)"

@@ -12,6 +12,7 @@ import { hongKong } from './hongkong';
 import { aquariumStation } from './aqstation';
 import { longWharfPavilion } from './pavilion';
 import { harborIslandsPavilion, northEndPergola, turnpikeTollbooth } from './greenway';
+import { oneBostonPlaceLobby } from './onebostonplace';
 
 export const LANDMARKS: Record<string, LandmarkBuilder> = {
   faneuil, quincy, northMarket, southMarket,
@@ -24,4 +25,5 @@ export const LANDMARKS: Record<string, LandmarkBuilder> = {
   hongKong,
   aquariumStation,
   harborIslandsPavilion, northEndPergola, turnpikeTollbooth,
+  oneBostonPlaceLobby,
 };
